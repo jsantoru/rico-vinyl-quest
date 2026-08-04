@@ -109,7 +109,8 @@ function makeOverworld() {
   for (let y = 20; y <= 21; y++) for (let x = 8; x <= 11; x++) g[y][x] = '~';
 
   // flea market corner: stalls (fences) + crates, one holds the white label
-  for (let x = 25; x <= 31; x++) g[18][x] = 'f';
+  // stop short of x=31 so the thrift shop door at (31,17) stays reachable
+  for (let x = 25; x <= 30; x++) g[18][x] = 'f';
   for (let y = 18; y <= 22; y++) g[y][32] = 'f';
   g[20][26] = 'c'; g[21][28] = 'c'; g[20][30] = 'c';
 
