@@ -11,6 +11,70 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
+// ---------------------------------------------------------------- responsive fullscreen canvas
+(() => {
+  let vp = document.querySelector('meta[name="viewport"]');
+  if (!vp) { vp = document.createElement('meta'); vp.name = 'viewport'; document.head.appendChild(vp); }
+  vp.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
+
+  const style = document.createElement('style');
+  style.textContent = `
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      background: #000; overflow: hidden;
+      touch-action: none;
+      -webkit-user-select: none; user-select: none;
+    }
+    #game {
+      display: block;
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      image-rendering: pixelated;
+      image-rendering: -moz-crisp-edges;
+      image-rendering: crisp-edges;
+      touch-action: none;
+    }
+    #touchControls {
+      position: fixed; inset: 0; pointer-events: none;
+      display: none; z-index: 10;
+    }
+    @media (pointer: coarse) {
+      #touchControls { display: block; }
+    }
+    #touchControls .tc-btn {
+      position: absolute;
+      pointer-events: auto;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(244,236,216,0.15);
+      border: 2px solid rgba(244,236,216,0.55);
+      border-radius: 12px;
+      color: #f4ecd8;
+      font: bold 13px monospace;
+      -webkit-user-select: none; user-select: none;
+      -webkit-touch-callout: none;
+      touch-action: none;
+    }
+    #touchControls .tc-btn:active { background: rgba(244,236,216,0.35); }
+    #dpadUp    { left: 68px;  bottom: 156px; width: 56px; height: 56px; font-size: 18px; }
+    #dpadDown  { left: 68px;  bottom: 88px;  width: 56px; height: 56px; font-size: 18px; }
+    #dpadLeft  { left: 18px;  bottom: 122px; width: 56px; height: 56px; font-size: 18px; }
+    #dpadRight { left: 118px; bottom: 122px; width: 56px; height: 56px; font-size: 18px; }
+    #btnE { right: 22px;  bottom: 116px; width: 78px; height: 78px; border-radius: 50%; font-size: 20px; }
+    #btnB { right: 114px; bottom: 148px; width: 54px; height: 54px; border-radius: 50%; }
+    #btnM { right: 114px; bottom: 78px;  width: 54px; height: 54px; border-radius: 50%; }
+  `;
+  document.head.appendChild(style);
+
+  function fitCanvas() {
+    const scale = Math.min(window.innerWidth / VIEW_W, window.innerHeight / VIEW_H);
+    canvas.style.width = Math.max(1, Math.floor(VIEW_W * scale)) + 'px';
+    canvas.style.height = Math.max(1, Math.floor(VIEW_H * scale)) + 'px';
+  }
+  window.addEventListener('resize', fitCanvas);
+  window.addEventListener('orientationchange', fitCanvas);
+  fitCanvas();
+})();
+
 // ---------------------------------------------------------------- records
 const RECORDS = {
   elm:   { title: 'Elm Street Funk',      artist: 'Static Groove',   year: '1974',
@@ -67,11 +131,15 @@ function axis() {
   return [dx, dy];
 }
 
-// ---------------------------------------------------------------- sprite
+// ---------------------------------------------------------------- sprite / splash images
 const ricoImg = new Image();
 ricoImg.src = 'assets/rico.png';
 const SHEET_CW = 129, SHEET_CH = 225;
 const DIR_ROW = { up: 0, down: 1, left: 2, right: 3 };
+
+// Splash screen image — save the intro artwork as assets/splash.png (same folder as rico.png)
+const splashImg = new Image();
+splashImg.src = 'assets/splash.png';
 
 // ---------------------------------------------------------------- maps
 const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J']);
@@ -207,7 +275,7 @@ const player = {
   dir: 'down', moving: false, skating: false, animT: 0,
 };
 const collected = new Set();
-let state = 'title'; // title | play | dialog | record | win
+let state = 'splash'; // splash | title | play | dialog | record | win
 let dialog = null;   // { name, lines, i }
 let shownRecord = null;
 let winShown = false;
@@ -428,6 +496,61 @@ function doInteract() {
   }
 }
 
+// ---------------------------------------------------------------- touch controls (phones / tablets)
+function bindHold(el, onDown, onUp) {
+  el.addEventListener('pointerdown', (e) => { e.preventDefault(); onDown(); });
+  el.addEventListener('pointerup', (e) => { e.preventDefault(); onUp(); });
+  el.addEventListener('pointercancel', () => onUp());
+  el.addEventListener('pointerleave', () => onUp());
+}
+function bindTap(el, onTap) {
+  el.addEventListener('pointerdown', (e) => { e.preventDefault(); onTap(); });
+}
+
+function createTouchControls() {
+  const wrap = document.createElement('div');
+  wrap.id = 'touchControls';
+  wrap.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  const dpad = [
+    ['dpadUp', 'arrowup', '▲'],
+    ['dpadDown', 'arrowdown', '▼'],
+    ['dpadLeft', 'arrowleft', '◀'],
+    ['dpadRight', 'arrowright', '▶'],
+  ];
+  dpad.forEach(([id, k, label]) => {
+    const btn = document.createElement('div');
+    btn.id = id; btn.className = 'tc-btn'; btn.textContent = label;
+    bindHold(btn, () => { keys[k] = true; music.start(); }, () => { keys[k] = false; });
+    wrap.appendChild(btn);
+  });
+
+  const eBtn = document.createElement('div');
+  eBtn.id = 'btnE'; eBtn.className = 'tc-btn'; eBtn.textContent = 'E';
+  bindTap(eBtn, () => { interactPressed = true; music.start(); });
+  wrap.appendChild(eBtn);
+
+  const bBtn = document.createElement('div');
+  bBtn.id = 'btnB'; bBtn.className = 'tc-btn'; bBtn.textContent = 'SKATE';
+  bindTap(bBtn, () => { toggleSkate(); music.start(); });
+  wrap.appendChild(bBtn);
+
+  const mBtn = document.createElement('div');
+  mBtn.id = 'btnM'; mBtn.className = 'tc-btn'; mBtn.textContent = 'MUTE';
+  bindTap(mBtn, () => { music.toggleMute(); music.start(); });
+  wrap.appendChild(mBtn);
+
+  document.body.appendChild(wrap);
+}
+createTouchControls();
+
+// Tapping the game screen itself advances splash/title/dialog/record/win screens
+// (movement + interact during actual play stays on the dedicated controls above).
+canvas.addEventListener('pointerdown', () => {
+  music.start();
+  if (state !== 'play') interactPressed = true;
+});
+
 // ---------------------------------------------------------------- update
 let last = performance.now();
 function frame(now) {
@@ -441,7 +564,9 @@ function frame(now) {
 function update(dt) {
   if (toast) { toast.t -= dt; if (toast.t <= 0) toast = null; }
 
-  if (state === 'title') {
+  if (state === 'splash') {
+    if (interactPressed) state = 'title';
+  } else if (state === 'title') {
     if (interactPressed) state = 'play';
   } else if (state === 'play') {
     movePlayer(dt);
@@ -490,7 +615,8 @@ function render(time) {
   drawPlayer(time);
 
   ctx.restore();
-  drawHUD();
+  if (state !== 'splash') drawHUD();
+  if (state === 'splash') drawSplash();
   if (state === 'title') drawTitle();
   if (state === 'dialog') drawDialog();
   if (state === 'record') drawRecordCard();
@@ -825,6 +951,25 @@ function drawRecordCard() {
   ctx.fillText('[E] ▶', x + w - 20, y + h - 12);
 }
 
+function drawSplash() {
+  if (splashImg.complete && splashImg.naturalWidth) {
+    const iw = splashImg.naturalWidth, ih = splashImg.naturalHeight;
+    const scale = Math.max(VIEW_W / iw, VIEW_H / ih); // cover-fit, crop overflow
+    const dw = iw * scale, dh = ih * scale;
+    const dx = (VIEW_W - dw) / 2, dy = (VIEW_H - dh) / 2;
+    ctx.drawImage(splashImg, dx, dy, dw, dh);
+  } else {
+    ctx.fillStyle = '#120e18';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  }
+  ctx.fillStyle = 'rgba(8,6,12,0.55)';
+  ctx.fillRect(0, VIEW_H - 64, VIEW_W, 64);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
+  ctx.font = 'bold 18px monospace';
+  ctx.fillText('- PRESS E OR TAP TO BEGIN -', VIEW_W / 2, VIEW_H - 26);
+}
+
 function drawTitle() {
   ctx.fillStyle = 'rgba(8,6,12,0.93)';
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
@@ -844,10 +989,10 @@ function drawTitle() {
   ctx.fillStyle = '#9a90a8';
   ctx.font = '13px monospace';
   const controls = [
-    'ARROWS / WASD ........ move',
-    'E ......... talk / dig crates',
-    'B ...... skateboard on & off',
-    'M ................... mute',
+    'ARROWS / WASD, OR THE ON-SCREEN D-PAD .... move',
+    'E, OR THE ON-SCREEN E BUTTON ... talk / dig crates',
+    'B, OR ON-SCREEN "SKATE" ...... skateboard on & off',
+    'M, OR ON-SCREEN "MUTE" ....................... mute',
   ];
   controls.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, 330 + i * 22));
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
