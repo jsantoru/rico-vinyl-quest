@@ -118,7 +118,7 @@ window.addEventListener('keydown', (e) => {
     if (k === 'm') music.toggleMute();
   }
   keys[k] = true;
-  music.start();
+  music.start(); // audio needs a user gesture
 });
 window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
 
@@ -190,6 +190,9 @@ function makeOverworld() {
   const trees = [[3,20],[5,22],[7,19],[13,21],[15,23],[3,23],[10,23],[16,19],[36,20],[34,23],[9,12],[14,13],[25,12],[36,12],[2,12],[37,7],[2,7],[24,23],[13,6],[26,6]];
   for (const [tx, ty] of trees) if (g[ty][tx] === '.') g[ty][tx] = '#';
 
+  // flea market corner: stalls (fences) + crates, one holds the white label
+  // NOTE: skip the tile directly above the Pure Pop Records door so the fence
+  // doesn't block access to it.
   for (let x = 25; x <= 31; x++) { if (x === thrift.doorX) continue; g[18][x] = 'f'; }
   for (let y = 18; y <= 22; y++) g[y][32] = 'f';
   g[20][26] = 'c'; g[21][28] = 'c'; g[20][30] = 'c';
@@ -272,6 +275,7 @@ const shops = {
   }),
 };
 
+// door wiring: town door tile -> shop spawn; shop exit tile -> town spawn
 const transitions = {};
 for (const [id, d] of Object.entries(doors)) {
   transitions['town:' + key(d.doorX, d.doorY)] = { map: id, x: 6.5, y: 7.5 };
@@ -285,11 +289,11 @@ const player = {
   dir: 'down', moving: false, skating: false, animT: 0,
 };
 const collected = new Set();
-let state = 'splash';
-let dialog = null;
+let state = 'splash'; // splash | title | play | dialog | record | win
+let dialog = null;   // { name, lines, i }
 let shownRecord = null;
 let winShown = false;
-let toast = null;
+let toast = null;    // { text, t }
 
 function toggleSkate() {
   if (state !== 'play' || !maps[player.map].outside) return;
@@ -318,14 +322,12 @@ const music = {
     this.nextTime = this.ctx.currentTime + 0.1;
     setInterval(() => this.pump(), 25);
   },
-
   toggleMute() {
     if (!this.ctx) return;
     this.muted = !this.muted;
     this.master.gain.value = this.muted ? 0 : 0.28;
     toast = { text: this.muted ? 'Music: MUTED' : 'Music: ON', t: 1.2 };
   },
-
   enable(layer) { this.layers.add(layer); },
 
   pump() {
@@ -336,11 +338,9 @@ const music = {
       this.nextTime += stepDur;
     }
   },
-
   schedule(gs, t, stepDur) {
     const s = gs % 16, bar = Math.floor(gs / 16);
     const L = this.layers;
-
     if (L.has('drums')) {
       if ([0, 7, 10].includes(s)) this.kick(t);
       if (s === 4 || s === 12) this.snare(t);
@@ -348,28 +348,23 @@ const music = {
     } else if (L.has('tick') && s % 4 === 0) {
       this.hat(t, false, 0.028);
     }
-
     if (L.has('bass')) {
       const pat = [[0,45,2],[3,45,1],[6,48,2],[8,50,2],[11,45,1],[14,43,2]];
       for (const [ps, n, d] of pat)
         if (ps === s) this.note(t, 'square', n, d * stepDur, 0.10);
     }
-
     if (L.has('horns') && (s === 4 || s === 11)) {
       for (const n of [57, 60, 64]) this.note(t, 'sawtooth', n, 1.4 * stepDur, 0.05, 0.03);
     }
-
     if (L.has('vox') && (s === 0 || s === 8)) {
       const notes = bar % 2 === 0 ? [69, 67] : [72, 71];
       this.note(t, 'triangle', notes[s === 0 ? 0 : 1], 7.5 * stepDur, 0.07, 0.25, true);
     }
-
     if (L.has('lead') && bar % 2 === 1 && s % 2 === 0) {
       const mel = [76, 74, 72, 69, 72, 74, 76, 79];
       this.note(t, 'square', mel[s / 2], 1.6 * stepDur, 0.045, 0.02);
     }
   },
-
   kick(t) {
     const o = this.ctx.createOscillator(), g = this.ctx.createGain();
     o.frequency.setValueAtTime(130, t);
@@ -379,7 +374,6 @@ const music = {
     o.connect(g); g.connect(this.master);
     o.start(t); o.stop(t + 0.16);
   },
-
   snare(t) {
     const src = this.ctx.createBufferSource(); src.buffer = this.noiseBuf;
     const f = this.ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1900;
@@ -389,7 +383,6 @@ const music = {
     src.connect(f); f.connect(g); g.connect(this.master);
     src.start(t); src.stop(t + 0.13);
   },
-
   hat(t, open, gain) {
     const src = this.ctx.createBufferSource(); src.buffer = this.noiseBuf;
     const f = this.ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7500;
@@ -400,19 +393,16 @@ const music = {
     src.connect(f); f.connect(g); g.connect(this.master);
     src.start(t); src.stop(t + dur + 0.01);
   },
-
   note(t, type, midi, dur, gain, release = 0.02, vibrato = false) {
     const o = this.ctx.createOscillator(), g = this.ctx.createGain();
     o.type = type;
     o.frequency.value = 440 * Math.pow(2, (midi - 69) / 12);
-
     if (vibrato) {
       const lfo = this.ctx.createOscillator(), lg = this.ctx.createGain();
       lfo.frequency.value = 5.2; lg.gain.value = 7;
       lfo.connect(lg); lg.connect(o.detune);
       lfo.start(t); lfo.stop(t + dur + release);
     }
-
     g.gain.setValueAtTime(0.0001, t);
     g.gain.linearRampToValueAtTime(gain, t + 0.015);
     g.gain.setValueAtTime(gain, t + dur);
@@ -420,13 +410,10 @@ const music = {
     o.connect(g); g.connect(this.master);
     o.start(t); o.stop(t + dur + release + 0.02);
   },
-
   sting() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime + 0.05;
-    [69, 73, 76, 81].forEach((n, i) =>
-      this.note(t + i * 0.09, 'square', n, 0.14, 0.09, 0.08)
-    );
+    [69, 73, 76, 81].forEach((n, i) => this.note(t + i * 0.09, 'square', n, 0.14, 0.09, 0.08));
   },
 };
 
@@ -438,15 +425,8 @@ function isSolid(map, tx, ty) {
 
 function boxClear(map, cx, cy) {
   const hw = 10, hh = 7;
-  const pts = [
-    [cx-hw, cy-hh],
-    [cx+hw, cy-hh],
-    [cx-hw, cy+hh],
-    [cx+hw, cy+hh]
-  ];
-  return pts.every(([px, py]) =>
-    !isSolid(map, Math.floor(px / TILE), Math.floor(py / TILE))
-  );
+  const pts = [[cx-hw, cy-hh], [cx+hw, cy-hh], [cx-hw, cy+hh], [cx+hw, cy+hh]];
+  return pts.every(([px, py]) => !isSolid(map, Math.floor(px / TILE), Math.floor(py / TILE)));
 }
 
 function movePlayer(dt) {
@@ -467,13 +447,10 @@ function movePlayer(dt) {
 
   if (boxClear(map, player.x + stepX, player.y)) player.x += stepX;
   if (boxClear(map, player.x, player.y + stepY)) player.y += stepY;
-
   player.animT += dt * (player.skating ? 1.4 : 1);
 
-  const tk = player.map + ':' +
-    key(Math.floor(player.x / TILE), Math.floor(player.y / TILE));
+  const tk = player.map + ':' + key(Math.floor(player.x / TILE), Math.floor(player.y / TILE));
   const tr = transitions[tk];
-
   if (tr) {
     player.map = tr.map;
     player.x = tr.x * TILE;
@@ -484,231 +461,111 @@ function movePlayer(dt) {
 
 // ---------------------------------------------------------------- interact
 function facingTile() {
-  const d = {
-    up: [0, -1],
-    down: [0, 1],
-    left: [-1, 0],
-    right: [1, 0]
-  }[player.dir];
-
-  const fx = player.x + d[0] * 24;
-  const fy = player.y + d[1] * 22;
-
-  return [
-    Math.floor(fx / TILE),
-    Math.floor(fy / TILE)
-  ];
+  const d = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[player.dir];
+  const fx = player.x + d[0] * 24, fy = player.y + d[1] * 22;
+  return [Math.floor(fx / TILE), Math.floor(fy / TILE)];
 }
 
 function facingTarget() {
   const map = maps[player.map];
   const [tx, ty] = facingTile();
-
   if (tx < 0 || ty < 0 || tx >= map.w || ty >= map.h) return null;
-
   const ch = map.grid[ty][tx];
-
-  if (ch === 'C' || ch === 'c')
-    return {
-      type: 'crate',
-      tx,
-      ty,
-      data: map.crates[key(tx, ty)]
-    };
-
-  if (ch === 'K')
+  if (ch === 'C' || ch === 'c') return { type: 'crate', tx, ty, data: map.crates[key(tx, ty)] };
+  if (ch === 'K') return { type: 'keeper', data: map.keeper };
+  if (ch === 'T' && map.keeper && Math.abs(tx - map.keeper.x) <= 2 && ty === 2)
     return { type: 'keeper', data: map.keeper };
-
-  if (ch === 'T' &&
-      map.keeper &&
-      Math.abs(tx - map.keeper.x) <= 2 &&
-      ty === 2)
-    return { type: 'keeper', data: map.keeper };
-
-  if (ch === 'J')
-    return { type: 'jukebox' };
-
+  if (ch === 'J') return { type: 'jukebox' };
   return null;
 }
 
 function doInteract() {
   const target = facingTarget();
   if (!target) return;
-
   if (target.type === 'keeper') {
     const k = target.data;
-    const shopRecord =
-      Object.values(maps[player.map].crates).find(c => c.record)?.record;
-
-    const lines =
-      shopRecord && collected.has(shopRecord)
-        ? [k.foundLine]
-        : k.lines;
-
-    dialog = {
-      name: k.name,
-      lines,
-      i: 0
-    };
-
+    const shopRecord = Object.values(maps[player.map].crates).find(c => c.record)?.record;
+    const lines = shopRecord && collected.has(shopRecord) ? [k.foundLine] : k.lines;
+    dialog = { name: k.name, lines, i: 0 };
     state = 'dialog';
-
   } else if (target.type === 'crate') {
     const c = target.data;
     if (!c) return;
-
     if (c.record && !collected.has(c.record)) {
       collected.add(c.record);
       music.enable(RECORDS[c.record].layer);
       music.sting();
       shownRecord = c.record;
       state = 'record';
-
     } else if (c.record) {
-      dialog = {
-        name: 'CRATE',
-        lines: ['Nothing left in here but dust and old sleeves.'],
-        i: 0
-      };
+      dialog = { name: 'CRATE', lines: ['Nothing left in here but dust and old sleeves.'], i: 0 };
       state = 'dialog';
-
     } else {
-      dialog = {
-        name: 'CRATE',
-        lines: [
-          JUNK[c.junkSeed % JUNK.length],
-          'Keep digging...'
-        ],
-        i: 0
-      };
+      dialog = { name: 'CRATE', lines: [JUNK[c.junkSeed % JUNK.length], 'Keep digging...'], i: 0 };
       state = 'dialog';
     }
-
   } else if (target.type === 'jukebox') {
-    dialog = {
-      name: 'JUKEBOX',
-      lines: [
-        'B7: "Cherry Cola Bounce". The button is worn smooth from decades of plays.'
-      ],
-      i: 0
-    };
+    dialog = { name: 'JUKEBOX', lines: ['B7: "Cherry Cola Bounce". The button is worn smooth from decades of plays.'], i: 0 };
     state = 'dialog';
   }
 }
 
-// ---------------------------------------------------------------- ambient town life
+// ---------------------------------------------------------------- ambient town life (people, bikes, dogs, fish)
 const ambient = [];
-const ambientTimers = {
-  bike: 4,
-  walker: 3,
-  dog: 6,
-  fish: 2
-};
+const ambientTimers = { bike: 4, walker: 3, dog: 6, fish: 2 };
 
 function updateAmbient(dt) {
-  if (player.map !== 'town') {
-    if (ambient.length) ambient.length = 0;
-    return;
-  }
+  if (player.map !== 'town') { if (ambient.length) ambient.length = 0; return; }
 
   ambientTimers.bike -= dt;
-  if (ambientTimers.bike <= 0) {
-    spawnBike();
-    ambientTimers.bike = 7 + Math.random() * 9;
-  }
-
+  if (ambientTimers.bike <= 0) { spawnBike(); ambientTimers.bike = 7 + Math.random() * 9; }
   ambientTimers.walker -= dt;
-  if (ambientTimers.walker <= 0) {
-    spawnWalker();
-    ambientTimers.walker = 5 + Math.random() * 8;
-  }
-
+  if (ambientTimers.walker <= 0) { spawnWalker(); ambientTimers.walker = 5 + Math.random() * 8; }
   ambientTimers.dog -= dt;
-  if (ambientTimers.dog <= 0) {
-    spawnDog();
-    ambientTimers.dog = 9 + Math.random() * 10;
-  }
-
+  if (ambientTimers.dog <= 0) { spawnDog(); ambientTimers.dog = 9 + Math.random() * 10; }
   ambientTimers.fish -= dt;
-  if (ambientTimers.fish <= 0 && town.riverTiles.length) {
-    spawnFish();
-    ambientTimers.fish = 2 + Math.random() * 3;
-  }
+  if (ambientTimers.fish <= 0 && town.riverTiles.length) { spawnFish(); ambientTimers.fish = 2 + Math.random() * 3; }
 
   for (let i = ambient.length - 1; i >= 0; i--) {
     const a = ambient[i];
     a.t += dt;
-
     if (a.type === 'fish') {
       if (a.t > a.life) ambient.splice(i, 1);
       continue;
     }
-
     a.x += a.vx * dt;
-
-    if (a.x < -50 || a.x > town.w * TILE + 50)
-      ambient.splice(i, 1);
+    if (a.x < -50 || a.x > town.w * TILE + 50) ambient.splice(i, 1);
   }
 }
 
 function spawnBike() {
   const dir = Math.random() < 0.5 ? 1 : -1;
   const row = Math.random() < 0.5 ? 9 : 10;
-
-  ambient.push({
-    type: 'bike',
-    x: dir > 0 ? -30 : town.w * TILE + 30,
-    y: row * TILE + 16,
-    vx: dir * 115,
-    dir,
-    t: 0
-  });
+  ambient.push({ type: 'bike', x: dir > 0 ? -30 : town.w * TILE + 30, y: row * TILE + 16, vx: dir * 115, dir, t: 0 });
 }
 
 function spawnWalker() {
   const dir = Math.random() < 0.5 ? 1 : -1;
-  const shirts = [
-    '#c86a3c',
-    '#4a7ab0',
-    '#7a4a9a',
-    '#3a9a5a'
-  ];
-
+  const shirts = ['#c86a3c', '#4a7ab0', '#7a4a9a', '#3a9a5a'];
   ambient.push({
-    type: 'walker',
-    x: dir > 0 ? -20 : town.w * TILE + 20,
-    y: 12 * TILE + 24,
-    vx: dir * 44,
-    dir,
-    t: 0,
-    shirt: shirts[Math.floor(Math.random() * shirts.length)],
-    skin: '#b87954',
+    type: 'walker', x: dir > 0 ? -20 : town.w * TILE + 20, y: 12 * TILE + 24,
+    vx: dir * 44, dir, t: 0,
+    shirt: shirts[Math.floor(Math.random() * shirts.length)], skin: '#b87954',
   });
 }
 
 function spawnDog() {
   const dir = Math.random() < 0.5 ? 1 : -1;
-
-  ambient.push({
-    type: 'dog',
-    x: dir > 0 ? -20 : town.w * TILE + 20,
-    y: 23 * TILE + 20,
-    vx: dir * 58,
-    dir,
-    t: 0
-  });
+  ambient.push({ type: 'dog', x: dir > 0 ? -20 : town.w * TILE + 20, y: 23 * TILE + 20, vx: dir * 58, dir, t: 0 });
 }
 
 function spawnFish() {
-  const tile =
-    town.riverTiles[Math.floor(Math.random() * town.riverTiles.length)];
-
+  const tile = town.riverTiles[Math.floor(Math.random() * town.riverTiles.length)];
   ambient.push({
     type: 'fish',
     x: tile.x * TILE + 10 + Math.random() * 12,
     y: tile.y * TILE + 10 + Math.random() * 12,
-    t: 0,
-    life: 1 + Math.random() * 0.8
+    t: 0, life: 1 + Math.random() * 0.8,
   });
 }
 
@@ -725,174 +582,109 @@ function drawWheel(cx, cy, spin) {
   ctx.beginPath();
   ctx.arc(cx, cy, 7, 0, Math.PI * 2);
   ctx.stroke();
-
   ctx.beginPath();
-  ctx.moveTo(
-    cx + Math.cos(spin) * 6,
-    cy + Math.sin(spin) * 6
-  );
-  ctx.lineTo(
-    cx - Math.cos(spin) * 6,
-    cy - Math.sin(spin) * 6
-  );
+  ctx.moveTo(cx + Math.cos(spin) * 6, cy + Math.sin(spin) * 6);
+  ctx.lineTo(cx - Math.cos(spin) * 6, cy - Math.sin(spin) * 6);
   ctx.stroke();
 }
 
 function drawBikeActor(a) {
   const flip = a.dir < 0;
-
   ctx.save();
   ctx.translate(a.x, a.y);
-
   if (flip) ctx.scale(-1, 1);
-
   const spin = a.t * 10;
-
   ctx.strokeStyle = '#1c1a20';
   ctx.lineWidth = 2;
-
   drawWheel(-10, 8, spin);
   drawWheel(10, 8, spin);
-
   ctx.strokeStyle = '#3f6fae';
   ctx.lineWidth = 2;
-
   ctx.beginPath();
-  ctx.moveTo(-10, 8);
-  ctx.lineTo(0, -4);
-  ctx.lineTo(10, 8);
-  ctx.moveTo(0, -4);
-  ctx.lineTo(-4, -12);
+  ctx.moveTo(-10, 8); ctx.lineTo(0, -4); ctx.lineTo(10, 8);
+  ctx.moveTo(0, -4); ctx.lineTo(-4, -12);
   ctx.stroke();
-
   ctx.fillStyle = '#d0703c';
   ctx.fillRect(-5, -20, 9, 10);
-
   ctx.fillStyle = '#b87954';
   ctx.fillRect(-4, -28, 7, 8);
-
   ctx.restore();
 }
 
 function drawWalkerActor(a) {
   const flip = a.dir < 0;
-
   ctx.save();
   ctx.translate(a.x, a.y);
-
   if (flip) ctx.scale(-1, 1);
-
   const stride = Math.sin(a.t * 8) * 3;
-
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.fillRect(-8, 14, 16, 4);
-
   ctx.fillStyle = '#3a3a46';
   ctx.fillRect(-5, 2 + stride * 0.4, 4, 12);
   ctx.fillRect(1, 2 - stride * 0.4, 4, 12);
-
   ctx.fillStyle = a.shirt;
   ctx.fillRect(-6, -8, 12, 11);
-
   ctx.fillStyle = a.skin;
   ctx.fillRect(-4, -16, 8, 8);
-
   ctx.restore();
 }
 
 function drawDogActor(a) {
   const flip = a.dir < 0;
-
   ctx.save();
   ctx.translate(a.x, a.y);
-
   if (flip) ctx.scale(-1, 1);
-
   const legOff = Math.sin(a.t * 10) * 2;
-
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.fillRect(-9, 8, 18, 3);
-
   ctx.fillStyle = '#8a5a34';
   ctx.fillRect(-7, 2 + legOff, 2, 6);
   ctx.fillRect(4, 2 - legOff, 2, 6);
-
   ctx.fillStyle = '#a9713f';
   ctx.fillRect(-9, -4, 18, 8);
   ctx.fillRect(7, -8, 6, 6);
   ctx.fillRect(-11, -2, 4, 3);
-
   ctx.restore();
 }
 
 function drawFishActor(a) {
   const p = a.t / a.life;
-  const alpha =
-    p < 0.2
-      ? p / 0.2
-      : p > 0.8
-        ? (1 - p) / 0.2
-        : 1;
-
+  const alpha = p < 0.2 ? p / 0.2 : p > 0.8 ? (1 - p) / 0.2 : 1;
   ctx.save();
   ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
-
   ctx.fillStyle = '#e8d060';
   ctx.beginPath();
   ctx.ellipse(a.x, a.y, 5, 2.4, 0, 0, Math.PI * 2);
   ctx.fill();
-
   ctx.beginPath();
   ctx.moveTo(a.x - 5, a.y);
   ctx.lineTo(a.x - 8, a.y - 3);
   ctx.lineTo(a.x - 8, a.y + 3);
   ctx.closePath();
   ctx.fill();
-
   ctx.strokeStyle = 'rgba(230,240,255,0.5)';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.ellipse(
-    a.x,
-    a.y,
-    8 + p * 10,
-    3 + p * 4,
-    0,
-    0,
-    Math.PI * 2
-  );
+  ctx.ellipse(a.x, a.y, 8 + p * 10, 3 + p * 4, 0, 0, Math.PI * 2);
   ctx.stroke();
-
   ctx.restore();
 }
 
-// ---------------------------------------------------------------- touch controls
+// ---------------------------------------------------------------- touch controls (phones / tablets)
 function bindHold(el, onDown, onUp) {
-  el.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    onDown();
-  });
-
-  el.addEventListener('pointerup', (e) => {
-    e.preventDefault();
-    onUp();
-  });
-
+  el.addEventListener('pointerdown', (e) => { e.preventDefault(); onDown(); });
+  el.addEventListener('pointerup', (e) => { e.preventDefault(); onUp(); });
   el.addEventListener('pointercancel', () => onUp());
   el.addEventListener('pointerleave', () => onUp());
 }
 
 function bindTap(el, onTap) {
-  el.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    onTap();
-  });
+  el.addEventListener('pointerdown', (e) => { e.preventDefault(); onTap(); });
 }
 
 function createTouchControls() {
   const wrap = document.createElement('div');
   wrap.id = 'touchControls';
-
   wrap.addEventListener('contextmenu', (e) => e.preventDefault());
 
   const dpad = [
@@ -904,58 +696,24 @@ function createTouchControls() {
 
   dpad.forEach(([id, k, label]) => {
     const btn = document.createElement('div');
-    btn.id = id;
-    btn.className = 'tc-btn';
-    btn.textContent = label;
-
-    bindHold(
-      btn,
-      () => {
-        keys[k] = true;
-        music.start();
-      },
-      () => {
-        keys[k] = false;
-      }
-    );
-
+    btn.id = id; btn.className = 'tc-btn'; btn.textContent = label;
+    bindHold(btn, () => { keys[k] = true; music.start(); }, () => { keys[k] = false; });
     wrap.appendChild(btn);
   });
 
   const eBtn = document.createElement('div');
-  eBtn.id = 'btnE';
-  eBtn.className = 'tc-btn';
-  eBtn.textContent = 'E';
-
-  bindTap(eBtn, () => {
-    interactPressed = true;
-    music.start();
-  });
-
+  eBtn.id = 'btnE'; eBtn.className = 'tc-btn'; eBtn.textContent = 'E';
+  bindTap(eBtn, () => { interactPressed = true; music.start(); });
   wrap.appendChild(eBtn);
 
   const bBtn = document.createElement('div');
-  bBtn.id = 'btnB';
-  bBtn.className = 'tc-btn';
-  bBtn.textContent = 'SKATE';
-
-  bindTap(bBtn, () => {
-    toggleSkate();
-    music.start();
-  });
-
+  bBtn.id = 'btnB'; bBtn.className = 'tc-btn'; bBtn.textContent = 'SKATE';
+  bindTap(bBtn, () => { toggleSkate(); music.start(); });
   wrap.appendChild(bBtn);
 
   const mBtn = document.createElement('div');
-  mBtn.id = 'btnM';
-  mBtn.className = 'tc-btn';
-  mBtn.textContent = 'MUTE';
-
-  bindTap(mBtn, () => {
-    music.toggleMute();
-    music.start();
-  });
-
+  mBtn.id = 'btnM'; mBtn.className = 'tc-btn'; mBtn.textContent = 'MUTE';
+  bindTap(mBtn, () => { music.toggleMute(); music.start(); });
   wrap.appendChild(mBtn);
 
   document.body.appendChild(wrap);
@@ -965,9 +723,7 @@ createTouchControls();
 
 canvas.addEventListener('pointerdown', () => {
   music.start();
-
-  if (state !== 'play')
-    interactPressed = true;
+  if (state !== 'play') interactPressed = true;
 });
 
 // ---------------------------------------------------------------- update
@@ -976,60 +732,35 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
-
   update(dt);
   render(now / 1000);
-
   requestAnimationFrame(frame);
 }
 
 function update(dt) {
   updateAmbient(dt);
-
-  if (toast) {
-    toast.t -= dt;
-    if (toast.t <= 0) toast = null;
-  }
+  if (toast) { toast.t -= dt; if (toast.t <= 0) toast = null; }
 
   if (state === 'splash') {
-    if (interactPressed)
-      state = 'title';
-
+    if (interactPressed) state = 'title';
   } else if (state === 'title') {
-    if (interactPressed)
-      state = 'play';
-
+    if (interactPressed) state = 'play';
   } else if (state === 'play') {
     movePlayer(dt);
-
-    if (interactPressed)
-      doInteract();
-
+    if (interactPressed) doInteract();
   } else if (state === 'dialog') {
     if (interactPressed) {
       dialog.i++;
-
-      if (dialog.i >= dialog.lines.length) {
-        dialog = null;
-        state = 'play';
-      }
+      if (dialog.i >= dialog.lines.length) { dialog = null; state = 'play'; }
     }
-
   } else if (state === 'record') {
     if (interactPressed) {
       shownRecord = null;
-
-      if (collected.size === PAD_ORDER.length && !winShown) {
-        winShown = true;
-        state = 'win';
-      } else {
-        state = 'play';
-      }
+      if (collected.size === PAD_ORDER.length && !winShown) { winShown = true; state = 'win'; }
+      else state = 'play';
     }
-
   } else if (state === 'win') {
-    if (interactPressed)
-      state = 'play';
+    if (interactPressed) state = 'play';
   }
 
   interactPressed = false;
@@ -1037,21 +768,12 @@ function update(dt) {
 
 // ---------------------------------------------------------------- render
 function camera(map) {
-  const worldW = map.w * TILE;
-  const worldH = map.h * TILE;
-
-  let cx = player.x - VIEW_W / 2;
-  let cy = player.y - VIEW_H / 2;
-
+  const worldW = map.w * TILE, worldH = map.h * TILE;
+  let cx = player.x - VIEW_W / 2, cy = player.y - VIEW_H / 2;
   cx = Math.max(0, Math.min(cx, worldW - VIEW_W));
   cy = Math.max(0, Math.min(cy, worldH - VIEW_H));
-
-  if (worldW < VIEW_W)
-    cx = (worldW - VIEW_W) / 2;
-
-  if (worldH < VIEW_H)
-    cy = (worldH - VIEW_H) / 2;
-
+  if (worldW < VIEW_W) cx = (worldW - VIEW_W) / 2;
+  if (worldH < VIEW_H) cy = (worldH - VIEW_H) / 2;
   return [Math.round(cx), Math.round(cy)];
 }
 
@@ -1074,7 +796,6 @@ function drawMountainLayer(layer, camX) {
       Math.sin((sx + layer.seed) * 0.045) * 0.4;
 
     const py = layer.baseY - Math.abs(n) * layer.amp;
-
     ctx.lineTo(sx - offset, py);
   }
 
@@ -1107,34 +828,14 @@ function drawMountainLayer(layer, camX) {
 
 function drawMountains(camX) {
   const layers = [
-    {
-      color: '#241d38',
-      speed: 0.05,
-      baseY: 130,
-      amp: 32,
-      seed: 0,
-      snow: false
-    },
-    {
-      color: '#332a4c',
-      speed: 0.10,
-      baseY: 155,
-      amp: 48,
-      seed: 700,
-      snow: true
-    },
-    {
-      color: '#443860',
-      speed: 0.18,
-      baseY: 185,
-      amp: 60,
-      seed: 1500,
-      snow: true
-    },
+    { color: '#241d38', speed: 0.05, baseY: 130, amp: 32, seed: 0,    snow: false },
+    { color: '#332a4c', speed: 0.10, baseY: 155, amp: 48, seed: 700,  snow: true },
+    { color: '#443860', speed: 0.18, baseY: 185, amp: 60, seed: 1500, snow: true },
   ];
 
-  for (const layer of layers)
+  for (const layer of layers) {
     drawMountainLayer(layer, camX);
+  }
 }
 
 function drawMountainHorizon(camX, camY) {
@@ -1143,27 +844,15 @@ function drawMountainHorizon(camX, camY) {
 
   const horizonY = camY + 18;
   const startX = camX - 160;
-
-  const colors = [
-    '#24304a',
-    '#34415b',
-    '#46536c'
-  ];
+  const colors = ['#24304a', '#34415b', '#46536c'];
 
   for (let layer = 0; layer < 3; layer++) {
     ctx.fillStyle = colors[layer];
     ctx.beginPath();
 
-    ctx.moveTo(
-      startX,
-      horizonY + 130 + layer * 22
-    );
+    ctx.moveTo(startX, horizonY + 130 + layer * 22);
 
-    for (
-      let x = startX;
-      x <= camX + VIEW_W + 160;
-      x += 48
-    ) {
+    for (let x = startX; x <= camX + VIEW_W + 160; x += 48) {
       const n =
         Math.sin((x + layer * 700) * 0.018) * 0.55 +
         Math.sin((x + layer * 1200) * 0.041) * 0.45;
@@ -1186,13 +875,10 @@ function drawMountainHorizon(camX, camY) {
     ctx.fill();
   }
 
+  // Snow caps on the tallest peaks.
   ctx.fillStyle = 'rgba(235,235,240,0.72)';
 
-  for (
-    let x = startX;
-    x <= camX + VIEW_W + 160;
-    x += 96
-  ) {
+  for (let x = startX; x <= camX + VIEW_W + 160; x += 96) {
     const peak =
       horizonY +
       35 -
@@ -1217,8 +903,9 @@ function render(time) {
 
   let camX = 0, camY = 0;
 
-  if (map.outside)
+  if (map.outside) {
     [camX, camY] = camera(map);
+  }
 
   ctx.save();
 
@@ -1227,12 +914,7 @@ function render(time) {
   } else {
     const worldW = map.w * TILE;
     const worldH = map.h * TILE;
-
-    const zoom = Math.min(
-      VIEW_W / worldW,
-      VIEW_H / worldH
-    );
-
+    const zoom = Math.min(VIEW_W / worldW, VIEW_H / worldH);
     const dx = (VIEW_W - worldW * zoom) / 2;
     const dy = (VIEW_H - worldH * zoom) / 2;
 
@@ -1249,33 +931,19 @@ function render(time) {
     drawAmbient();
   }
 
-  if (map.keeper)
-    drawKeeper(map.keeper);
+  if (map.keeper) drawKeeper(map.keeper);
 
   drawPlayer(time);
 
   ctx.restore();
 
-  if (state !== 'splash')
-    drawHUD();
-
-  if (state === 'splash')
-    drawSplash();
-
-  if (state === 'title')
-    drawTitle();
-
-  if (state === 'dialog')
-    drawDialog();
-
-  if (state === 'record')
-    drawRecordCard();
-
-  if (state === 'win')
-    drawWin();
-
-  if (toast)
-    drawToast();
+  if (state !== 'splash') drawHUD();
+  if (state === 'splash') drawSplash();
+  if (state === 'title') drawTitle();
+  if (state === 'dialog') drawDialog();
+  if (state === 'record') drawRecordCard();
+  if (state === 'win') drawWin();
+  if (toast) drawToast();
 }
 
 // ---------------------------------------------------------------- tiles
@@ -1288,11 +956,7 @@ function drawTiles(map, time) {
       const h = hash2(tx, ty);
 
       if (map.outside) {
-        ctx.fillStyle =
-          (h % 7 === 0)
-            ? '#3e7c34'
-            : '#468a3a';
-
+        ctx.fillStyle = (h % 7 === 0) ? '#3e7c34' : '#468a3a';
         ctx.fillRect(px, py, TILE, TILE);
 
         if (h % 5 === 0) {
@@ -1304,7 +968,6 @@ function drawTiles(map, time) {
             3
           );
         }
-
       } else {
         ctx.fillStyle = map.floor;
         ctx.fillRect(px, py, TILE, TILE);
@@ -1321,14 +984,14 @@ function drawTiles(map, time) {
 
           ctx.fillStyle = '#504e58';
 
-          if (h % 6 === 0)
+          if (h % 6 === 0) {
             ctx.fillRect(
               px + (h % 18),
               py + ((h >> 3) % 24),
               4,
               3
             );
-
+          }
           break;
         }
 
@@ -1343,19 +1006,15 @@ function drawTiles(map, time) {
           ctx.fillStyle = '#4878cc';
 
           const off =
-            Math.floor(time * 6) % 2 === 0
-              ? 4
-              : 12;
+            Math.floor(time * 6) % 2 === 0 ? 4 : 12;
 
           ctx.fillRect(px + off, py + 8, 10, 2);
-
           ctx.fillRect(
             px + (TILE - off - 10),
             py + 22,
             10,
             2
           );
-
           break;
         }
 
@@ -1375,50 +1034,21 @@ function drawTiles(map, time) {
 
           ctx.fillStyle = 'rgba(0,0,0,0.15)';
           ctx.fillRect(px, py, TILE, 2);
-          ctx.fillRect(
-            px,
-            py + TILE - 2,
-            TILE,
-            2
-          );
-
+          ctx.fillRect(px, py + TILE - 2, TILE, 2);
           break;
         }
 
         case 'f': {
           ctx.fillStyle = '#8a6a42';
-
-          ctx.fillRect(
-            px + 2,
-            py + 8,
-            TILE - 4,
-            6
-          );
-
-          ctx.fillRect(
-            px + 4,
-            py + 4,
-            4,
-            20
-          );
-
-          ctx.fillRect(
-            px + TILE - 8,
-            py + 4,
-            4,
-            20
-          );
-
+          ctx.fillRect(px + 2, py + 8, TILE - 4, 6);
+          ctx.fillRect(px + 4, py + 4, 4, 20);
+          ctx.fillRect(px + TILE - 8, py + 4, 4, 20);
           break;
         }
 
         case 'c':
         case 'C':
-          drawCrate(
-            px,
-            py,
-            map.crates[key(tx, ty)]
-          );
+          drawCrate(px, py, map.crates[key(tx, ty)]);
           break;
 
         case 'W': {
@@ -1434,65 +1064,37 @@ function drawTiles(map, time) {
             2,
             14
           );
-
           break;
         }
 
         case 'T': {
           ctx.fillStyle = '#6a4a2a';
-          ctx.fillRect(
-            px,
-            py + 6,
-            TILE,
-            TILE - 6
-          );
+          ctx.fillRect(px, py + 6, TILE, TILE - 6);
 
           ctx.fillStyle = '#9a7040';
           ctx.fillRect(px, py, TILE, 10);
-
           break;
         }
 
         case 'J': {
           ctx.fillStyle = '#b03030';
-          ctx.fillRect(
-            px + 4,
-            py,
-            TILE - 8,
-            TILE
-          );
+          ctx.fillRect(px + 4, py, TILE - 8, TILE);
 
           ctx.fillStyle = '#f0d060';
-          ctx.fillRect(
-            px + 8,
-            py + 4,
-            TILE - 16,
-            8
-          );
+          ctx.fillRect(px + 8, py + 4, TILE - 16, 8);
 
           ctx.fillStyle =
             Math.floor(time * 2) % 2
               ? '#60d0f0'
               : '#f06090';
 
-          ctx.fillRect(
-            px + 8,
-            py + 16,
-            TILE - 16,
-            4
-          );
-
+          ctx.fillRect(px + 8, py + 16, TILE - 16, 4);
           break;
         }
 
         case 'E': {
           ctx.fillStyle = '#7a3a20';
-          ctx.fillRect(
-            px,
-            py,
-            TILE,
-            TILE
-          );
+          ctx.fillRect(px, py, TILE, TILE);
 
           ctx.fillStyle = '#9a5a30';
           ctx.fillRect(
@@ -1501,7 +1103,6 @@ function drawTiles(map, time) {
             TILE - 8,
             TILE - 8
           );
-
           break;
         }
       }
@@ -1525,27 +1126,11 @@ function drawTree(px, py) {
 
 function drawCrate(px, py, data) {
   ctx.fillStyle = '#8a5a30';
-  ctx.fillRect(
-    px + 2,
-    py + 6,
-    TILE - 4,
-    TILE - 8
-  );
+  ctx.fillRect(px + 2, py + 6, TILE - 4, TILE - 8);
 
   ctx.fillStyle = '#6a4020';
-  ctx.fillRect(
-    px + 2,
-    py + 6,
-    TILE - 4,
-    3
-  );
-
-  ctx.fillRect(
-    px + 2,
-    py + TILE - 5,
-    TILE - 4,
-    3
-  );
+  ctx.fillRect(px + 2, py + 6, TILE - 4, 3);
+  ctx.fillRect(px + 2, py + TILE - 5, TILE - 4, 3);
 
   const empty =
     data &&
@@ -1597,9 +1182,7 @@ function drawBuildings(map) {
         ctx.stroke();
 
         const offset =
-          row % 2 === 0
-            ? 0
-            : 16;
+          row % 2 === 0 ? 0 : 16;
 
         for (let bx = offset; bx < w; bx += 32) {
           ctx.beginPath();
@@ -1618,12 +1201,7 @@ function drawBuildings(map) {
     ctx.fillRect(px, py, w, TILE + 8);
 
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ctx.fillRect(
-      px,
-      py + TILE + 8,
-      w,
-      3
-    );
+    ctx.fillRect(px, py + TILE + 8, w, 3);
 
     ctx.fillStyle = '#ffe9a0';
 
@@ -1639,7 +1217,6 @@ function drawBuildings(map) {
       );
 
       ctx.fillStyle = 'rgba(0,0,0,0.2)';
-
       ctx.fillRect(
         px + i * TILE + 8,
         py + h - TILE - 6,
@@ -1650,8 +1227,9 @@ function drawBuildings(map) {
       ctx.fillStyle = '#ffe9a0';
     }
 
-    if (isGreenDoorStudio)
+    if (isGreenDoorStudio) {
       drawGraffiti(px, py, w, h);
+    }
 
     const dx = b.doorX * TILE;
 
@@ -1679,8 +1257,9 @@ function drawBuildings(map) {
       3
     );
 
-    if (isHeyBud)
+    if (isHeyBud) {
       drawHeyBudDecor(px, py, w, h);
+    }
 
     ctx.fillStyle = '#f4ecd8';
 
@@ -1764,24 +1343,9 @@ function drawHeyBudDecor(px, py, w, h) {
 
   ctx.beginPath();
   ctx.moveTo(px + 8, py + 30);
-  ctx.quadraticCurveTo(
-    px + 16,
-    py + 46,
-    px + 22,
-    py + 34
-  );
-  ctx.quadraticCurveTo(
-    px + 30,
-    py + 49,
-    px + 38,
-    py + 35
-  );
-  ctx.quadraticCurveTo(
-    px + 48,
-    py + 49,
-    px + 57,
-    py + 34
-  );
+  ctx.quadraticCurveTo(px + 16, py + 46, px + 22, py + 34);
+  ctx.quadraticCurveTo(px + 30, py + 49, px + 38, py + 35);
+  ctx.quadraticCurveTo(px + 48, py + 49, px + 57, py + 34);
   ctx.stroke();
 
   const leaves = [
@@ -1816,35 +1380,12 @@ function drawHeyBudDecor(px, py, w, h) {
   ctx.stroke();
 
   ctx.fillStyle = '#9b633a';
-  ctx.fillRect(
-    px + w - 48,
-    py + 45,
-    20,
-    7
-  );
+  ctx.fillRect(px + w - 48, py + 45, 20, 7);
 
   ctx.fillStyle = '#4d9342';
-
-  ctx.fillRect(
-    px + w - 44,
-    py + 38,
-    5,
-    9
-  );
-
-  ctx.fillRect(
-    px + w - 37,
-    py + 35,
-    5,
-    12
-  );
-
-  ctx.fillRect(
-    px + w - 30,
-    py + 39,
-    5,
-    8
-  );
+  ctx.fillRect(px + w - 44, py + 38, 5, 9);
+  ctx.fillRect(px + w - 37, py + 35, 5, 12);
+  ctx.fillRect(px + w - 30, py + 39, 5, 8);
 
   ctx.restore();
 }
@@ -1871,83 +1412,31 @@ function drawTownDecorations(time) {
   drawHeyBudCars();
   drawPurePopDogSticker();
   drawKountryKartPark();
-  drawKountryKartElectionSign();
 }
 
 function drawGreenDoorArtArea() {
   const baseX = 3 * TILE;
   const baseY = 7 * TILE + 2;
 
+  // Paint table / supplies
   ctx.fillStyle = '#513628';
-  ctx.fillRect(
-    baseX + 2,
-    baseY + 48,
-    66,
-    5
-  );
+  ctx.fillRect(baseX + 2, baseY + 48, 66, 5);
+  ctx.fillRect(baseX + 8, baseY + 53, 5, 13);
+  ctx.fillRect(baseX + 57, baseY + 53, 5, 13);
 
-  ctx.fillRect(
-    baseX + 8,
-    baseY + 53,
-    5,
-    13
-  );
+  drawSprayCan(baseX + 3, baseY + 20, '#e34b3c');
+  drawSprayCan(baseX + 20, baseY + 19, '#3f82c0');
+  drawSprayCan(baseX + 37, baseY + 22, '#d7a52f');
 
-  ctx.fillRect(
-    baseX + 57,
-    baseY + 53,
-    5,
-    13
-  );
+  // Two large canvases being painted outside the studio.
+  drawCanvas(baseX + 70, baseY + 1, 43, 52, 0);
+  drawCanvas(baseX + 124, baseY + 4, 43, 49, 1);
 
-  drawSprayCan(
-    baseX + 3,
-    baseY + 20,
-    '#e34b3c'
-  );
+  // Two artists actively spray-painting the canvases.
+  drawSprayPainter(baseX + 62, baseY + 45, '#c86a3c', 1);
+  drawSprayPainter(baseX + 119, baseY + 47, '#4a7ab0', -1);
 
-  drawSprayCan(
-    baseX + 20,
-    baseY + 19,
-    '#3f82c0'
-  );
-
-  drawSprayCan(
-    baseX + 37,
-    baseY + 22,
-    '#d7a52f'
-  );
-
-  drawCanvas(
-    baseX + 70,
-    baseY + 1,
-    43,
-    52,
-    0
-  );
-
-  drawCanvas(
-    baseX + 124,
-    baseY + 4,
-    43,
-    49,
-    1
-  );
-
-  drawSprayPainter(
-    baseX + 62,
-    baseY + 45,
-    '#c86a3c',
-    1
-  );
-
-  drawSprayPainter(
-    baseX + 119,
-    baseY + 47,
-    '#4a7ab0',
-    -1
-  );
-
+  // Paint palette on the ground.
   ctx.fillStyle = '#d9c7a2';
   ctx.beginPath();
   ctx.ellipse(
@@ -1962,28 +1451,13 @@ function drawGreenDoorArtArea() {
   ctx.fill();
 
   ctx.fillStyle = '#d84b38';
-  ctx.fillRect(
-    baseX + 33,
-    baseY + 59,
-    3,
-    3
-  );
+  ctx.fillRect(baseX + 33, baseY + 59, 3, 3);
 
   ctx.fillStyle = '#3d82bd';
-  ctx.fillRect(
-    baseX + 39,
-    baseY + 56,
-    3,
-    3
-  );
+  ctx.fillRect(baseX + 39, baseY + 56, 3, 3);
 
   ctx.fillStyle = '#e0b33c';
-  ctx.fillRect(
-    baseX + 45,
-    baseY + 59,
-    3,
-    3
-  );
+  ctx.fillRect(baseX + 45, baseY + 59, 3, 3);
 }
 
 function drawSprayPainter(x, y, shirt, dir) {
@@ -2012,6 +1486,7 @@ function drawSprayPainter(x, y, shirt, dir) {
   ctx.fillStyle = '#252026';
   ctx.fillRect(-6, -21, 12, 4);
 
+  // Arm reaching toward canvas.
   ctx.strokeStyle = '#b87954';
   ctx.lineWidth = 4;
 
@@ -2020,12 +1495,9 @@ function drawSprayPainter(x, y, shirt, dir) {
   ctx.lineTo(13, -11);
   ctx.stroke();
 
-  drawSprayCan(
-    12,
-    -17,
-    '#d84b38'
-  );
+  drawSprayCan(12, -17, '#d84b38');
 
+  // Paint spray.
   ctx.fillStyle = '#e8d060';
   ctx.fillRect(24, -16, 3, 2);
   ctx.fillRect(28, -12, 2, 2);
@@ -2035,36 +1507,16 @@ function drawSprayPainter(x, y, shirt, dir) {
 
 function drawSprayCan(x, y, color) {
   ctx.fillStyle = '#202026';
-  ctx.fillRect(
-    x + 2,
-    y + 5,
-    10,
-    19
-  );
+  ctx.fillRect(x + 2, y + 5, 10, 19);
 
   ctx.fillStyle = color;
-  ctx.fillRect(
-    x + 3,
-    y + 8,
-    8,
-    12
-  );
+  ctx.fillRect(x + 3, y + 8, 8, 12);
 
   ctx.fillStyle = '#cfc7b5';
-  ctx.fillRect(
-    x + 4,
-    y + 2,
-    6,
-    4
-  );
+  ctx.fillRect(x + 4, y + 2, 6, 4);
 
   ctx.fillStyle = '#141218';
-  ctx.fillRect(
-    x + 5,
-    y,
-    4,
-    3
-  );
+  ctx.fillRect(x + 5, y, 4, 3);
 }
 
 function drawCanvas(x, y, w, h, style) {
@@ -2072,27 +1524,10 @@ function drawCanvas(x, y, w, h, style) {
   ctx.lineWidth = 3;
 
   ctx.beginPath();
-
-  ctx.moveTo(
-    x + w / 2,
-    y + h
-  );
-
-  ctx.lineTo(
-    x + 2,
-    y + h + 12
-  );
-
-  ctx.moveTo(
-    x + w / 2,
-    y + h
-  );
-
-  ctx.lineTo(
-    x + w - 2,
-    y + h + 12
-  );
-
+  ctx.moveTo(x + w / 2, y + h);
+  ctx.lineTo(x + 2, y + h + 12);
+  ctx.moveTo(x + w / 2, y + h);
+  ctx.lineTo(x + w - 2, y + h + 12);
   ctx.stroke();
 
   ctx.fillStyle = '#d9cdb8';
@@ -2107,27 +1542,10 @@ function drawCanvas(x, y, w, h, style) {
     ctx.lineWidth = 3;
 
     ctx.beginPath();
-
-    ctx.moveTo(
-      x + 3,
-      y + h - 5
-    );
-
-    ctx.lineTo(
-      x + 10,
-      y + 9
-    );
-
-    ctx.lineTo(
-      x + 16,
-      y + 20
-    );
-
-    ctx.lineTo(
-      x + 22,
-      y + 5
-    );
-
+    ctx.moveTo(x + 3, y + h - 5);
+    ctx.lineTo(x + 10, y + 9);
+    ctx.lineTo(x + 16, y + 20);
+    ctx.lineTo(x + 22, y + 5);
     ctx.stroke();
 
     ctx.strokeStyle = '#397bb4';
@@ -2136,27 +1554,16 @@ function drawCanvas(x, y, w, h, style) {
     ctx.moveTo(x + 3, y + 8);
     ctx.lineTo(x + 19, y + 26);
     ctx.stroke();
-
   } else {
     ctx.fillStyle = '#d35a42';
-    ctx.fillRect(
-      x + 3,
-      y + 5,
-      9,
-      10
-    );
+    ctx.fillRect(x + 3, y + 5, 9, 10);
 
     ctx.fillStyle = '#407eb6';
-    ctx.fillRect(
-      x + 12,
-      y + 16,
-      12,
-      11
-    );
+    ctx.fillRect(x + 12, y + 16, 12, 11);
 
     ctx.fillStyle = '#d5a531';
-    ctx.beginPath();
 
+    ctx.beginPath();
     ctx.arc(
       x + 10,
       y + 25,
@@ -2164,7 +1571,6 @@ function drawCanvas(x, y, w, h, style) {
       0,
       Math.PI * 2
     );
-
     ctx.fill();
 
     ctx.strokeStyle = '#6b4592';
@@ -2182,139 +1588,49 @@ function drawDeliScene(time) {
   const y = 18 * TILE + 2;
 
   ctx.fillStyle = '#41454a';
-  ctx.fillRect(
-    x + 7,
-    y + 8,
-    20,
-    25
-  );
+  ctx.fillRect(x + 7, y + 8, 20, 25);
 
   ctx.fillStyle = '#5c6267';
-  ctx.fillRect(
-    x + 5,
-    y + 6,
-    24,
-    5
-  );
+  ctx.fillRect(x + 5, y + 6, 24, 5);
 
   ctx.fillStyle = '#303338';
-  ctx.fillRect(
-    x + 9,
-    y + 13,
-    3,
-    15
-  );
-
-  ctx.fillRect(
-    x + 17,
-    y + 13,
-    3,
-    15
-  );
-
-  ctx.fillRect(
-    x + 25,
-    y + 13,
-    2,
-    15
-  );
+  ctx.fillRect(x + 9, y + 13, 3, 15);
+  ctx.fillRect(x + 17, y + 13, 3, 15);
+  ctx.fillRect(x + 25, y + 13, 2, 15);
 
   ctx.fillStyle = '#d8d0b8';
-  ctx.fillRect(
-    x + 11,
-    y + 2,
-    8,
-    8
-  );
+  ctx.fillRect(x + 11, y + 2, 8, 8);
 
   ctx.fillStyle = '#9a4038';
-  ctx.fillRect(
-    x + 18,
-    y + 4,
-    6,
-    5
-  );
+  ctx.fillRect(x + 18, y + 4, 6, 5);
 
-  drawGuitarPlayer(
-    x + 50,
-    y + 12,
-    time
-  );
+  drawGuitarPlayer(x + 50, y + 12, time);
 }
 
 function drawGuitarPlayer(x, y, time) {
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.fillRect(
-    x - 13,
-    y + 27,
-    31,
-    5
-  );
+  ctx.fillRect(x - 13, y + 27, 31, 5);
 
   ctx.fillStyle = '#252638';
-  ctx.fillRect(
-    x - 10,
-    y + 18,
-    8,
-    13
-  );
-
-  ctx.fillRect(
-    x + 4,
-    y + 17,
-    8,
-    14
-  );
+  ctx.fillRect(x - 10, y + 18, 8, 13);
+  ctx.fillRect(x + 4, y + 17, 8, 14);
 
   ctx.fillStyle = '#1c1a20';
-  ctx.fillRect(
-    x - 13,
-    y + 28,
-    10,
-    4
-  );
-
-  ctx.fillRect(
-    x + 9,
-    y + 28,
-    10,
-    4
-  );
+  ctx.fillRect(x - 13, y + 28, 10, 4);
+  ctx.fillRect(x + 9, y + 28, 10, 4);
 
   ctx.fillStyle = '#bd5745';
-  ctx.fillRect(
-    x - 8,
-    y + 7,
-    17,
-    14
-  );
+  ctx.fillRect(x - 8, y + 7, 17, 14);
 
   ctx.fillStyle = '#b87954';
-  ctx.fillRect(
-    x - 5,
-    y - 1,
-    11,
-    11
-  );
+  ctx.fillRect(x - 5, y - 1, 11, 11);
 
   ctx.fillStyle = '#2b211e';
-  ctx.fillRect(
-    x - 6,
-    y - 4,
-    13,
-    5
-  );
-
-  ctx.fillRect(
-    x - 7,
-    y - 1,
-    3,
-    7
-  );
+  ctx.fillRect(x - 6, y - 4, 13, 5);
+  ctx.fillRect(x - 7, y - 1, 3, 7);
 
   ctx.fillStyle = '#c8903e';
   ctx.beginPath();
-
   ctx.ellipse(
     x + 4,
     y + 13,
@@ -2324,12 +1640,10 @@ function drawGuitarPlayer(x, y, time) {
     0,
     Math.PI * 2
   );
-
   ctx.fill();
 
   ctx.fillStyle = '#704525';
   ctx.beginPath();
-
   ctx.arc(
     x + 4,
     y + 13,
@@ -2337,46 +1651,22 @@ function drawGuitarPlayer(x, y, time) {
     0,
     Math.PI * 2
   );
-
   ctx.fill();
 
   ctx.fillStyle = '#704525';
-  ctx.fillRect(
-    x - 19,
-    y + 5,
-    22,
-    3
-  );
+  ctx.fillRect(x - 19, y + 5, 22, 3);
 
   ctx.strokeStyle = '#ead8a4';
   ctx.lineWidth = 1;
 
   ctx.beginPath();
-
-  ctx.moveTo(
-    x - 18,
-    y + 5
-  );
-
-  ctx.lineTo(
-    x + 10,
-    y + 13
-  );
-
-  ctx.moveTo(
-    x - 18,
-    y + 7
-  );
-
-  ctx.lineTo(
-    x + 10,
-    y + 14
-  );
-
+  ctx.moveTo(x - 18, y + 5);
+  ctx.lineTo(x + 10, y + 13);
+  ctx.moveTo(x - 18, y + 7);
+  ctx.lineTo(x + 10, y + 14);
   ctx.stroke();
 
-  const strum =
-    Math.floor(time * 5) % 2;
+  const strum = Math.floor(time * 5) % 2;
 
   ctx.fillStyle = '#b87954';
   ctx.fillRect(
@@ -2394,125 +1684,57 @@ function drawCoffeeCart() {
   ctx.fillStyle = '#202126';
 
   ctx.beginPath();
-  ctx.arc(
-    x + 8,
-    y + 27,
-    5,
-    0,
-    Math.PI * 2
-  );
+  ctx.arc(x + 8, y + 27, 5, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.beginPath();
-  ctx.arc(
-    x + 48,
-    y + 27,
-    5,
-    0,
-    Math.PI * 2
-  );
+  ctx.arc(x + 48, y + 27, 5, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.fillStyle = '#e8d4a3';
-  ctx.fillRect(
-    x + 3,
-    y + 5,
-    50,
-    23
-  );
+  ctx.fillRect(x + 3, y + 5, 50, 23);
 
   ctx.strokeStyle = '#594432';
   ctx.lineWidth = 2;
-  ctx.strokeRect(
-    x + 3,
-    y + 5,
-    50,
-    23
-  );
+  ctx.strokeRect(x + 3, y + 5, 50, 23);
 
   ctx.fillStyle = '#9a513d';
-  ctx.fillRect(
-    x,
-    y,
-    56,
-    7
-  );
+  ctx.fillRect(x, y, 56, 7);
 
   ctx.fillStyle = '#f0d4a0';
 
-  for (let i = 0; i < 4; i++)
+  for (let i = 0; i < 4; i++) {
     ctx.fillRect(
       x + 4 + i * 13,
       y,
       7,
       7
     );
+  }
 
   ctx.fillStyle = '#493326';
-  ctx.fillRect(
-    x + 17,
-    y + 9,
-    24,
-    8
-  );
+  ctx.fillRect(x + 17, y + 9, 24, 8);
 
   ctx.fillStyle = '#f4ecd8';
   ctx.font = 'bold 6px monospace';
   ctx.textAlign = 'center';
-
-  ctx.fillText(
-    'COFFEE',
-    x + 29,
-    y + 15
-  );
+  ctx.fillText('COFFEE', x + 29, y + 15);
 
   ctx.fillStyle = '#666a6d';
-  ctx.fillRect(
-    x + 7,
-    y + 18,
-    12,
-    8
-  );
+  ctx.fillRect(x + 7, y + 18, 12, 8);
 
   ctx.fillStyle = '#f2e5c7';
-  ctx.fillRect(
-    x + 25,
-    y + 19,
-    7,
-    7
-  );
+  ctx.fillRect(x + 25, y + 19, 7, 7);
 
   ctx.fillStyle = '#5c3928';
-  ctx.fillRect(
-    x + 26,
-    y + 18,
-    5,
-    3
-  );
+  ctx.fillRect(x + 26, y + 18, 5, 3);
 
   ctx.fillStyle = '#70432d';
-  ctx.fillRect(
-    x + 37,
-    y + 18,
-    10,
-    8
-  );
+  ctx.fillRect(x + 37, y + 18, 10, 8);
 
   ctx.fillStyle = '#e9d5ad';
-
-  ctx.fillRect(
-    x + 39,
-    y + 20,
-    6,
-    1
-  );
-
-  ctx.fillRect(
-    x + 39,
-    y + 23,
-    5,
-    1
-  );
+  ctx.fillRect(x + 39, y + 20, 6, 1);
+  ctx.fillRect(x + 39, y + 23, 5, 1);
 }
 
 function drawAnthillBillboard() {
@@ -2522,63 +1744,26 @@ function drawAnthillBillboard() {
   const h = 54;
 
   ctx.fillStyle = '#553c2b';
-
-  ctx.fillRect(
-    x + 15,
-    y + h,
-    7,
-    38
-  );
-
-  ctx.fillRect(
-    x + w - 22,
-    y + h,
-    7,
-    38
-  );
+  ctx.fillRect(x + 15, y + h, 7, 38);
+  ctx.fillRect(x + w - 22, y + h, 7, 38);
 
   ctx.fillStyle = '#29242a';
-  ctx.fillRect(
-    x - 4,
-    y - 4,
-    w + 8,
-    h + 8
-  );
+  ctx.fillRect(x - 4, y - 4, w + 8, h + 8);
 
   ctx.fillStyle = '#d6c35e';
-  ctx.fillRect(
-    x,
-    y,
-    w,
-    h
-  );
+  ctx.fillRect(x, y, w, h);
 
   ctx.strokeStyle = '#4b3928';
   ctx.lineWidth = 3;
-  ctx.strokeRect(
-    x + 4,
-    y + 4,
-    w - 8,
-    h - 8
-  );
+  ctx.strokeRect(x + 4, y + 4, w - 8, h - 8);
 
   ctx.fillStyle = '#3b2724';
   ctx.font = 'bold 28px monospace';
   ctx.textAlign = 'center';
-
-  ctx.fillText(
-    'ANTHILL',
-    x + w / 2,
-    y + 35
-  );
+  ctx.fillText('ANTHILL', x + w / 2, y + 35);
 
   ctx.fillStyle = '#a34332';
-  ctx.fillRect(
-    x + 24,
-    y + 41,
-    w - 48,
-    4
-  );
+  ctx.fillRect(x + 24, y + 41, w - 48, 4);
 }
 
 function drawOldLotByHeyBud() {
@@ -2588,12 +1773,7 @@ function drawOldLotByHeyBud() {
   const h = 2 * TILE;
 
   ctx.fillStyle = '#5a5a5e';
-  ctx.fillRect(
-    x,
-    y,
-    w,
-    h
-  );
+  ctx.fillRect(x, y, w, h);
 
   ctx.fillStyle = '#4c4c50';
 
@@ -2629,83 +1809,28 @@ function drawOldLotByHeyBud() {
   ];
 
   for (const [wx, wy] of weeds) {
-    ctx.fillRect(
-      x + wx,
-      y + wy,
-      2,
-      6
-    );
-
-    ctx.fillRect(
-      x + wx - 3,
-      y + wy + 2,
-      2,
-      5
-    );
-
-    ctx.fillRect(
-      x + wx + 3,
-      y + wy + 2,
-      2,
-      5
-    );
+    ctx.fillRect(x + wx, y + wy, 2, 6);
+    ctx.fillRect(x + wx - 3, y + wy + 2, 2, 5);
+    ctx.fillRect(x + wx + 3, y + wy + 2, 2, 5);
   }
 
-  drawParkedCar(
-    x + 70,
-    y + 10,
-    '#b63d3d',
-    1
-  );
-
-  drawParkedCar(
-    x + 170,
-    y + 42,
-    '#3d72b6',
-    -1
-  );
+  // Two permanent parked cars beside Hey Bud.
+  drawParkedCar(x + 70, y + 10, '#b63d3d', 1);
+  drawParkedCar(x + 170, y + 42, '#3d72b6', -1);
 
   ctx.fillStyle = '#7a3a26';
-  ctx.fillRect(
-    x + w - 30,
-    y + 8,
-    14,
-    20
-  );
+  ctx.fillRect(x + w - 30, y + 8, 14, 20);
 
   ctx.fillStyle = '#5a2818';
-
-  ctx.fillRect(
-    x + w - 30,
-    y + 12,
-    14,
-    3
-  );
-
-  ctx.fillRect(
-    x + w - 30,
-    y + 20,
-    14,
-    3
-  );
+  ctx.fillRect(x + w - 30, y + 12, 14, 3);
+  ctx.fillRect(x + w - 30, y + 20, 14, 3);
 
   ctx.save();
-
-  ctx.translate(
-    x + 6,
-    y + h - 4
-  );
-
+  ctx.translate(x + 6, y + h - 4);
   ctx.rotate(-0.25);
 
   ctx.fillStyle = '#8a7a5a';
-
-  ctx.fillRect(
-    -2,
-    -22,
-    16,
-    22
-  );
+  ctx.fillRect(-2, -22, 16, 22);
 
   ctx.restore();
 }
@@ -2717,112 +1842,48 @@ function drawParkedCar(x, y, body, dir) {
   ctx.scale(dir, 1);
 
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.fillRect(
-    -27,
-    12,
-    54,
-    6
-  );
+  ctx.fillRect(-27, 12, 54, 6);
 
   ctx.fillStyle = '#20242a';
 
   ctx.beginPath();
-
-  ctx.arc(
-    -18,
-    12,
-    7,
-    0,
-    Math.PI * 2
-  );
-
-  ctx.arc(
-    18,
-    12,
-    7,
-    0,
-    Math.PI * 2
-  );
-
+  ctx.arc(-18, 12, 7, 0, Math.PI * 2);
+  ctx.arc(18, 12, 7, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.fillStyle = body;
-
-  ctx.fillRect(
-    -27,
-    -2,
-    54,
-    15
-  );
-
-  ctx.fillRect(
-    -17,
-    -10,
-    29,
-    10
-  );
+  ctx.fillRect(-27, -2, 54, 15);
+  ctx.fillRect(-17, -10, 29, 10);
 
   ctx.fillStyle = '#9ed0dc';
-
-  ctx.fillRect(
-    -12,
-    -8,
-    10,
-    7
-  );
-
-  ctx.fillRect(
-    0,
-    -8,
-    11,
-    7
-  );
+  ctx.fillRect(-12, -8, 10, 7);
+  ctx.fillRect(0, -8, 11, 7);
 
   ctx.fillStyle = '#f2d37a';
-  ctx.fillRect(
-    24,
-    1,
-    4,
-    4
-  );
+  ctx.fillRect(24, 1, 4, 4);
 
   ctx.fillStyle = '#7c2428';
-  ctx.fillRect(
-    -27,
-    1,
-    4,
-    4
-  );
+  ctx.fillRect(-27, 1, 4, 4);
 
   ctx.restore();
 }
 
+// ---------------------------------------------------------------- Pure Pop Records sticker
 function drawPurePopDogSticker() {
+  // Large poster-style sticker mounted on the right side of Pure Pop Records.
   const x = 35 * TILE + 4;
   const y = 14 * TILE + 7;
   const w = 58;
   const h = 84;
 
+  // White sticker border / shadow.
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.fillRect(
-    x + 3,
-    y + 3,
-    w + 6,
-    h + 6
-  );
+  ctx.fillRect(x + 3, y + 3, w + 6, h + 6);
 
   ctx.fillStyle = '#f4f0e7';
+  ctx.fillRect(x - 3, y - 3, w + 6, h + 6);
 
-  ctx.fillRect(
-    x - 3,
-    y - 3,
-    w + 6,
-    h + 6
-  );
-
-  if (dogStickerImg.complete &&
-      dogStickerImg.naturalWidth) {
-
+  if (dogStickerImg.complete && dogStickerImg.naturalWidth) {
     ctx.drawImage(
       dogStickerImg,
       x,
@@ -2830,16 +1891,10 @@ function drawPurePopDogSticker() {
       w,
       h
     );
-
   } else {
+    // Fallback if image has not loaded yet.
     ctx.fillStyle = '#29242a';
-
-    ctx.fillRect(
-      x,
-      y,
-      w,
-      h
-    );
+    ctx.fillRect(x, y, w, h);
 
     ctx.fillStyle = '#f4ecd8';
     ctx.font = 'bold 7px monospace';
@@ -2858,51 +1913,25 @@ function drawPurePopDogSticker() {
     );
   }
 
+  // Small corner tape pieces.
   ctx.fillStyle = 'rgba(240,220,170,0.75)';
-
-  ctx.fillRect(
-    x - 2,
-    y + 5,
-    8,
-    4
-  );
-
-  ctx.fillRect(
-    x + w - 6,
-    y + h - 8,
-    8,
-    4
-  );
+  ctx.fillRect(x - 2, y + 5, 8, 4);
+  ctx.fillRect(x + w - 6, y + h - 8, 8, 4);
 }
 
+// ---------------------------------------------------------------- Hey Bud mailbox
 function drawHeyBudMailbox() {
   const x = 35 * TILE + 5;
   const y = 4 * TILE + 18;
 
+  // Post
   ctx.fillStyle = '#4a3527';
+  ctx.fillRect(x + 17, y + 31, 7, 46);
+  ctx.fillRect(x + 10, y + 72, 21, 6);
 
-  ctx.fillRect(
-    x + 17,
-    y + 31,
-    7,
-    46
-  );
-
-  ctx.fillRect(
-    x + 10,
-    y + 72,
-    21,
-    6
-  );
-
+  // Big blue mailbox body
   ctx.fillStyle = '#2468b7';
-
-  ctx.fillRect(
-    x,
-    y + 8,
-    42,
-    27
-  );
+  ctx.fillRect(x, y + 8, 42, 27);
 
   ctx.beginPath();
   ctx.arc(
@@ -2915,94 +1944,36 @@ function drawHeyBudMailbox() {
   ctx.fill();
 
   ctx.fillStyle = '#174c8b';
+  ctx.fillRect(x + 2, y + 32, 38, 4);
 
-  ctx.fillRect(
-    x + 2,
-    y + 32,
-    38,
-    4
-  );
-
+  // Flag
   ctx.fillStyle = '#d7d9df';
-
-  ctx.fillRect(
-    x + 36,
-    y + 7,
-    3,
-    20
-  );
-
-  ctx.fillRect(
-    x + 35,
-    y + 6,
-    10,
-    3
-  );
+  ctx.fillRect(x + 36, y + 7, 3, 20);
+  ctx.fillRect(x + 35, y + 6, 10, 3);
 
   ctx.fillStyle = '#e05a4f';
+  ctx.fillRect(x + 43, y + 7, 5, 7);
 
-  ctx.fillRect(
-    x + 43,
-    y + 7,
-    5,
-    7
-  );
-
+  // Big Ant silhouette sticker
   ctx.fillStyle = '#111218';
 
   ctx.beginPath();
-
-  ctx.arc(
-    x + 21,
-    y + 17,
-    7,
-    0,
-    Math.PI * 2
-  );
-
-  ctx.arc(
-    x + 12,
-    y + 18,
-    5,
-    0,
-    Math.PI * 2
-  );
-
-  ctx.arc(
-    x + 30,
-    y + 18,
-    5,
-    0,
-    Math.PI * 2
-  );
-
+  ctx.arc(x + 21, y + 17, 7, 0, Math.PI * 2);
+  ctx.arc(x + 12, y + 18, 5, 0, Math.PI * 2);
+  ctx.arc(x + 30, y + 18, 5, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.strokeStyle = '#111218';
   ctx.lineWidth = 2;
 
-  for (const sy of [12,17,22]) {
+  for (const sy of [12, 17, 22]) {
     ctx.beginPath();
 
-    ctx.moveTo(
-      x + 14,
-      y + sy
-    );
+    ctx.moveTo(x + 14, y + sy);
+    ctx.lineTo(x + 7, y + sy - 4);
 
-    ctx.lineTo(
-      x + 7,
-      y + sy - 4
-    );
-
-    ctx.moveTo(
-      x + 28,
-      y + sy
-    );
-
-    ctx.lineTo(
-      x + 35,
-      y + sy - 4
-    );
+    ctx.moveTo(x + 28, y + sy);
+    ctx.lineTo(x + 35, y + sy - 4);
 
     ctx.stroke();
   }
@@ -3010,39 +1981,25 @@ function drawHeyBudMailbox() {
   ctx.fillStyle = '#f4ecd8';
   ctx.font = 'bold 6px monospace';
   ctx.textAlign = 'center';
-
-  ctx.fillText(
-    'ANT',
-    x + 21,
-    y + 27
-  );
+  ctx.fillText('ANT', x + 21, y + 27);
 }
 
+// ---------------------------------------------------------------- Kountry Kart park
 function drawKountryKartPark() {
   const x = 1 * TILE;
   const y = 19 * TILE;
   const w = 11 * TILE;
   const h = 6 * TILE;
 
+  // Small sitting lawn
   ctx.fillStyle = 'rgba(80,150,65,0.28)';
-
-  ctx.fillRect(
-    x + 4,
-    y + 4,
-    w - 8,
-    h - 8
-  );
+  ctx.fillRect(x + 4, y + 4, w - 8, h - 8);
 
   ctx.strokeStyle = 'rgba(30,70,30,0.35)';
   ctx.lineWidth = 2;
+  ctx.strokeRect(x + 5, y + 5, w - 10, h - 10);
 
-  ctx.strokeRect(
-    x + 5,
-    y + 5,
-    w - 10,
-    h - 10
-  );
-
+  // Path stones
   ctx.fillStyle = '#c4b38c';
 
   for (let i = 0; i < 7; i++) {
@@ -3054,37 +2011,20 @@ function drawKountryKartPark() {
     );
   }
 
-  drawBench(
-    x + 38,
-    y + 31
-  );
+  drawBench(x + 38, y + 31);
+  drawBench(x + 190, y + 31);
+  drawBench(x + 110, y + 112);
 
-  drawBench(
-    x + 190,
-    y + 31
-  );
-
-  drawBench(
-    x + 110,
-    y + 112
-  );
-
+  // Flower patches
   for (const [fx, fy] of [
     [18,86],
     [278,92],
     [144,42]
   ]) {
     ctx.fillStyle = '#e6d060';
-
-    ctx.fillRect(
-      x + fx,
-      y + fy,
-      4,
-      4
-    );
+    ctx.fillRect(x + fx, y + fy, 4, 4);
 
     ctx.fillStyle = '#d85a72';
-
     ctx.fillRect(
       x + fx + 5,
       y + fy + 2,
@@ -3093,7 +2033,6 @@ function drawKountryKartPark() {
     );
 
     ctx.fillStyle = '#4c8d3c';
-
     ctx.fillRect(
       x + fx + 2,
       y + fy + 5,
@@ -3103,140 +2042,17 @@ function drawKountryKartPark() {
   }
 }
 
-// ---------------------------------------------------------------- DJ KANGA election sign
-function drawKountryKartElectionSign() {
-  // Election sign just outside Kountry Kart Deli.
-  const x = 12 * TILE + 2;
-  const y = 19 * TILE + 28;
-
-  // Ground shadow.
-  ctx.fillStyle = 'rgba(0,0,0,0.22)';
-  ctx.fillRect(
-    x + 18,
-    y + 76,
-    34,
-    5
-  );
-
-  // Wooden post.
-  ctx.fillStyle = '#5a3b27';
-
-  ctx.fillRect(
-    x + 32,
-    y + 48,
-    7,
-    34
-  );
-
-  ctx.fillStyle = '#7a5130';
-
-  ctx.fillRect(
-    x + 33,
-    y + 48,
-    3,
-    34
-  );
-
-  // Campaign placard.
-  ctx.fillStyle = '#f4ecd8';
-
-  ctx.fillRect(
-    x,
-    y,
-    72,
-    52
-  );
-
-  ctx.strokeStyle = '#25202a';
-  ctx.lineWidth = 3;
-
-  ctx.strokeRect(
-    x + 1.5,
-    y + 1.5,
-    69,
-    49
-  );
-
-  // Red and blue campaign stripes.
-  ctx.fillStyle = '#c94848';
-
-  ctx.fillRect(
-    x + 4,
-    y + 4,
-    64,
-    5
-  );
-
-  ctx.fillStyle = '#3972b8';
-
-  ctx.fillRect(
-    x + 4,
-    y + 43,
-    64,
-    5
-  );
-
-  // Sign text.
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#25202a';
-
-  ctx.font = 'bold 9px monospace';
-
-  ctx.fillText(
-    'DJ KANGA',
-    x + 36,
-    y + 22
-  );
-
-  ctx.font = 'bold 8px monospace';
-
-  ctx.fillText(
-    'FOR MAYOR',
-    x + 36,
-    y + 34
-  );
-}
-
 function drawBench(x, y) {
   ctx.fillStyle = 'rgba(0,0,0,0.2)';
-  ctx.fillRect(
-    x - 24,
-    y + 16,
-    48,
-    4
-  );
+  ctx.fillRect(x - 24, y + 16, 48, 4);
 
   ctx.fillStyle = '#70452d';
-
-  ctx.fillRect(
-    x - 24,
-    y - 5,
-    48,
-    7
-  );
-
-  ctx.fillRect(
-    x - 22,
-    y + 3,
-    44,
-    6
-  );
+  ctx.fillRect(x - 24, y - 5, 48, 7);
+  ctx.fillRect(x - 22, y + 3, 44, 6);
 
   ctx.fillStyle = '#4b3022';
-
-  ctx.fillRect(
-    x - 18,
-    y + 9,
-    5,
-    12
-  );
-
-  ctx.fillRect(
-    x + 13,
-    y + 9,
-    5,
-    12
-  );
+  ctx.fillRect(x - 18, y + 9, 5, 12);
+  ctx.fillRect(x + 13, y + 9, 5, 12);
 }
 
 // ---------------------------------------------------------------- keeper
@@ -3245,53 +2061,18 @@ function drawKeeper(k) {
   const py = k.y * TILE;
 
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.fillRect(
-    px + 8,
-    py + 26,
-    16,
-    4
-  );
+  ctx.fillRect(px + 8, py + 26, 16, 4);
 
   ctx.fillStyle = k.shirt;
-
-  ctx.fillRect(
-    px + 8,
-    py + 12,
-    16,
-    14
-  );
+  ctx.fillRect(px + 8, py + 12, 16, 14);
 
   ctx.fillStyle = k.skin;
-
-  ctx.fillRect(
-    px + 10,
-    py + 2,
-    12,
-    11
-  );
+  ctx.fillRect(px + 10, py + 2, 12, 11);
 
   ctx.fillStyle = '#201818';
-
-  ctx.fillRect(
-    px + 12,
-    py + 6,
-    2,
-    2
-  );
-
-  ctx.fillRect(
-    px + 18,
-    py + 6,
-    2,
-    2
-  );
-
-  ctx.fillRect(
-    px + 10,
-    py,
-    12,
-    3
-  );
+  ctx.fillRect(px + 12, py + 6, 2, 2);
+  ctx.fillRect(px + 18, py + 6, 2, 2);
+  ctx.fillRect(px + 10, py, 12, 3);
 }
 
 // ---------------------------------------------------------------- player
@@ -3300,13 +2081,15 @@ function drawPlayer(time) {
 
   let col = 0;
 
-  if (player.moving)
+  if (player.moving) {
     col = [0, 1, 0, 2][
       Math.floor(player.animT * 7) % 4
     ];
+  }
 
-  if (player.skating)
+  if (player.skating) {
     col = player.moving ? 2 : 0;
+  }
 
   const bob =
     player.skating && player.moving
@@ -3316,7 +2099,6 @@ function drawPlayer(time) {
   const footY = player.y + 6;
 
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
-
   ctx.fillRect(
     player.x - 11,
     footY - 3,
@@ -3326,7 +2108,6 @@ function drawPlayer(time) {
 
   if (player.skating) {
     ctx.fillStyle = '#8a4a20';
-
     ctx.fillRect(
       player.x - 14,
       footY - 3 + bob,
@@ -3358,9 +2139,7 @@ function drawPlayer(time) {
       row * SHEET_CH,
       SHEET_CW,
       SHEET_CH,
-      Math.round(
-        player.x - SPR_W / 2
-      ),
+      Math.round(player.x - SPR_W / 2),
       Math.round(
         footY -
         SPR_H -
@@ -3370,10 +2149,8 @@ function drawPlayer(time) {
       SPR_W,
       SPR_H
     );
-
   } else {
     ctx.fillStyle = '#d0a060';
-
     ctx.fillRect(
       player.x - 8,
       footY - 40,
@@ -3386,27 +2163,15 @@ function drawPlayer(time) {
 // ---------------------------------------------------------------- UI
 function drawHUD() {
   ctx.fillStyle = 'rgba(10,8,14,0.75)';
-
-  ctx.fillRect(
-    8,
-    8,
-    320,
-    44
-  );
+  ctx.fillRect(8, 8, 320, 44);
 
   ctx.font = 'bold 11px monospace';
   ctx.textAlign = 'left';
   ctx.fillStyle = '#c8c0d8';
-
-  ctx.fillText(
-    'SAMPLES',
-    18,
-    26
-  );
+  ctx.fillText('SAMPLES', 18, 26);
 
   PAD_ORDER.forEach((id, i) => {
     const r = RECORDS[id];
-
     const x = 88 + i * 46;
     const y = 14;
 
@@ -3415,20 +2180,10 @@ function drawHUD() {
         ? r.color
         : '#262030';
 
-    ctx.fillRect(
-      x,
-      y,
-      38,
-      30
-    );
+    ctx.fillRect(x, y, 38, 30);
 
     ctx.strokeStyle = '#0a080e';
-    ctx.strokeRect(
-      x + 0.5,
-      y + 0.5,
-      37,
-      29
-    );
+    ctx.strokeRect(x + 0.5, y + 0.5, 37, 29);
 
     ctx.fillStyle =
       collected.has(id)
@@ -3436,12 +2191,7 @@ function drawHUD() {
         : '#4a4258';
 
     ctx.textAlign = 'center';
-
-    ctx.fillText(
-      r.pad,
-      x + 19,
-      y + 20
-    );
+    ctx.fillText(r.pad, x + 19, y + 20);
   });
 
   if (state === 'play') {
@@ -3471,7 +2221,6 @@ function pill(text, cx, cy) {
     ctx.measureText(text).width + 24;
 
   ctx.fillStyle = 'rgba(10,8,14,0.8)';
-
   ctx.fillRect(
     cx - w / 2,
     cy - 14,
@@ -3481,12 +2230,7 @@ function pill(text, cx, cy) {
 
   ctx.fillStyle = '#f4ecd8';
   ctx.textAlign = 'center';
-
-  ctx.fillText(
-    text,
-    cx,
-    cy + 4
-  );
+  ctx.fillText(text, cx, cy + 4);
 }
 
 function drawToast() {
@@ -3507,7 +2251,6 @@ function drawDialog() {
   const y = VIEW_H - h - 16;
 
   ctx.fillStyle = 'rgba(10,8,14,0.92)';
-
   ctx.fillRect(
     24,
     y,
@@ -3568,25 +2311,15 @@ function wrapText(text, x, y, maxW, lh) {
         : w;
 
     if (ctx.measureText(test).width > maxW) {
-      ctx.fillText(
-        line,
-        x,
-        y
-      );
-
+      ctx.fillText(line, x, y);
       y += lh;
       line = w;
-
     } else {
       line = test;
     }
   }
 
-  ctx.fillText(
-    line,
-    x,
-    y
-  );
+  ctx.fillText(line, x, y);
 }
 
 function drawRecordCard() {
@@ -3606,13 +2339,7 @@ function drawRecordCard() {
   const y = (VIEW_H - h) / 2;
 
   ctx.fillStyle = '#1c1626';
-
-  ctx.fillRect(
-    x,
-    y,
-    w,
-    h
-  );
+  ctx.fillRect(x, y, w, h);
 
   ctx.strokeStyle = r.color;
   ctx.lineWidth = 3;
@@ -3629,16 +2356,9 @@ function drawRecordCard() {
   const ss = 150;
 
   ctx.fillStyle = r.color;
-
-  ctx.fillRect(
-    sx,
-    sy,
-    ss,
-    ss
-  );
+  ctx.fillRect(sx, sy, ss, ss);
 
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
-
   ctx.fillRect(
     sx,
     sy + ss - 26,
@@ -3649,7 +2369,6 @@ function drawRecordCard() {
   ctx.fillStyle = '#0c0a10';
 
   ctx.beginPath();
-
   ctx.arc(
     sx + ss + 40,
     sy + ss / 2,
@@ -3657,7 +2376,6 @@ function drawRecordCard() {
     0,
     Math.PI * 2
   );
-
   ctx.fill();
 
   ctx.strokeStyle = '#2a2632';
@@ -3665,7 +2383,6 @@ function drawRecordCard() {
 
   for (const rr of [30, 42, 54]) {
     ctx.beginPath();
-
     ctx.arc(
       sx + ss + 40,
       sy + ss / 2,
@@ -3673,14 +2390,12 @@ function drawRecordCard() {
       0,
       Math.PI * 2
     );
-
     ctx.stroke();
   }
 
   ctx.fillStyle = r.color;
 
   ctx.beginPath();
-
   ctx.arc(
     sx + ss + 40,
     sy + ss / 2,
@@ -3688,7 +2403,6 @@ function drawRecordCard() {
     0,
     Math.PI * 2
   );
-
   ctx.fill();
 
   ctx.textAlign = 'center';
@@ -3772,9 +2486,7 @@ function drawRecordCard() {
 }
 
 function drawSplash() {
-  if (splashImg.complete &&
-      splashImg.naturalWidth) {
-
+  if (splashImg.complete && splashImg.naturalWidth) {
     const iw = splashImg.naturalWidth;
     const ih = splashImg.naturalHeight;
 
@@ -3796,10 +2508,8 @@ function drawSplash() {
       dw,
       dh
     );
-
   } else {
     ctx.fillStyle = '#120e18';
-
     ctx.fillRect(
       0,
       0,
@@ -3809,7 +2519,6 @@ function drawSplash() {
   }
 
   ctx.fillStyle = 'rgba(8,6,12,0.55)';
-
   ctx.fillRect(
     0,
     VIEW_H - 64,
@@ -3835,7 +2544,6 @@ function drawSplash() {
 
 function drawTitle() {
   ctx.fillStyle = 'rgba(8,6,12,0.93)';
-
   ctx.fillRect(
     0,
     0,
@@ -3844,7 +2552,6 @@ function drawTitle() {
   );
 
   ctx.textAlign = 'center';
-
   ctx.fillStyle = '#e0b040';
   ctx.font = 'bold 44px monospace';
 
@@ -3864,13 +2571,13 @@ function drawTitle() {
     'Dig them ALL up and the whole town hears your beat come alive.',
   ];
 
-  story.forEach((l, i) =>
+  story.forEach((l, i) => {
     ctx.fillText(
       l,
       VIEW_W / 2,
       190 + i * 26
-    )
-  );
+    );
+  });
 
   ctx.fillStyle = '#9a90a8';
   ctx.font = '13px monospace';
@@ -3882,13 +2589,13 @@ function drawTitle() {
     'M, OR ON-SCREEN "MUTE" ....................... mute',
   ];
 
-  controls.forEach((l, i) =>
+  controls.forEach((l, i) => {
     ctx.fillText(
       l,
       VIEW_W / 2,
       330 + i * 22
-    )
-  );
+    );
+  });
 
   ctx.fillStyle =
     Math.floor(performance.now() / 400) % 2
@@ -3906,7 +2613,6 @@ function drawTitle() {
 
 function drawWin() {
   ctx.fillStyle = 'rgba(8,6,12,0.88)';
-
   ctx.fillRect(
     0,
     0,
@@ -3915,7 +2621,6 @@ function drawWin() {
   );
 
   ctx.textAlign = 'center';
-
   ctx.fillStyle = '#e0b040';
   ctx.font = 'bold 40px monospace';
 
@@ -3936,16 +2641,10 @@ function drawWin() {
 
   PAD_ORDER.forEach((id, i) => {
     const r = RECORDS[id];
-
-    const x =
-      VIEW_W / 2 -
-      230 +
-      i * 92;
-
+    const x = VIEW_W / 2 - 230 + i * 92;
     const y = 210;
 
     ctx.fillStyle = r.color;
-
     ctx.fillRect(
       x,
       y,
@@ -3997,6 +2696,7 @@ function drawWin() {
 
 requestAnimationFrame(frame);
 
+// debug/test handle
 window.__rico = {
   player,
   maps,
