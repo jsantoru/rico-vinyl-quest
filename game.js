@@ -167,11 +167,11 @@ function makeOverworld() {
     return { doorX, doorY: y+h-1 };
   }
 
-  // Updated building names and exterior colors
-const groove = building(4, 3, 7, 4, 'Green Door Studio', '#3f7f45', '#2f6335');
-const wax    = building(28, 3, 7, 4, 'Hey Bud', '#bf4f6f', '#93384f');
-const diner  = building(4, 14, 7, 4, 'Kountry Kart Deli', '#c07a38', '#96591f');
-const thrift = building(28, 14, 7, 4, 'Pure Pop Records', '#3f8fbf', '#2a6a93');
+  // Building names / colors
+  const groove = building(4, 3, 7, 4, 'Green Door Studio', '#3f7f45', '#2f6335');
+  const wax    = building(28, 3, 7, 4, 'Hey Bud', '#bf4f6f', '#93384f');
+  const diner  = building(4, 14, 7, 4, 'Kountry Kart Deli', '#c07a38', '#96591f');
+  const thrift = building(28, 14, 7, 4, 'Pure Pop Records', '#3f8fbf', '#2a6a93');
 
   // park & pond, bottom of town
   const trees = [[3,20],[5,22],[7,19],[13,21],[15,23],[3,23],[10,23],[16,19],[36,20],[34,23],[9,12],[14,13],[25,12],[36,12],[2,12],[37,7],[2,7],[24,23],[13,6],[26,6]];
@@ -680,22 +680,14 @@ function render(time) {
   ctx.save();
 
   if (map.outside) {
-    // The overworld keeps its normal 1:1 pixel-art scale.
+    // The overworld keeps the normal camera and 1:1 pixel-art scale.
     ctx.translate(-camX, -camY);
   } else {
-    // ---------------------------------------------------------------
-    // FULL-SCREEN SHOP INTERIORS
-    //
-    // The shop map is 14x10 tiles (448x320 pixels), while the game
-    // viewport is 960x600. Scale the entire interior independently
-    // in X and Y so the room fills the complete game viewport.
-    //
-    // The player and all interior objects are drawn after this scale,
-    // so they remain inside the enlarged room.
-    // ---------------------------------------------------------------
+    // Shop interiors are smaller than the 960x600 game view. Scale the
+    // entire interior to fill the full game screen instead of leaving
+    // black/empty space around the room.
     const scaleX = VIEW_W / (map.w * TILE);
     const scaleY = VIEW_H / (map.h * TILE);
-
     ctx.scale(scaleX, scaleY);
   }
 
@@ -1254,11 +1246,7 @@ function drawWin() {
 
   ctx.fillStyle = '#f4ecd8';
   ctx.font = '15px monospace';
-  ctx.fillText(
-    'All five samples on the pads. The whole town is bumping your track.',
-    VIEW_W / 2,
-    165
-  );
+  ctx.fillText('All five samples on the pads. The whole town is bumping your track.', VIEW_W / 2, 165);
 
   PAD_ORDER.forEach((id, i) => {
     const r = RECORDS[id];
