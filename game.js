@@ -166,10 +166,12 @@ function makeOverworld() {
     buildings.push({ x, y, w, h, name, wall, roof, doorX });
     return { doorX, doorY: y+h-1 };
   }
-  const groove = building(4, 3, 7, 4, 'GROOVE PALACE', '#7a5abf', '#5a3f96');
-  const wax    = building(28, 3, 7, 4, 'WAX MUSEUM',    '#bf4f6f', '#93384f');
-  const diner  = building(4, 14, 7, 4, "ROSIE'S DINER", '#c07a38', '#96591f');
-  const thrift = building(28, 14, 7, 4, 'THRIFT PLANET','#3f8fbf', '#2a6a93');
+
+  // Updated building names and exterior colors
+  const groove = building(4, 3, 7, 4, 'Green Door Studio', '#3f7f45', '#2f6335');
+  const wax    = building(28, 3, 7, 4, 'Pure Pop Records', '#bf4f6f', '#93384f');
+  const diner  = building(4, 14, 7, 4, 'Kountry Kart Deli', '#c07a38', '#96591f');
+  const thrift = building(28, 14, 7, 4, 'Hey Bud!', '#3f8fbf', '#2a6a93');
 
   // park & pond, bottom of town
   const trees = [[3,20],[5,22],[7,19],[13,21],[15,23],[3,23],[10,23],[16,19],[36,20],[34,23],[9,12],[14,13],[25,12],[36,12],[2,12],[37,7],[2,7],[24,23],[13,6],[26,6]];
@@ -203,18 +205,21 @@ function makeShop(id, opts) {
   for (let x = 4; x <= 9; x++) g[2][x] = 'T';
   g[1][6] = 'K';
   g[H-1][6] = 'E';
+
   const map = {
     id, w: W, h: H, grid: g, outside: false,
     floor: opts.floor, plank: opts.plank, wallColor: opts.wallColor,
     keeper: { x: 6, y: 1, ...opts.keeper },
     crates: {}, npcs: [],
   };
+
   const spots = [[1,4],[1,6],[12,4],[12,6],[2,8],[11,8]];
   opts.crates.forEach((c, i) => {
     const [x, y] = spots[i % spots.length];
     g[y][x] = 'C';
     map.crates[key(x, y)] = c;
   });
+
   if (opts.jukebox) { g[2][11] = 'J'; map.jukebox = true; }
   return map;
 }
@@ -231,6 +236,7 @@ const shops = {
       foundLine: 'You FOUND it?! Elm Street Funk, in my own shop. Flip that break into something beautiful.' },
     crates: [ { record: 'elm' }, { junkSeed: 0 }, { junkSeed: 1 }, { junkSeed: 2 } ],
   }),
+
   wax: makeShop('wax', {
     floor: '#5f4a6a', plank: '#4f3c58', wallColor: '#3a2a44',
     keeper: { name: 'DEE', shirt: '#d05a8a', skin: '#c89a72',
@@ -240,6 +246,7 @@ const shops = {
       foundLine: 'Midnight Stab, in the flesh. Those horns are going to slap so hard.' },
     crates: [ { junkSeed: 3 }, { junkSeed: 4 }, { record: 'stab' }, { junkSeed: 5 } ],
   }),
+
   diner: makeShop('diner', {
     floor: '#b8a08a', plank: '#a89078', wallColor: '#7a4a3a',
     keeper: { name: 'ROSIE', shirt: '#e0e0e0', skin: '#e8b890',
@@ -250,6 +257,7 @@ const shops = {
     crates: [ { junkSeed: 6 }, { junkSeed: 7 }, { junkSeed: 0 }, { junkSeed: 1 }, { record: 'cola' } ],
     jukebox: true,
   }),
+
   thrift: makeShop('thrift', {
     floor: '#6a8a6a', plank: '#587a58', wallColor: '#3a4a3a',
     keeper: { name: 'ZEKE', shirt: '#70b060', skin: '#9a7050',
@@ -267,6 +275,7 @@ for (const [id, d] of Object.entries(doors)) {
   transitions['town:' + key(d.doorX, d.doorY)] = { map: id, x: 6.5, y: 7.5 };
   transitions[id + ':' + key(6, 9)] = { map: 'town', x: d.doorX + 0.5, y: d.doorY + 1.6 };
 }
+
 const maps = { town, ...shops };
 
 // ---------------------------------------------------------------- state
@@ -274,6 +283,7 @@ const player = {
   map: 'town', x: 19.5 * TILE, y: 12.5 * TILE,
   dir: 'down', moving: false, skating: false, animT: 0,
 };
+
 const collected = new Set();
 let state = 'splash'; // splash | title | play | dialog | record | win
 let dialog = null;   // { name, lines, i }
@@ -308,12 +318,14 @@ const music = {
     this.nextTime = this.ctx.currentTime + 0.1;
     setInterval(() => this.pump(), 25);
   },
+
   toggleMute() {
     if (!this.ctx) return;
     this.muted = !this.muted;
     this.master.gain.value = this.muted ? 0 : 0.28;
     toast = { text: this.muted ? 'Music: MUTED' : 'Music: ON', t: 1.2 };
   },
+
   enable(layer) { this.layers.add(layer); },
 
   pump() {
@@ -324,9 +336,11 @@ const music = {
       this.nextTime += stepDur;
     }
   },
+
   schedule(gs, t, stepDur) {
     const s = gs % 16, bar = Math.floor(gs / 16);
     const L = this.layers;
+
     if (L.has('drums')) {
       if ([0, 7, 10].includes(s)) this.kick(t);
       if (s === 4 || s === 12) this.snare(t);
@@ -334,23 +348,28 @@ const music = {
     } else if (L.has('tick') && s % 4 === 0) {
       this.hat(t, false, 0.028);
     }
+
     if (L.has('bass')) {
       const pat = [[0,45,2],[3,45,1],[6,48,2],[8,50,2],[11,45,1],[14,43,2]];
       for (const [ps, n, d] of pat)
         if (ps === s) this.note(t, 'square', n, d * stepDur, 0.10);
     }
+
     if (L.has('horns') && (s === 4 || s === 11)) {
       for (const n of [57, 60, 64]) this.note(t, 'sawtooth', n, 1.4 * stepDur, 0.05, 0.03);
     }
+
     if (L.has('vox') && (s === 0 || s === 8)) {
       const notes = bar % 2 === 0 ? [69, 67] : [72, 71];
       this.note(t, 'triangle', notes[s === 0 ? 0 : 1], 7.5 * stepDur, 0.07, 0.25, true);
     }
+
     if (L.has('lead') && bar % 2 === 1 && s % 2 === 0) {
       const mel = [76, 74, 72, 69, 72, 74, 76, 79];
       this.note(t, 'square', mel[s / 2], 1.6 * stepDur, 0.045, 0.02);
     }
   },
+
   kick(t) {
     const o = this.ctx.createOscillator(), g = this.ctx.createGain();
     o.frequency.setValueAtTime(130, t);
@@ -360,6 +379,7 @@ const music = {
     o.connect(g); g.connect(this.master);
     o.start(t); o.stop(t + 0.16);
   },
+
   snare(t) {
     const src = this.ctx.createBufferSource(); src.buffer = this.noiseBuf;
     const f = this.ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1900;
@@ -369,6 +389,7 @@ const music = {
     src.connect(f); f.connect(g); g.connect(this.master);
     src.start(t); src.stop(t + 0.13);
   },
+
   hat(t, open, gain) {
     const src = this.ctx.createBufferSource(); src.buffer = this.noiseBuf;
     const f = this.ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7500;
@@ -379,16 +400,19 @@ const music = {
     src.connect(f); f.connect(g); g.connect(this.master);
     src.start(t); src.stop(t + dur + 0.01);
   },
+
   note(t, type, midi, dur, gain, release = 0.02, vibrato = false) {
     const o = this.ctx.createOscillator(), g = this.ctx.createGain();
     o.type = type;
     o.frequency.value = 440 * Math.pow(2, (midi - 69) / 12);
+
     if (vibrato) {
       const lfo = this.ctx.createOscillator(), lg = this.ctx.createGain();
       lfo.frequency.value = 5.2; lg.gain.value = 7;
       lfo.connect(lg); lg.connect(o.detune);
       lfo.start(t); lfo.stop(t + dur + release);
     }
+
     g.gain.setValueAtTime(0.0001, t);
     g.gain.linearRampToValueAtTime(gain, t + 0.015);
     g.gain.setValueAtTime(gain, t + dur);
@@ -396,7 +420,8 @@ const music = {
     o.connect(g); g.connect(this.master);
     o.start(t); o.stop(t + dur + release + 0.02);
   },
-  sting() { // little fanfare when a record is found
+
+  sting() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime + 0.05;
     [69, 73, 76, 81].forEach((n, i) => this.note(t + i * 0.09, 'square', n, 0.14, 0.09, 0.08));
@@ -437,6 +462,7 @@ function movePlayer(dt) {
 
   const tk = player.map + ':' + key(Math.floor(player.x / TILE), Math.floor(player.y / TILE));
   const tr = transitions[tk];
+
   if (tr) {
     player.map = tr.map;
     player.x = tr.x * TILE;
@@ -455,41 +481,57 @@ function facingTile() {
 function facingTarget() {
   const map = maps[player.map];
   const [tx, ty] = facingTile();
+
   if (tx < 0 || ty < 0 || tx >= map.w || ty >= map.h) return null;
+
   const ch = map.grid[ty][tx];
-  if (ch === 'C' || ch === 'c') return { type: 'crate', tx, ty, data: map.crates[key(tx, ty)] };
-  if (ch === 'K') return { type: 'keeper', data: map.keeper };
+
+  if (ch === 'C' || ch === 'c')
+    return { type: 'crate', tx, ty, data: map.crates[key(tx, ty)] };
+
+  if (ch === 'K')
+    return { type: 'keeper', data: map.keeper };
+
   if (ch === 'T' && map.keeper && Math.abs(tx - map.keeper.x) <= 2 && ty === 2)
     return { type: 'keeper', data: map.keeper };
-  if (ch === 'J') return { type: 'jukebox' };
+
+  if (ch === 'J')
+    return { type: 'jukebox' };
+
   return null;
 }
 
 function doInteract() {
   const target = facingTarget();
   if (!target) return;
+
   if (target.type === 'keeper') {
     const k = target.data;
     const shopRecord = Object.values(maps[player.map].crates).find(c => c.record)?.record;
     const lines = shopRecord && collected.has(shopRecord) ? [k.foundLine] : k.lines;
     dialog = { name: k.name, lines, i: 0 };
     state = 'dialog';
+
   } else if (target.type === 'crate') {
     const c = target.data;
     if (!c) return;
+
     if (c.record && !collected.has(c.record)) {
       collected.add(c.record);
       music.enable(RECORDS[c.record].layer);
       music.sting();
       shownRecord = c.record;
       state = 'record';
+
     } else if (c.record) {
       dialog = { name: 'CRATE', lines: ['Nothing left in here but dust and old sleeves.'], i: 0 };
       state = 'dialog';
+
     } else {
       dialog = { name: 'CRATE', lines: [JUNK[c.junkSeed % JUNK.length], 'Keep digging...'], i: 0 };
       state = 'dialog';
     }
+
   } else if (target.type === 'jukebox') {
     dialog = { name: 'JUKEBOX', lines: ['B7: "Cherry Cola Bounce". The button is worn smooth from decades of plays.'], i: 0 };
     state = 'dialog';
@@ -503,6 +545,7 @@ function bindHold(el, onDown, onUp) {
   el.addEventListener('pointercancel', () => onUp());
   el.addEventListener('pointerleave', () => onUp());
 }
+
 function bindTap(el, onTap) {
   el.addEventListener('pointerdown', (e) => { e.preventDefault(); onTap(); });
 }
@@ -518,6 +561,7 @@ function createTouchControls() {
     ['dpadLeft', 'arrowleft', '◀'],
     ['dpadRight', 'arrowright', '▶'],
   ];
+
   dpad.forEach(([id, k, label]) => {
     const btn = document.createElement('div');
     btn.id = id; btn.className = 'tc-btn'; btn.textContent = label;
@@ -542,6 +586,7 @@ function createTouchControls() {
 
   document.body.appendChild(wrap);
 }
+
 createTouchControls();
 
 // Tapping the game screen itself advances splash/title/dialog/record/win screens
@@ -553,6 +598,7 @@ canvas.addEventListener('pointerdown', () => {
 
 // ---------------------------------------------------------------- update
 let last = performance.now();
+
 function frame(now) {
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
@@ -562,66 +608,129 @@ function frame(now) {
 }
 
 function update(dt) {
-  if (toast) { toast.t -= dt; if (toast.t <= 0) toast = null; }
+  if (toast) {
+    toast.t -= dt;
+    if (toast.t <= 0) toast = null;
+  }
 
   if (state === 'splash') {
     if (interactPressed) state = 'title';
+
   } else if (state === 'title') {
     if (interactPressed) state = 'play';
+
   } else if (state === 'play') {
     movePlayer(dt);
     if (interactPressed) doInteract();
+
   } else if (state === 'dialog') {
     if (interactPressed) {
       dialog.i++;
-      if (dialog.i >= dialog.lines.length) { dialog = null; state = 'play'; }
+      if (dialog.i >= dialog.lines.length) {
+        dialog = null;
+        state = 'play';
+      }
     }
+
   } else if (state === 'record') {
     if (interactPressed) {
       shownRecord = null;
-      if (collected.size === PAD_ORDER.length && !winShown) { winShown = true; state = 'win'; }
-      else state = 'play';
+      if (collected.size === PAD_ORDER.length && !winShown) {
+        winShown = true;
+        state = 'win';
+      } else {
+        state = 'play';
+      }
     }
+
   } else if (state === 'win') {
     if (interactPressed) state = 'play';
   }
+
   interactPressed = false;
 }
 
 // ---------------------------------------------------------------- render
 function camera(map) {
   const worldW = map.w * TILE, worldH = map.h * TILE;
-  let cx = player.x - VIEW_W / 2, cy = player.y - VIEW_H / 2;
+
+  let cx = player.x - VIEW_W / 2;
+  let cy = player.y - VIEW_H / 2;
+
   cx = Math.max(0, Math.min(cx, worldW - VIEW_W));
   cy = Math.max(0, Math.min(cy, worldH - VIEW_H));
+
   if (worldW < VIEW_W) cx = (worldW - VIEW_W) / 2;
   if (worldH < VIEW_H) cy = (worldH - VIEW_H) / 2;
+
   return [Math.round(cx), Math.round(cy)];
 }
 
-function hash2(x, y) { return ((x * 73856093) ^ (y * 19349663)) >>> 0; }
+function hash2(x, y) {
+  return ((x * 73856093) ^ (y * 19349663)) >>> 0;
+}
 
 function render(time) {
   const map = maps[player.map];
   const [camX, camY] = camera(map);
+
   ctx.fillStyle = '#120e18';
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
   ctx.save();
-  ctx.translate(-camX, -camY);
+
+  if (map.outside) {
+    // The overworld keeps its normal 1:1 pixel-art scale.
+    ctx.translate(-camX, -camY);
+  } else {
+    // ---------------------------------------------------------------
+    // FULL-SCREEN SHOP INTERIORS
+    //
+    // The shop map is 14x10 tiles (448x320 pixels), while the game
+    // viewport is 960x600. Scale the entire interior independently
+    // in X and Y so the room fills the complete game viewport.
+    //
+    // The player and all interior objects are drawn after this scale,
+    // so they remain inside the enlarged room.
+    // ---------------------------------------------------------------
+    const scaleX = VIEW_W / (map.w * TILE);
+    const scaleY = VIEW_H / (map.h * TILE);
+
+    ctx.scale(scaleX, scaleY);
+  }
 
   drawTiles(map, time);
-  if (map.outside) drawBuildings(map);
-  if (map.keeper) drawKeeper(map.keeper);
+
+  if (map.outside)
+    drawBuildings(map);
+
+  if (map.keeper)
+    drawKeeper(map.keeper);
+
   drawPlayer(time);
 
   ctx.restore();
-  if (state !== 'splash') drawHUD();
-  if (state === 'splash') drawSplash();
-  if (state === 'title') drawTitle();
-  if (state === 'dialog') drawDialog();
-  if (state === 'record') drawRecordCard();
-  if (state === 'win') drawWin();
-  if (toast) drawToast();
+
+  if (state !== 'splash')
+    drawHUD();
+
+  if (state === 'splash')
+    drawSplash();
+
+  if (state === 'title')
+    drawTitle();
+
+  if (state === 'dialog')
+    drawDialog();
+
+  if (state === 'record')
+    drawRecordCard();
+
+  if (state === 'win')
+    drawWin();
+
+  if (toast)
+    drawToast();
 }
 
 function drawTiles(map, time) {
@@ -630,36 +739,56 @@ function drawTiles(map, time) {
       const px = tx * TILE, py = ty * TILE;
       const ch = map.grid[ty][tx];
       const h = hash2(tx, ty);
+
       if (map.outside) {
         // grass base everywhere outdoors
         ctx.fillStyle = (h % 7 === 0) ? '#3e7c34' : '#468a3a';
         ctx.fillRect(px, py, TILE, TILE);
-        if (h % 5 === 0) { ctx.fillStyle = '#54a046'; ctx.fillRect(px + (h % 20), py + (h % 22), 3, 3); }
+
+        if (h % 5 === 0) {
+          ctx.fillStyle = '#54a046';
+          ctx.fillRect(px + (h % 20), py + (h % 22), 3, 3);
+        }
+
       } else {
         ctx.fillStyle = map.floor;
         ctx.fillRect(px, py, TILE, TILE);
+
         ctx.fillStyle = map.plank;
         ctx.fillRect(px, py + 10, TILE, 2);
         ctx.fillRect(px, py + 24, TILE, 2);
       }
+
       switch (ch) {
+
         case 'r': {
           ctx.fillStyle = '#44424a';
           ctx.fillRect(px, py, TILE, TILE);
+
           ctx.fillStyle = '#504e58';
-          if (h % 6 === 0) ctx.fillRect(px + (h % 18), py + ((h >> 3) % 24), 4, 3);
+          if (h % 6 === 0)
+            ctx.fillRect(px + (h % 18), py + ((h >> 3) % 24), 4, 3);
+
           break;
         }
-        case '#': drawTree(px, py); break;
+
+        case '#':
+          drawTree(px, py);
+          break;
+
         case '~': {
           ctx.fillStyle = '#3060b0';
           ctx.fillRect(px, py, TILE, TILE);
+
           ctx.fillStyle = '#4878cc';
           const off = Math.floor(time * 6) % 2 === 0 ? 4 : 12;
+
           ctx.fillRect(px + off, py + 8, 10, 2);
           ctx.fillRect(px + (TILE - off - 10), py + 22, 10, 2);
+
           break;
         }
+
         case 'f': {
           ctx.fillStyle = '#8a6a42';
           ctx.fillRect(px + 2, py + 8, TILE - 4, 6);
@@ -667,36 +796,53 @@ function drawTiles(map, time) {
           ctx.fillRect(px + TILE - 8, py + 4, 4, 20);
           break;
         }
-        case 'c': case 'C': drawCrate(px, py, map.crates[key(tx, ty)]); break;
+
+        case 'c':
+        case 'C':
+          drawCrate(px, py, map.crates[key(tx, ty)]);
+          break;
+
         case 'W': {
           ctx.fillStyle = map.wallColor;
           ctx.fillRect(px, py, TILE, TILE);
+
           ctx.fillStyle = 'rgba(0,0,0,0.18)';
           ctx.fillRect(px, py + 14, TILE, 2);
           ctx.fillRect(px + (ty % 2 === 0 ? 8 : 20), py, 2, 14);
+
           break;
         }
+
         case 'T': {
           ctx.fillStyle = '#6a4a2a';
           ctx.fillRect(px, py + 6, TILE, TILE - 6);
+
           ctx.fillStyle = '#9a7040';
           ctx.fillRect(px, py, TILE, 10);
+
           break;
         }
+
         case 'J': {
           ctx.fillStyle = '#b03030';
           ctx.fillRect(px + 4, py, TILE - 8, TILE);
+
           ctx.fillStyle = '#f0d060';
           ctx.fillRect(px + 8, py + 4, TILE - 16, 8);
+
           ctx.fillStyle = Math.floor(time * 2) % 2 ? '#60d0f0' : '#f06090';
           ctx.fillRect(px + 8, py + 16, TILE - 16, 4);
+
           break;
         }
+
         case 'E': {
           ctx.fillStyle = '#7a3a20';
           ctx.fillRect(px, py, TILE, TILE);
+
           ctx.fillStyle = '#9a5a30';
           ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 8);
+
           break;
         }
       }
@@ -707,10 +853,13 @@ function drawTiles(map, time) {
 function drawTree(px, py) {
   ctx.fillStyle = '#6a4a2a';
   ctx.fillRect(px + 13, py + 20, 6, 10);
+
   ctx.fillStyle = '#2e6428';
   ctx.fillRect(px + 4, py + 10, 24, 12);
+
   ctx.fillStyle = '#38782e';
   ctx.fillRect(px + 8, py + 2, 16, 14);
+
   ctx.fillStyle = '#4a9038';
   ctx.fillRect(px + 10, py + 4, 8, 6);
 }
@@ -718,12 +867,15 @@ function drawTree(px, py) {
 function drawCrate(px, py, data) {
   ctx.fillStyle = '#8a5a30';
   ctx.fillRect(px + 2, py + 6, TILE - 4, TILE - 8);
+
   ctx.fillStyle = '#6a4020';
   ctx.fillRect(px + 2, py + 6, TILE - 4, 3);
   ctx.fillRect(px + 2, py + TILE - 5, TILE - 4, 3);
+
   // record sleeves peeking out
   const empty = data && data.record && collected.has(data.record);
   const colors = empty ? ['#5a3a1e'] : ['#c04040', '#4060c0', '#d0a030'];
+
   colors.forEach((c, i) => {
     ctx.fillStyle = c;
     ctx.fillRect(px + 6 + i * 7, py + 2, 5, 8);
@@ -733,32 +885,49 @@ function drawCrate(px, py, data) {
 function drawBuildings(map) {
   for (const b of map.buildings) {
     const px = b.x * TILE, py = b.y * TILE, w = b.w * TILE, h = b.h * TILE;
+
     ctx.fillStyle = b.wall;
     ctx.fillRect(px, py, w, h);
+
     ctx.fillStyle = b.roof;
     ctx.fillRect(px, py, w, TILE + 8);
+
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.fillRect(px, py + TILE + 8, w, 3);
+
     // windows
     ctx.fillStyle = '#ffe9a0';
+
     for (let i = 0; i < b.w; i++) {
       if (b.x + i === b.doorX) continue;
       if (i === 0 || i === b.w - 1) continue;
+
       ctx.fillRect(px + i * TILE + 8, py + h - TILE - 14, 16, 18);
+
       ctx.fillStyle = 'rgba(0,0,0,0.2)';
       ctx.fillRect(px + i * TILE + 8, py + h - TILE - 6, 16, 2);
+
       ctx.fillStyle = '#ffe9a0';
     }
+
     // door
     const dx = b.doorX * TILE;
-    ctx.fillStyle = '#3a2414';
+
+    // Green Door Studio gets a green door.
+    const isGreenDoorStudio = b.name === 'Green Door Studio';
+
+    ctx.fillStyle = isGreenDoorStudio ? '#245b2b' : '#3a2414';
     ctx.fillRect(dx + 4, py + h - TILE + 2, TILE - 8, TILE - 2);
-    ctx.fillStyle = '#e0c060';
+
+    ctx.fillStyle = isGreenDoorStudio ? '#b7d96a' : '#e0c060';
     ctx.fillRect(dx + TILE - 12, py + h - 16, 3, 3);
+
     // sign
     ctx.fillStyle = '#f4ecd8';
+
     const sw = Math.min(w - 10, b.name.length * 9 + 14);
     ctx.fillRect(px + (w - sw) / 2, py + 6, sw, 20);
+
     ctx.fillStyle = '#2a2020';
     ctx.font = 'bold 12px monospace';
     ctx.textAlign = 'center';
@@ -768,12 +937,16 @@ function drawBuildings(map) {
 
 function drawKeeper(k) {
   const px = k.x * TILE, py = k.y * TILE;
+
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.fillRect(px + 8, py + 26, 16, 4);
+
   ctx.fillStyle = k.shirt;
   ctx.fillRect(px + 8, py + 12, 16, 14);
+
   ctx.fillStyle = k.skin;
   ctx.fillRect(px + 10, py + 2, 12, 11);
+
   ctx.fillStyle = '#201818';
   ctx.fillRect(px + 12, py + 6, 2, 2);
   ctx.fillRect(px + 18, py + 6, 2, 2);
@@ -782,9 +955,14 @@ function drawKeeper(k) {
 
 function drawPlayer(time) {
   const row = DIR_ROW[player.dir];
+
   let col = 0;
-  if (player.moving) col = [0, 1, 0, 2][Math.floor(player.animT * 7) % 4];
-  if (player.skating) col = player.moving ? 2 : 0;
+
+  if (player.moving)
+    col = [0, 1, 0, 2][Math.floor(player.animT * 7) % 4];
+
+  if (player.skating)
+    col = player.moving ? 2 : 0;
 
   const bob = player.skating && player.moving ? Math.sin(time * 14) * 1.5 : 0;
   const footY = player.y + 6;
@@ -795,14 +973,24 @@ function drawPlayer(time) {
   if (player.skating) {
     ctx.fillStyle = '#8a4a20';
     ctx.fillRect(player.x - 14, footY - 3 + bob, 28, 4);
+
     ctx.fillStyle = '#e8d8b0';
     ctx.fillRect(player.x - 10, footY + 1 + bob, 5, 4);
     ctx.fillRect(player.x + 5, footY + 1 + bob, 5, 4);
   }
+
   if (ricoImg.complete && ricoImg.naturalWidth) {
-    ctx.drawImage(ricoImg, col * SHEET_CW, row * SHEET_CH, SHEET_CW, SHEET_CH,
-      Math.round(player.x - SPR_W / 2), Math.round(footY - SPR_H - (player.skating ? 4 : 0) + bob),
-      SPR_W, SPR_H);
+    ctx.drawImage(
+      ricoImg,
+      col * SHEET_CW,
+      row * SHEET_CH,
+      SHEET_CW,
+      SHEET_CH,
+      Math.round(player.x - SPR_W / 2),
+      Math.round(footY - SPR_H - (player.skating ? 4 : 0) + bob),
+      SPR_W,
+      SPR_H
+    );
   } else {
     ctx.fillStyle = '#d0a060';
     ctx.fillRect(player.x - 8, footY - 40, 16, 40);
@@ -813,17 +1001,22 @@ function drawPlayer(time) {
 function drawHUD() {
   ctx.fillStyle = 'rgba(10,8,14,0.75)';
   ctx.fillRect(8, 8, 320, 44);
+
   ctx.font = 'bold 11px monospace';
   ctx.textAlign = 'left';
   ctx.fillStyle = '#c8c0d8';
   ctx.fillText('SAMPLES', 18, 26);
+
   PAD_ORDER.forEach((id, i) => {
     const r = RECORDS[id];
     const x = 88 + i * 46, y = 14;
+
     ctx.fillStyle = collected.has(id) ? r.color : '#262030';
     ctx.fillRect(x, y, 38, 30);
+
     ctx.strokeStyle = '#0a080e';
     ctx.strokeRect(x + 0.5, y + 0.5, 37, 29);
+
     ctx.fillStyle = collected.has(id) ? '#181418' : '#4a4258';
     ctx.textAlign = 'center';
     ctx.fillText(r.pad, x + 19, y + 20);
@@ -831,10 +1024,13 @@ function drawHUD() {
 
   if (state === 'play') {
     const target = facingTarget();
+
     if (target) {
-      const label = target.type === 'crate' ? '[E] DIG CRATE'
-                  : target.type === 'keeper' ? '[E] TALK'
-                  : '[E] LOOK';
+      const label =
+        target.type === 'crate' ? '[E] DIG CRATE' :
+        target.type === 'keeper' ? '[E] TALK' :
+        '[E] LOOK';
+
       pill(label, VIEW_W / 2, VIEW_H - 34);
     }
   }
@@ -842,9 +1038,12 @@ function drawHUD() {
 
 function pill(text, cx, cy) {
   ctx.font = 'bold 13px monospace';
+
   const w = ctx.measureText(text).width + 24;
+
   ctx.fillStyle = 'rgba(10,8,14,0.8)';
   ctx.fillRect(cx - w / 2, cy - 14, w, 26);
+
   ctx.fillStyle = '#f4ecd8';
   ctx.textAlign = 'center';
   ctx.fillText(text, cx, cy + 4);
@@ -858,18 +1057,23 @@ function drawToast() {
 
 function drawDialog() {
   const h = 120, y = VIEW_H - h - 16;
+
   ctx.fillStyle = 'rgba(10,8,14,0.92)';
   ctx.fillRect(24, y, VIEW_W - 48, h);
+
   ctx.strokeStyle = '#f4ecd8';
   ctx.lineWidth = 2;
   ctx.strokeRect(26, y + 2, VIEW_W - 52, h - 4);
+
   ctx.textAlign = 'left';
   ctx.font = 'bold 13px monospace';
   ctx.fillStyle = '#e0b040';
   ctx.fillText(dialog.name, 44, y + 28);
+
   ctx.fillStyle = '#f4ecd8';
   ctx.font = '14px monospace';
   wrapText(dialog.lines[dialog.i], 44, y + 52, VIEW_W - 96, 20);
+
   ctx.font = '11px monospace';
   ctx.fillStyle = '#9a90a8';
   ctx.textAlign = 'right';
@@ -879,45 +1083,62 @@ function drawDialog() {
 function wrapText(text, x, y, maxW, lh) {
   const words = text.split(' ');
   let line = '';
+
   for (const w of words) {
     const test = line ? line + ' ' + w : w;
+
     if (ctx.measureText(test).width > maxW) {
       ctx.fillText(line, x, y);
       y += lh;
       line = w;
-    } else line = test;
+    } else {
+      line = test;
+    }
   }
+
   ctx.fillText(line, x, y);
 }
 
 function drawRecordCard() {
   const r = RECORDS[shownRecord];
+
   ctx.fillStyle = 'rgba(6,4,10,0.85)';
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-  const w = 560, h = 300, x = (VIEW_W - w) / 2, y = (VIEW_H - h) / 2;
+
+  const w = 560, h = 300;
+  const x = (VIEW_W - w) / 2;
+  const y = (VIEW_H - h) / 2;
+
   ctx.fillStyle = '#1c1626';
   ctx.fillRect(x, y, w, h);
+
   ctx.strokeStyle = r.color;
   ctx.lineWidth = 3;
   ctx.strokeRect(x + 3, y + 3, w - 6, h - 6);
 
   // sleeve + vinyl
   const sx = x + 36, sy = y + 60, ss = 150;
+
   ctx.fillStyle = r.color;
   ctx.fillRect(sx, sy, ss, ss);
+
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.fillRect(sx, sy + ss - 26, ss, 26);
+
   ctx.fillStyle = '#0c0a10';
   ctx.beginPath();
   ctx.arc(sx + ss + 40, sy + ss / 2, 70, 0, Math.PI * 2);
   ctx.fill();
+
   ctx.strokeStyle = '#2a2632';
   ctx.lineWidth = 1;
+
   for (const rr of [30, 42, 54]) {
     ctx.beginPath();
     ctx.arc(sx + ss + 40, sy + ss / 2, rr, 0, Math.PI * 2);
     ctx.stroke();
   }
+
   ctx.fillStyle = r.color;
   ctx.beginPath();
   ctx.arc(sx + ss + 40, sy + ss / 2, 20, 0, Math.PI * 2);
@@ -927,17 +1148,23 @@ function drawRecordCard() {
   ctx.font = 'bold 18px monospace';
   ctx.fillStyle = '#f4ecd8';
   ctx.fillText('★ RECORD FOUND ★', x + w / 2, y + 36);
+
   ctx.textAlign = 'left';
+
   const tx = sx + ss + 130;
+
   ctx.font = 'bold 16px monospace';
   ctx.fillStyle = r.color === '#e8e4dc' ? '#f4ecd8' : r.color;
   wrapText('"' + r.title + '"', tx, sy + 14, w - (tx - x) - 24, 20);
+
   ctx.font = '13px monospace';
   ctx.fillStyle = '#c8c0d8';
   ctx.fillText(r.artist + ' · ' + r.year, tx, sy + 58);
+
   ctx.fillStyle = '#f4ecd8';
   ctx.font = 'bold 13px monospace';
   ctx.fillText('SAMPLE: ' + r.sample, tx, sy + 86);
+
   ctx.font = '12px monospace';
   ctx.fillStyle = '#9a90a8';
   wrapText('New layer added to the beat. Listen!', tx, sy + 110, w - (tx - x) - 24, 16);
@@ -945,6 +1172,7 @@ function drawRecordCard() {
   ctx.font = '12px monospace';
   ctx.fillStyle = '#c8c0d8';
   wrapText(r.flavor, x + 36, y + h - 52, w - 72, 16);
+
   ctx.textAlign = 'right';
   ctx.fillStyle = '#9a90a8';
   ctx.font = '11px monospace';
@@ -954,16 +1182,23 @@ function drawRecordCard() {
 function drawSplash() {
   if (splashImg.complete && splashImg.naturalWidth) {
     const iw = splashImg.naturalWidth, ih = splashImg.naturalHeight;
-    const scale = Math.max(VIEW_W / iw, VIEW_H / ih); // cover-fit, crop overflow
+
+    const scale = Math.max(VIEW_W / iw, VIEW_H / ih);
     const dw = iw * scale, dh = ih * scale;
-    const dx = (VIEW_W - dw) / 2, dy = (VIEW_H - dh) / 2;
+
+    const dx = (VIEW_W - dw) / 2;
+    const dy = (VIEW_H - dh) / 2;
+
     ctx.drawImage(splashImg, dx, dy, dw, dh);
+
   } else {
     ctx.fillStyle = '#120e18';
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   }
+
   ctx.fillStyle = 'rgba(8,6,12,0.55)';
   ctx.fillRect(0, VIEW_H - 64, VIEW_W, 64);
+
   ctx.textAlign = 'center';
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
   ctx.font = 'bold 18px monospace';
@@ -973,28 +1208,36 @@ function drawSplash() {
 function drawTitle() {
   ctx.fillStyle = 'rgba(8,6,12,0.93)';
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
   ctx.textAlign = 'center';
   ctx.fillStyle = '#e0b040';
   ctx.font = 'bold 44px monospace';
   ctx.fillText("RICO'S VINYL QUEST", VIEW_W / 2, 130);
+
   ctx.fillStyle = '#f4ecd8';
   ctx.font = '15px monospace';
+
   const story = [
     'Your sampler is empty. Your beat is due.',
     'Five legendary records are hiding somewhere in this town —',
     'in shop crates, diner backrooms, and flea market stalls.',
     'Dig them ALL up and the whole town hears your beat come alive.',
   ];
+
   story.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, 190 + i * 26));
+
   ctx.fillStyle = '#9a90a8';
   ctx.font = '13px monospace';
+
   const controls = [
     'ARROWS / WASD, OR THE ON-SCREEN D-PAD .... move',
     'E, OR THE ON-SCREEN E BUTTON ... talk / dig crates',
     'B, OR ON-SCREEN "SKATE" ...... skateboard on & off',
     'M, OR ON-SCREEN "MUTE" ....................... mute',
   ];
+
   controls.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, 330 + i * 22));
+
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
   ctx.font = 'bold 18px monospace';
   ctx.fillText('- PRESS E TO START -', VIEW_W / 2, 480);
@@ -1003,28 +1246,40 @@ function drawTitle() {
 function drawWin() {
   ctx.fillStyle = 'rgba(8,6,12,0.88)';
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
   ctx.textAlign = 'center';
   ctx.fillStyle = '#e0b040';
   ctx.font = 'bold 40px monospace';
   ctx.fillText('BEAT COMPLETE!', VIEW_W / 2, 120);
+
   ctx.fillStyle = '#f4ecd8';
   ctx.font = '15px monospace';
-  ctx.fillText('All five samples on the pads. The whole town is bumping your track.', VIEW_W / 2, 165);
+  ctx.fillText(
+    'All five samples on the pads. The whole town is bumping your track.',
+    VIEW_W / 2,
+    165
+  );
+
   PAD_ORDER.forEach((id, i) => {
     const r = RECORDS[id];
     const x = VIEW_W / 2 - 230 + i * 92, y = 210;
+
     ctx.fillStyle = r.color;
     ctx.fillRect(x, y, 76, 76);
+
     ctx.fillStyle = '#181418';
     ctx.font = 'bold 13px monospace';
     ctx.fillText(r.pad, x + 38, y + 44);
+
     ctx.fillStyle = '#c8c0d8';
     ctx.font = '10px monospace';
     ctx.fillText(r.sample, x + 38, y + 96);
   });
+
   ctx.fillStyle = '#9a90a8';
   ctx.font = '13px monospace';
   ctx.fillText('Rico’s next beat tape: certified classic.', VIEW_W / 2, 360);
+
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
   ctx.font = 'bold 15px monospace';
   ctx.fillText('- PRESS E TO KEEP CRUISING -', VIEW_W / 2, 420);
@@ -1033,5 +1288,11 @@ function drawWin() {
 requestAnimationFrame(frame);
 
 // debug/test handle
-window.__rico = { player, maps, collected, getState: () => state };
+window.__rico = {
+  player,
+  maps,
+  collected,
+  getState: () => state
+};
+
 })();
