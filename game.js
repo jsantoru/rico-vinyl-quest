@@ -168,10 +168,10 @@ function makeOverworld() {
   }
 
   // Updated building names and exterior colors
-  const groove = building(4, 3, 7, 4, 'Green Door Studio', '#3f7f45', '#2f6335');
-  const wax    = building(28, 3, 7, 4, 'Pure Pop Records', '#bf4f6f', '#93384f');
-  const diner  = building(4, 14, 7, 4, 'Kountry Kart Deli', '#c07a38', '#96591f');
-  const thrift = building(28, 14, 7, 4, 'Hey Bud!', '#3f8fbf', '#2a6a93');
+const groove = building(4, 3, 7, 4, 'Green Door Studio', '#3f7f45', '#2f6335');
+const wax    = building(28, 3, 7, 4, 'Hey Bud', '#bf4f6f', '#93384f');
+const diner  = building(4, 14, 7, 4, 'Kountry Kart Deli', '#c07a38', '#96591f');
+const thrift = building(28, 14, 7, 4, 'Pure Pop Records', '#3f8fbf', '#2a6a93');
 
   // park & pond, bottom of town
   const trees = [[3,20],[5,22],[7,19],[13,21],[15,23],[3,23],[10,23],[16,19],[36,20],[34,23],[9,12],[14,13],[25,12],[36,12],[2,12],[37,7],[2,7],[24,23],[13,6],[26,6]];
