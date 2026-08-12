@@ -202,7 +202,7 @@ function makeOverworld() {
   const groove = building(4, 3, 7, 4, 'Green Door Studio', '#76503a', '#4e3328', 9); // door moved to right
   const wax    = building(28, 3, 7, 4, 'Hey Bud', '#bf4f6f', '#93384f');
   const diner  = building(2, 18, 5, 4, 'Kountry Kart Deli', '#c07a38', '#96591f'); // moved to left side, lower
-  const lounge = building(7, 18, 4, 6, 'Nectar\'s', '#2a2a3a', '#1a1a2a'); // moved to left side, next to deli
+  const lounge = building(7, 18, 4, 6, 'Nectars', '#2a2a3a', '#1a1a2a'); // moved to left side, next to deli
   const thrift = building(28, 14, 7, 4, 'Pure Pop Records', '#3f8fbf', '#2a6a93');
   const juniors = building(35, 14, 4, 4, "Junior's", '#d84a3a', '#a83828');
 
@@ -1093,7 +1093,7 @@ function drawBuildings(map) {
     const isHeyBud = b.name === 'Hey Bud';
     const isThrift = b.name === 'Pure Pop Records';
     const isJuniors = b.name === "Junior's";
-    const isLounge = b.name === 'Nectar\'s';
+    const isLounge = b.name === 'Nectars';
 
     ctx.fillStyle = b.wall;
     ctx.fillRect(px, py, w, h);
