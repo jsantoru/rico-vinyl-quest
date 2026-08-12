@@ -55,10 +55,23 @@ ctx.imageSmoothingEnabled = false;
       touch-action: none;
     }
     #touchControls .tc-btn:active { background: rgba(244,236,216,0.35); }
-    #dpadUp    { left: 68px;  bottom: 156px; width: 56px; height: 56px; font-size: 18px; }
-    #dpadDown  { left: 68px;  bottom: 88px;  width: 56px; height: 56px; font-size: 18px; }
-    #dpadLeft  { left: 18px;  bottom: 122px; width: 56px; height: 56px; font-size: 18px; }
-    #dpadRight { left: 118px; bottom: 122px; width: 56px; height: 56px; font-size: 18px; }
+    #touchControls .tc-dpad {
+      position: absolute;
+      pointer-events: auto;
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: contain;
+      opacity: 0.5;
+      filter: drop-shadow(0 1px 3px rgba(0,0,0,0.4));
+      -webkit-user-select: none; user-select: none;
+      -webkit-touch-callout: none;
+      touch-action: none;
+    }
+    #touchControls .tc-dpad:active { opacity: 0.8; }
+    #dpadUp    { left: 68px;  bottom: 156px; width: 56px; height: 56px; background-image: url('assets/arrow_up.png'); }
+    #dpadDown  { left: 68px;  bottom: 88px;  width: 56px; height: 56px; background-image: url('assets/arrow_down.png'); }
+    #dpadLeft  { left: 18px;  bottom: 122px; width: 56px; height: 56px; background-image: url('assets/arrow_left.png'); }
+    #dpadRight { left: 118px; bottom: 122px; width: 56px; height: 56px; background-image: url('assets/arrow_right.png'); }
     #btnE { right: 22px;  bottom: 116px; width: 78px; height: 78px; border-radius: 50%; font-size: 20px; }
     #btnB { right: 114px; bottom: 148px; width: 54px; height: 54px; border-radius: 50%; }
     #btnM { right: 114px; bottom: 78px;  width: 54px; height: 54px; border-radius: 50%; }
@@ -747,14 +760,14 @@ function createTouchControls() {
   wrap.addEventListener('contextmenu', (e) => e.preventDefault());
 
   const dpad = [
-    ['dpadUp', 'arrowup', '▲'],
-    ['dpadDown', 'arrowdown', '▼'],
-    ['dpadLeft', 'arrowleft', '◀'],
-    ['dpadRight', 'arrowright', '▶'],
+    ['dpadUp', 'arrowup'],
+    ['dpadDown', 'arrowdown'],
+    ['dpadLeft', 'arrowleft'],
+    ['dpadRight', 'arrowright'],
   ];
-  dpad.forEach(([id, k, label]) => {
+  dpad.forEach(([id, k]) => {
     const btn = document.createElement('div');
-    btn.id = id; btn.className = 'tc-btn'; btn.textContent = label;
+    btn.id = id; btn.className = 'tc-dpad';
     bindHold(btn, () => { keys[k] = true; music.start(); }, () => { keys[k] = false; });
     wrap.appendChild(btn);
   });
