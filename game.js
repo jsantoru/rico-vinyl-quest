@@ -167,6 +167,9 @@ const DIR_ROW = { up: 0, down: 1, left: 2, right: 3 };
 const splashImg = new Image();
 splashImg.src = 'assets/splash.png';
 
+const purePopPosterImg = new Image();
+purePopPosterImg.src = 'assets/purepop_poster.png';
+
 // ---------------------------------------------------------------- maps
 const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J']);
 
@@ -1008,6 +1011,7 @@ function drawBuildings(map) {
     const px = b.x * TILE, py = b.y * TILE, w = b.w * TILE, h = b.h * TILE;
     const isGreenDoorStudio = b.name === 'Green Door Studio';
     const isHeyBud = b.name === 'Hey Bud';
+    const isThrift = b.name === 'Pure Pop Records';
 
     ctx.fillStyle = b.wall;
     ctx.fillRect(px, py, w, h);
@@ -1058,6 +1062,7 @@ function drawBuildings(map) {
     ctx.fillRect(dx + TILE - 12, py + h - 16, 3, 3);
 
     if (isHeyBud) drawHeyBudDecor(px, py, w, h);
+    if (isThrift) drawWallPoster(px, py, w, h);
 
     ctx.fillStyle = '#f4ecd8';
     const sw = Math.min(w - 10, b.name.length * 9 + 14);
@@ -1167,6 +1172,9 @@ function drawTownDecorations(time) {
   drawCoffeeCart();
   drawAnthillBillboard();
   drawOldLotByHeyBud();
+  drawHeyBudParkedCars();
+  drawYardSign(11 * TILE + 4, 15 * TILE);
+  drawDeliSeatingArea();
 }
 
 function drawGreenDoorArtArea() {
@@ -1449,6 +1457,147 @@ function drawOldLotByHeyBud() {
   ctx.fillStyle = '#8a7a5a';
   ctx.fillRect(-2, -22, 16, 22);
   ctx.restore();
+}
+
+function drawParkedCar(x, y, color) {
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(x + 1, y + 23, 32, 6);
+
+  ctx.fillStyle = '#161616';
+  ctx.fillRect(x - 1, y + 5, 4, 8);
+  ctx.fillRect(x - 1, y + 16, 4, 8);
+  ctx.fillRect(x + 31, y + 5, 4, 8);
+  ctx.fillRect(x + 31, y + 16, 4, 8);
+
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y + 3, 34, 20);
+  ctx.fillRect(x + 4, y, 26, 8);
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.fillRect(x, y + 19, 34, 4);
+
+  ctx.fillStyle = '#bcd6e8';
+  ctx.fillRect(x + 7, y + 1, 8, 6);
+  ctx.fillRect(x + 19, y + 1, 8, 6);
+
+  ctx.fillStyle = '#f0e090';
+  ctx.fillRect(x + 30, y + 5, 3, 3);
+  ctx.fillStyle = '#c04040';
+  ctx.fillRect(x + 1, y + 17, 3, 3);
+}
+
+function drawHeyBudParkedCars() {
+  // a couple of cars parked in the gravel lot right beside Hey Bud,
+  // kept clear of the doorway path through the middle of the lot
+  drawParkedCar(28 * TILE + 18, 7 * TILE + 8, '#4a7a8c');
+  drawParkedCar(28 * TILE + 168, 7 * TILE + 4, '#8a3f3a');
+}
+
+function drawWallPoster(px, py, w, h) {
+  // portrait poster on the side of the storefront wall, between the
+  // shop sign and the windows
+  const pw = 34, ph = Math.round(pw * 806 / 555);
+  const x = px + w - pw - 14;
+  const y = py + 30;
+
+  ctx.fillStyle = '#1c1a20';
+  ctx.fillRect(x - 3, y - 3, pw + 6, ph + 6);
+  ctx.fillStyle = '#f4ecd8';
+  ctx.fillRect(x - 1, y - 1, pw + 2, ph + 2);
+
+  if (purePopPosterImg.complete && purePopPosterImg.naturalWidth) {
+    ctx.drawImage(purePopPosterImg, x, y, pw, ph);
+  } else {
+    ctx.fillStyle = '#c0392b';
+    ctx.fillRect(x, y, pw, ph);
+  }
+
+  ctx.fillStyle = 'rgba(230,224,200,0.6)';
+  ctx.fillRect(x - 4, y - 4, 8, 4);
+  ctx.fillRect(x + pw - 4, y - 4, 8, 4);
+}
+
+function drawYardSign(x, y) {
+  ctx.strokeStyle = '#9a9a9a';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x + 6, y + 18);
+  ctx.lineTo(x + 6, y + 30);
+  ctx.moveTo(x + 22, y + 18);
+  ctx.lineTo(x + 22, y + 30);
+  ctx.stroke();
+
+  ctx.fillStyle = '#f4ecd8';
+  ctx.fillRect(x, y, 30, 20);
+  ctx.strokeStyle = '#c0392b';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 1, y + 1, 28, 18);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#1c3f7a';
+  ctx.font = 'bold 7px monospace';
+  ctx.fillText('KANGA', x + 15, y + 10);
+  ctx.fillStyle = '#c0392b';
+  ctx.font = 'bold 6px monospace';
+  ctx.fillText('FOR MAYOR', x + 15, y + 17);
+
+  ctx.fillStyle = '#c0392b';
+  ctx.fillRect(x + 2, y + 2, 2, 2);
+  ctx.fillRect(x + 26, y + 2, 2, 2);
+}
+
+function drawBench(x, y, w) {
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(x, y + 25, w, 3);
+
+  ctx.fillStyle = '#4a3018';
+  ctx.fillRect(x + 3, y + 16, 4, 10);
+  ctx.fillRect(x + w - 7, y + 16, 4, 10);
+
+  ctx.fillStyle = '#8a5a30';
+  ctx.fillRect(x, y + 10, w, 6);
+  ctx.fillStyle = '#6a4020';
+  ctx.fillRect(x, y + 15, w, 2);
+
+  ctx.fillStyle = '#8a5a30';
+  ctx.fillRect(x + 2, y, 4, 12);
+  ctx.fillRect(x + w / 2 - 2, y, 4, 12);
+  ctx.fillRect(x + w - 6, y, 4, 12);
+}
+
+function drawDeliSeatingArea() {
+  // a small seating nook down by the riverbank, a bit removed from the
+  // deli's front door so it reads as its own little spot
+  const x = 9 * TILE, y = 19 * TILE + 10;
+
+  ctx.fillStyle = 'rgba(110,98,76,0.5)';
+  ctx.beginPath();
+  ctx.ellipse(x + 46, y + 20, 60, 32, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  drawBench(x, y, 34);
+  drawBench(x + 58, y, 34);
+
+  ctx.fillStyle = '#6a4a2a';
+  ctx.fillRect(x + 42, y + 14, 4, 12);
+  ctx.fillStyle = '#9a7a50';
+  ctx.beginPath();
+  ctx.ellipse(x + 44, y + 10, 16, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#5a3e22';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.fillStyle = '#5a4028';
+  ctx.fillRect(x + 90, y - 4, 14, 10);
+  ctx.fillStyle = '#4d8c3d';
+  ctx.fillRect(x + 92, y - 12, 4, 10);
+  ctx.fillRect(x + 98, y - 15, 4, 13);
+  ctx.fillRect(x + 102, y - 10, 4, 8);
+
+  ctx.fillStyle = '#454a4d';
+  ctx.fillRect(x - 14, y + 4, 12, 16);
+  ctx.fillStyle = '#5c6265';
+  ctx.fillRect(x - 15, y + 2, 14, 4);
 }
 
 // ---------------------------------------------------------------- keeper
