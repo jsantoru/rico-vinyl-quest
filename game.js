@@ -173,6 +173,9 @@ purePopPosterImg.src = 'assets/purepop_poster.png';
 const anthillLogoImg = new Image();
 anthillLogoImg.src = 'assets/anthill_logo.png';
 
+const anthillBillboardImg = new Image();
+anthillBillboardImg.src = 'assets/adog_billboard.png';
+
 const nectarsNeonImg = new Image();
 nectarsNeonImg.src = 'assets/nectars_neon.png';
 
@@ -1428,7 +1431,9 @@ function drawTownDecorations(time) {
   drawOldLotByHeyBud();
   drawHeyBudParkedCars();
   drawSmokingPerson(time);
-  drawYardSign(25 * TILE + 4, 20 * TILE);
+  // Widened sign: shifted left of its old anchor so its right edge still lines
+  // up with the flea-market crate at tile (26,20) instead of growing into it.
+  drawYardSign(25 * TILE - 10, 20 * TILE);
   drawFountainArea(time);
 }
 
@@ -1838,17 +1843,25 @@ function drawAnthillBillboard() {
   ctx.fillStyle = '#d6c35e';
   ctx.fillRect(x, y, w, h);
 
+  // Graffiti mural artwork fills the board (cover-fit, cropped to the frame)
+  if (anthillBillboardImg.complete && anthillBillboardImg.naturalWidth) {
+    const ix = x + 4, iy = y + 4, iw = w - 8, ih = h - 8;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(ix, iy, iw, ih);
+    ctx.clip();
+    const scale = Math.max(iw / anthillBillboardImg.naturalWidth, ih / anthillBillboardImg.naturalHeight);
+    const dw = anthillBillboardImg.naturalWidth * scale;
+    const dh = anthillBillboardImg.naturalHeight * scale;
+    const dx = ix + (iw - dw) / 2;
+    const dy = iy + (ih - dh) / 2;
+    ctx.drawImage(anthillBillboardImg, dx, dy, dw, dh);
+    ctx.restore();
+  }
+
   ctx.strokeStyle = '#4b3928';
   ctx.lineWidth = 3;
   ctx.strokeRect(x + 4, y + 4, w - 8, h - 8);
-
-  ctx.fillStyle = '#3b2724';
-  ctx.font = 'bold 28px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('ANTHILL', x + w / 2, y + 35);
-
-  ctx.fillStyle = '#a34332';
-  ctx.fillRect(x + 24, y + 41, w - 48, 4);
 }
 
 function drawOldLotByHeyBud() {
@@ -2078,11 +2091,11 @@ function drawNectarsDecor(px, py, w, h) {
 }
 
 function drawAnthillLogo(px, py, w, h) {
-  // Large Anthill logo on the front of Green Door Studio
-  const logoW = 120;
-  const logoH = 90;
+  // Large Anthill ant logo on the front of Green Door Studio
+  const logoW = 170;
+  const logoH = 100;
   const logoX = px + (w - logoW) / 2;
-  const logoY = py + 40;
+  const logoY = py + 28;
   
   if (anthillLogoImg.complete && anthillLogoImg.naturalWidth) {
     ctx.save();
@@ -2272,29 +2285,29 @@ function drawYardSign(x, y) {
   ctx.strokeStyle = '#9a9a9a';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(x + 6, y + 18);
-  ctx.lineTo(x + 6, y + 30);
-  ctx.moveTo(x + 22, y + 18);
-  ctx.lineTo(x + 22, y + 30);
+  ctx.moveTo(x + 9, y + 27);
+  ctx.lineTo(x + 9, y + 44);
+  ctx.moveTo(x + 33, y + 27);
+  ctx.lineTo(x + 33, y + 44);
   ctx.stroke();
 
   ctx.fillStyle = '#f4ecd8';
-  ctx.fillRect(x, y, 30, 20);
+  ctx.fillRect(x, y, 44, 29);
   ctx.strokeStyle = '#c0392b';
   ctx.lineWidth = 2;
-  ctx.strokeRect(x + 1, y + 1, 28, 18);
+  ctx.strokeRect(x + 1, y + 1, 42, 27);
 
   ctx.textAlign = 'center';
   ctx.fillStyle = '#1c3f7a';
-  ctx.font = 'bold 7px monospace';
-  ctx.fillText('KANGA', x + 15, y + 10);
+  ctx.font = 'bold 10px monospace';
+  ctx.fillText('KANGA', x + 22, y + 14);
   ctx.fillStyle = '#c0392b';
-  ctx.font = 'bold 6px monospace';
-  ctx.fillText('FOR MAYOR', x + 15, y + 17);
+  ctx.font = 'bold 9px monospace';
+  ctx.fillText('FOR MAYOR', x + 22, y + 25);
 
   ctx.fillStyle = '#c0392b';
-  ctx.fillRect(x + 2, y + 2, 2, 2);
-  ctx.fillRect(x + 26, y + 2, 2, 2);
+  ctx.fillRect(x + 3, y + 3, 3, 3);
+  ctx.fillRect(x + 38, y + 3, 3, 3);
 }
 
 function drawBench(x, y, w) {
