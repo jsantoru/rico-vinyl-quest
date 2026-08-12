@@ -131,6 +131,28 @@ const WORLD_DEFS = {
     },
     padOrder: ['elm', 'cola', 'stab', 'choir', 'white'],
   },
+  // The swamp — a template overworld, not yet connected to any other map.
+  swamp: {
+    name: 'Bayou Crossing',
+    records: {
+      moss: { title: 'Strum Low', artist: 'Boss Bass', year: '1981',
+              sample: 'Bassline', layer: 'bass', color: '#3f8f4f', pad: 'BAS',
+              flavor: 'Bass plucked deep under the waterline. It hums like rain itself.' },
+      frog: { title: 'Frog Chorus Stab', artist: 'The Lilypad Horns', year: '1985',
+              sample: 'Horn Stab', layer: 'horns', color: '#8f9a3f', pad: 'HRN',
+              flavor: 'Three bullfrogs, one chord, struck right before dawn.' },
+      choir: { title: 'Moss Hallelujah', artist: 'Cypress Choir', year: '1979',
+               sample: 'Vocal Chop', layer: 'vox', color: '#5f9a7a', pad: 'VOX',
+               flavor: 'A choir of crickets singing through the reeds to no one at all.' },
+      swampdrum: { title: 'Mud Kick', artist: 'Crawdad Drums', year: '1982',
+                   sample: 'Drum Loop', layer: 'drums', color: '#8fbf3f', pad: 'DRM',
+                   flavor: 'A rhythm beaten on a hollow log. Wet, muffled, unstoppable.' },
+      honeysuckle: { title: 'Honeysuckle Lead', artist: 'Wildflower & Vine', year: '1974',
+                    sample: 'Lead Melody', layer: 'lead', color: '#d8c060', pad: 'LD',
+                    flavor: 'A single string soaked in swamp honey. It glows through the mist.' },
+    },
+    padOrder: ['moss', 'frog', 'choir', 'swampdrum', 'honeysuckle'],
+  },
   // ADD MORE WORLDS HERE, e.g.:
   // subway: {
   //   name: 'The Subway',
@@ -195,9 +217,6 @@ splashImg.src = 'assets/splash.png';
 
 const purePopPosterImg = new Image();
 purePopPosterImg.src = 'assets/purepop_poster.png';
-
-const anthillLogoImg = new Image();
-anthillLogoImg.src = 'assets/anthill_logo.png';
 
 const anthillBillboardImg = new Image();
 anthillBillboardImg.src = 'assets/adog_billboard.png';
@@ -272,6 +291,79 @@ function makeOverworld() {
   map.crates[key(28,21)] = { record: 'white' };
   map.crates[key(30,20)] = { junkSeed: 6 };
   return { map, doors: { groove, wax, diner, nectars, thrift, juniors } };
+}
+
+// small deterministic RNG so the swamp layout is identical on every load
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Template world — a murky swamp. NOT connected to anything yet; add a
+// `transitions` entry later to wire it to the town. Legend: '~' murky water
+// (solid), 'b' boardwalk (walkable), '#' swamp tree (solid), 'c' crate.
+function makeSwamp() {
+  const W = 44, H = 28;
+  const g = blankGrid(W, H, '~');          // start as all water
+  const rng = mulberry32(90240214);
+
+  // boardwalk trunk + vertical spurs (the walkable paths through the water)
+  for (let x = 0; x < W; x++) g[12][x] = 'b';
+  for (let y = 5; y < 22; y++) { g[y][8] = 'b'; g[y][34] = 'b'; }
+
+  // carve muddy ground islands
+  for (let i = 0; i < 11; i++) {
+    const cx = 2 + Math.floor(rng() * (W - 4));
+    const cy = 2 + Math.floor(rng() * (H - 4));
+    const r = 2 + Math.floor(rng() * 3);
+    for (let y = cy - r; y <= cy + r; y++)
+      for (let x = cx - r; x <= cx + r; x++) {
+        if (x < 0 || y < 0 || x >= W || y >= H) continue;
+        if ((x - cx) ** 2 + (y - cy) ** 2 <= r * r && g[y][x] === '~') g[y][x] = '.';
+      }
+  }
+
+  // sprinkle swamp trees over the mud
+  for (let y = 1; y < H - 1; y++)
+    for (let x = 1; x < W - 1; x++)
+      if (g[y][x] === '.' && rng() < 0.10) g[y][x] = '#';
+
+  // crates: five hidden records + a few junk ones
+  const crates = {};
+  const crateDefs = [
+    [20, 12, { record: 'moss' }],
+    [30, 12, { record: 'frog' }],
+    [38, 12, { junkSeed: 1 }],
+    [6, 12,  { junkSeed: 2 }],
+    [8, 9,   { record: 'choir' }],
+    [34, 7,  { record: 'swampdrum' }],
+    [17, 18, { junkSeed: 0 }],
+    [34, 17, { record: 'honeysuckle' }],
+    [14, 12, { junkSeed: 3 }],
+  ];
+  for (const [x, y, d] of crateDefs) { g[y][x] = 'c'; crates[key(x, y)] = d; }
+
+  const waterTiles = [];
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++)
+      if (g[y][x] === '~') waterTiles.push({ x, y });
+
+  return {
+    id: 'swamp', world: 'swamp', w: W, h: H, grid: g, outside: true,
+    buildings: [], doors: {}, crates, npcs: [], riverTiles: waterTiles,
+    swamp: true,
+    palette: {
+      groundA: '#6a5a35', groundB: '#5c723a', groundDot: '#6d8a46',
+      water: '#2c4330', waterHi: '#3d5a3e',
+      trunk: '#4a3a24', leafDark: '#2f5a28', leafMid: '#3c6a30', leafLight: '#4a7c3c',
+    },
+    ambient: { bikeRows: [], walkerRow: -1, dogRow: -1 },  // fish only, no traffic
+  };
 }
 
 function key(x, y) { return x + ',' + y; }
@@ -372,7 +464,8 @@ for (const [id, d] of Object.entries(doors)) {
   transitions['town:' + key(d.doorX, d.doorY)] = { map: id, x: 6.5, y: 7.5 };
   transitions[id + ':' + key(6, 9)] = { map: 'town', x: d.doorX + 0.5, y: d.doorY + 1.6 };
 }
-const maps = { town, ...shops };
+const swamp = makeSwamp();
+const maps = { town, ...shops, swamp };
 
 // ---------------------------------------------------------------- state
 const player = {
@@ -637,7 +730,8 @@ function updateAmbient(dt) {
 // `ambient` config gets its own life without hardcoding 'town'.
 function spawnBike(map) {
   const amb = map.ambient || {};
-  const rows = amb.bikeRows || [9, 10];
+  const rows = amb.bikeRows;
+  if (!rows || !rows.length) return;   // no bike lanes -> no bikes
   const dir = Math.random() < 0.5 ? 1 : -1;
   const row = rows[Math.floor(Math.random() * rows.length)];
   ambient.push({ type: 'bike', x: dir > 0 ? -30 : map.w * TILE + 30, y: row * TILE + 16, vx: dir * 115, dir, t: 0 });
@@ -647,6 +741,7 @@ function spawnWalker(map) {
   const dir = Math.random() < 0.5 ? 1 : -1;
   const shirts = ['#c86a3a', '#4a7ab0', '#7a4a9a', '#3a9a5a'];
   const row = amb.walkerRow !== undefined ? amb.walkerRow : 12;
+  if (row < 0) return;                  // no walker lane -> no walkers
   ambient.push({
     type: 'walker', x: dir > 0 ? -20 : map.w * TILE + 20, y: row * TILE + 24,
     vx: dir * 44, dir, t: 0,
@@ -657,6 +752,7 @@ function spawnDog(map) {
   const amb = map.ambient || {};
   const dir = Math.random() < 0.5 ? 1 : -1;
   const row = amb.dogRow !== undefined ? amb.dogRow : 23;
+  if (row < 0) return;                  // no dog lane -> no dogs
   ambient.push({ type: 'dog', x: dir > 0 ? -20 : map.w * TILE + 20, y: row * TILE + 20, vx: dir * 58, dir, t: 0 });
 }
 function spawnFish(map) {
@@ -946,7 +1042,8 @@ function render(time) {
   drawTiles(map, time, camX, camY);
   if (map.outside) {
     drawBuildings(map);
-    drawTownDecorations(time);
+    if (map.swamp) drawSwampDecorations(time, map, camX, camY);
+    else drawTownDecorations(time);
     drawAmbient();
   }
   if (map.darkClub) drawNectarsInterior(time);
@@ -979,9 +1076,13 @@ function drawTiles(map, time, camX = 0, camY = 0) {
       const ch = map.grid[ty][tx];
       const h = hash2(tx, ty);
       if (map.outside) {
-        ctx.fillStyle = (h % 7 === 0) ? '#3e7c34' : '#468a3a';
+        const p = map.palette;
+        ctx.fillStyle = (h % 7 === 0) ? (p ? p.groundB : '#3e7c34') : (p ? p.groundA : '#468a3a');
         ctx.fillRect(px, py, TILE, TILE);
-        if (h % 5 === 0) { ctx.fillStyle = '#54a046'; ctx.fillRect(px + (h % 20), py + (h % 22), 3, 3); }
+        if (h % 5 === 0) {
+          ctx.fillStyle = p ? p.groundDot : '#54a046';
+          ctx.fillRect(px + (h % 20), py + (h % 22), 3, 3);
+        }
       } else {
         ctx.fillStyle = map.floor;
         ctx.fillRect(px, py, TILE, TILE);
@@ -997,11 +1098,12 @@ function drawTiles(map, time, camX = 0, camY = 0) {
           if (h % 6 === 0) ctx.fillRect(px + (h % 18), py + ((h >> 3) % 24), 4, 3);
           break;
         }
-        case '#': drawTree(px, py); break;
+        case '#': drawTree(px, py, map); break;
         case '~': {
-          ctx.fillStyle = '#3060b0';
+          const p = map.palette;
+          ctx.fillStyle = p ? p.water : '#3060b0';
           ctx.fillRect(px, py, TILE, TILE);
-          ctx.fillStyle = '#4878cc';
+          ctx.fillStyle = p ? p.waterHi : '#4878cc';
           const off = Math.floor(time * 6) % 2 === 0 ? 4 : 12;
           ctx.fillRect(px + off, py + 8, 10, 2);
           ctx.fillRect(px + (TILE - off - 10), py + 22, 10, 2);
@@ -1067,15 +1169,53 @@ function drawTiles(map, time, camX = 0, camY = 0) {
   }
 }
 
-function drawTree(px, py) {
-  ctx.fillStyle = '#6a4a2a';
+function drawTree(px, py, map) {
+  const p = map && map.palette;
+  ctx.fillStyle = p ? p.trunk : '#6a4a2a';
   ctx.fillRect(px + 13, py + 20, 6, 10);
-  ctx.fillStyle = '#2e6428';
+  ctx.fillStyle = p ? p.leafDark : '#2e6428';
   ctx.fillRect(px + 4, py + 10, 24, 12);
-  ctx.fillStyle = '#38782e';
+  ctx.fillStyle = p ? p.leafMid : '#38782e';
   ctx.fillRect(px + 8, py + 2, 16, 14);
-  ctx.fillStyle = '#4a9038';
+  ctx.fillStyle = p ? p.leafLight : '#4a9038';
   ctx.fillRect(px + 10, py + 4, 8, 6);
+}
+
+// Scatter lily pads + cattails over the swamp's water. Called from render
+// only when the current map has `swamp: true`.
+function drawSwampDecorations(time, map, camX, camY) {
+  const p = map.palette || {};
+  const x0 = Math.max(0, Math.floor(camX / TILE));
+  const y0 = Math.max(0, Math.floor(camY / TILE));
+  const x1 = Math.min(map.w, Math.ceil((camX + VIEW_W) / TILE));
+  const y1 = Math.min(map.h, Math.ceil((camY + VIEW_H) / TILE));
+  for (let ty = y0; ty < y1; ty++)
+    for (let tx = x0; tx < x1; tx++) {
+      if (map.grid[ty][tx] !== '~') continue;
+      const h = hash2(tx, ty);
+      const px = tx * TILE, py = ty * TILE;
+      if (h % 7 === 0) {                     // lily pad (bobs gently)
+        const bob = Math.sin(time * 2 + h) * 1;
+        const lx = px + 10 + (h % 11), ly = py + 18 + bob;
+        ctx.fillStyle = '#3f7a35';
+        ctx.beginPath();
+        ctx.ellipse(lx, ly, 7, 4, 0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = p.water || '#2c4330';  // notch
+        ctx.beginPath();
+        ctx.moveTo(lx - 1, ly);
+        ctx.lineTo(lx + 3, ly - 2);
+        ctx.lineTo(lx + 3, ly + 2);
+        ctx.closePath();
+        ctx.fill();
+      }
+      if (h % 11 === 0) {                    // cattail
+        ctx.fillStyle = '#3a4a2a';
+        ctx.fillRect(px + 6, py + 12, 2, 18);
+        ctx.fillStyle = '#6a4a28';
+        ctx.fillRect(px + 4, py + 8, 6, 9);
+      }
+    }
 }
 
 function drawCrate(px, py, data) {
@@ -1144,7 +1284,6 @@ function drawBuildings(map) {
 
     if (isGreenDoorStudio) {
       drawGraffiti(px, py, w, h);
-      drawAnthillLogo(px, py, w, h);
     }
 
     // Garage door on left side of Green Door Studio (closed, graffiti-covered)
@@ -2138,27 +2277,6 @@ function drawNectarsDecor(px, py, w, h) {
   ctx.stroke();
   
   ctx.restore();
-}
-
-function drawAnthillLogo(px, py, w, h) {
-  // Large Anthill ant logo on the front of Green Door Studio
-  const logoW = 170;
-  const logoH = 100;
-  const logoX = px + (w - logoW) / 2;
-  const logoY = py + 28;
-  
-  if (anthillLogoImg.complete && anthillLogoImg.naturalWidth) {
-    ctx.save();
-    
-    // Optional: Add a slight background for the logo to stand out
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillRect(logoX - 4, logoY - 4, logoW + 8, logoH + 8);
-    
-    // Draw the Anthill logo
-    ctx.drawImage(anthillLogoImg, logoX, logoY, logoW, logoH);
-    
-    ctx.restore();
-  }
 }
 
 function drawJuniorsDecor(px, py, w, h) {
