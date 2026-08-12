@@ -1136,10 +1136,17 @@ function drawBuildings(map) {
     }
 
     const dx = b.doorX * TILE;
-    ctx.fillStyle = isGreenDoorStudio ? '#245b2b' : '#3a2414';
-    ctx.fillRect(dx + 4, py + h - TILE + 2, TILE - 8, TILE - 2);
-    ctx.fillStyle = isGreenDoorStudio ? '#b7d96a' : '#e0c060';
-    ctx.fillRect(dx + TILE - 12, py + h - 16, 3, 3);
+    
+    // Special mural door for Green Door Studio
+    if (isGreenDoorStudio) {
+      drawGreenDoorMural(dx, py + h - TILE);
+    } else {
+      // Standard door for other buildings
+      ctx.fillStyle = '#3a2414';
+      ctx.fillRect(dx + 4, py + h - TILE + 2, TILE - 8, TILE - 2);
+      ctx.fillStyle = '#e0c060';
+      ctx.fillRect(dx + TILE - 12, py + h - 16, 3, 3);
+    }
 
     if (isHeyBud) drawHeyBudDecor(px, py, w, h);
     if (isNectars) {
@@ -1159,6 +1166,160 @@ function drawBuildings(map) {
       ctx.fillText(b.name, px + w / 2, py + 20);
     }
   }
+}
+
+function drawGreenDoorMural(doorX, doorY) {
+  // Vibrant mural on Green Door Studio entrance
+  // Based on the green character with purple hair and blue background
+  
+  const w = TILE;
+  const h = TILE;
+  
+  ctx.save();
+  
+  // Bright cyan/turquoise background
+  ctx.fillStyle = '#20c0d8';
+  ctx.fillRect(doorX, doorY, w, h);
+  
+  // Add some texture/splatter to background
+  ctx.fillStyle = '#18a8c0';
+  ctx.fillRect(doorX + 2, doorY + 4, 4, 3);
+  ctx.fillRect(doorX + w - 8, doorY + 8, 5, 4);
+  ctx.fillRect(doorX + 5, doorY + h - 10, 3, 3);
+  
+  // Purple hair swirls (left side)
+  ctx.fillStyle = '#9060b0';
+  ctx.beginPath();
+  ctx.ellipse(doorX + 8, doorY + 10, 6, 8, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.fillStyle = '#b080d0';
+  ctx.beginPath();
+  ctx.ellipse(doorX + 6, doorY + 12, 4, 6, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Purple hair swirls (right side)
+  ctx.fillStyle = '#9060b0';
+  ctx.beginPath();
+  ctx.ellipse(doorX + w - 10, doorY + 11, 6, 8, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.fillStyle = '#b080d0';
+  ctx.beginPath();
+  ctx.ellipse(doorX + w - 8, doorY + 13, 4, 6, 0.4, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Green face (center)
+  ctx.fillStyle = '#40d050';
+  ctx.beginPath();
+  ctx.ellipse(doorX + w/2, doorY + h/2 - 2, 10, 12, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Face outline/shadow
+  ctx.strokeStyle = '#2a9838';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.ellipse(doorX + w/2, doorY + h/2 - 2, 10, 12, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // Left eye (bright blue)
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.ellipse(doorX + w/2 - 4, doorY + h/2 - 4, 3, 3.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.fillStyle = '#20d0f0';
+  ctx.beginPath();
+  ctx.ellipse(doorX + w/2 - 4, doorY + h/2 - 4, 2, 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.fillStyle = '#1a1a1e';
+  ctx.beginPath();
+  ctx.ellipse(doorX + w/2 - 4, doorY + h/2 - 4, 1, 1.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Right eye (bright blue)
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.ellipse(doorX + w/2 + 4, doorY + h/2 - 4, 3, 3.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.fillStyle = '#20d0f0';
+  ctx.beginPath();
+  ctx.ellipse(doorX + w/2 + 4, doorY + h/2 - 4, 2, 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.fillStyle = '#1a1a1e';
+  ctx.beginPath();
+  ctx.ellipse(doorX + w/2 + 4, doorY + h/2 - 4, 1, 1.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Nose (small)
+  ctx.fillStyle = '#2a9838';
+  ctx.beginPath();
+  ctx.moveTo(doorX + w/2, doorY + h/2);
+  ctx.lineTo(doorX + w/2 - 1, doorY + h/2 + 2);
+  ctx.lineTo(doorX + w/2 + 1, doorY + h/2 + 2);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Big smile (pink/magenta lips)
+  ctx.fillStyle = '#f060a0';
+  ctx.beginPath();
+  ctx.ellipse(doorX + w/2, doorY + h/2 + 5, 6, 3, 0, 0, Math.PI);
+  ctx.fill();
+  
+  // Teeth highlight
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(doorX + w/2 - 3, doorY + h/2 + 4, 6, 2);
+  
+  // Yellow sunflower (right side of hair)
+  ctx.fillStyle = '#f0d060';
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2;
+    const petalX = doorX + w - 6 + Math.cos(angle) * 3;
+    const petalY = doorY + 8 + Math.sin(angle) * 3;
+    ctx.beginPath();
+    ctx.ellipse(petalX, petalY, 2, 3, angle, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  // Flower center
+  ctx.fillStyle = '#8a5a3a';
+  ctx.beginPath();
+  ctx.arc(doorX + w - 6, doorY + 8, 2, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Earring/jewelry (yellow)
+  ctx.fillStyle = '#f0d860';
+  ctx.beginPath();
+  ctx.arc(doorX + w/2 + 8, doorY + h/2 + 2, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(doorX + w/2 + 7, doorY + h/2 + 4, 2, 3);
+  
+  // Green body/shoulders (bottom)
+  ctx.fillStyle = '#40d050';
+  ctx.fillRect(doorX + w/2 - 8, doorY + h - 8, 16, 8);
+  
+  // Darker outfit/belt area
+  ctx.fillStyle = '#2a5a30';
+  ctx.fillRect(doorX + w/2 - 8, doorY + h - 4, 16, 4);
+  
+  // Belt studs
+  ctx.fillStyle = '#7a7a7e';
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.arc(doorX + w/2 - 4 + i * 4, doorY + h - 2, 1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  // Door handle (small circle)
+  ctx.fillStyle = '#8a8a8e';
+  ctx.beginPath();
+  ctx.arc(doorX + w - 8, doorY + h/2 + 8, 2, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.restore();
 }
 
 function drawGraffiti(px, py, w, h) {
