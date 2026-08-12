@@ -170,6 +170,9 @@ splashImg.src = 'assets/splash.png';
 const purePopPosterImg = new Image();
 purePopPosterImg.src = 'assets/purepop_poster.png';
 
+const neonSignImg = new Image();
+neonSignImg.src = 'assets/neon_lounge.png'; // or whatever you name the uploaded image
+
 // ---------------------------------------------------------------- maps
 const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J']);
 
@@ -198,8 +201,10 @@ function makeOverworld() {
 
   const groove = building(4, 3, 7, 4, 'Green Door Studio', '#76503a', '#4e3328', 9); // door moved to right
   const wax    = building(28, 3, 7, 4, 'Hey Bud', '#bf4f6f', '#93384f');
-  const diner  = building(4, 14, 7, 4, 'Kountry Kart Deli', '#c07a38', '#96591f');
+  const diner  = building(4, 14, 5, 4, 'Kountry Kart Deli', '#c07a38', '#96591f'); // made smaller (5 wide instead of 7)
+  const lounge = building(9, 14, 4, 6, 'Lounge', '#2a2a3a', '#1a1a2a'); // taller building next to deli
   const thrift = building(28, 14, 7, 4, 'Pure Pop Records', '#3f8fbf', '#2a6a93');
+  const juniors = building(35, 14, 4, 4, "Junior's", '#d84a3a', '#a83828');
 
   // park + winding river, avoiding the building footprints
   const riverTiles = [];
@@ -1012,6 +1017,8 @@ function drawBuildings(map) {
     const isGreenDoorStudio = b.name === 'Green Door Studio';
     const isHeyBud = b.name === 'Hey Bud';
     const isThrift = b.name === 'Pure Pop Records';
+    const isJuniors = b.name === "Junior's";
+    const isLounge = b.name === 'Lounge';
 
     ctx.fillStyle = b.wall;
     ctx.fillRect(px, py, w, h);
@@ -1110,6 +1117,8 @@ function drawBuildings(map) {
 
     if (isHeyBud) drawHeyBudDecor(px, py, w, h);
     if (isThrift) drawWallPoster(px, py, w, h);
+    if (isJuniors) drawJuniorsDecor(px, py, w, h);
+    if (isLounge) drawLoungeNeonSign(px, py, w, h);
 
     ctx.fillStyle = '#f4ecd8';
     const sw = Math.min(w - 10, b.name.length * 9 + 14);
@@ -1212,6 +1221,118 @@ function drawPlantPot(x, y) {
   ctx.fillRect(x + 9, y - 18, 5, 5);
 }
 
+function drawJuniorsDecor(px, py, w, h) {
+  ctx.save();
+  
+  // Pizza slice sign on the wall
+  const pizzaX = px + 10;
+  const pizzaY = py + 48;
+  
+  // Pizza slice triangle
+  ctx.fillStyle = '#f0d860';
+  ctx.beginPath();
+  ctx.moveTo(pizzaX, pizzaY);
+  ctx.lineTo(pizzaX + 20, pizzaY + 4);
+  ctx.lineTo(pizzaX + 18, pizzaY + 18);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Pepperoni spots
+  ctx.fillStyle = '#c83030';
+  ctx.beginPath();
+  ctx.arc(pizzaX + 8, pizzaY + 6, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(pizzaX + 14, pizzaY + 10, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(pizzaX + 10, pizzaY + 12, 2, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Crust edge
+  ctx.strokeStyle = '#c09030';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(pizzaX, pizzaY);
+  ctx.lineTo(pizzaX + 18, pizzaY + 18);
+  ctx.stroke();
+  
+  // "OPEN" sign in window
+  ctx.fillStyle = '#e8e0d0';
+  ctx.fillRect(px + w - 24, py + h - TILE - 10, 16, 12);
+  ctx.fillStyle = '#2a9a3a';
+  ctx.font = 'bold 6px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('OPEN', px + w - 16, py + h - TILE - 2);
+  
+  ctx.restore();
+}
+
+function drawLoungeNeonSign(px, py, w, h) {
+  ctx.save();
+  
+  // Dark brick texture for taller building
+  ctx.fillStyle = '#1a1a24';
+  for (let by = 0; by < 6; by++) {
+    const brickY = py + 34 + by * 16;
+    ctx.strokeStyle = '#0a0a14';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px, brickY);
+    ctx.lineTo(px + w, brickY);
+    ctx.stroke();
+  }
+  
+  // Neon sign area on the front
+  const signW = w - 8;
+  const signH = 48;
+  const signX = px + 4;
+  const signY = py + 50;
+  
+  // Dark background for sign
+  ctx.fillStyle = '#0a0a14';
+  ctx.fillRect(signX, signY, signW, signH);
+  
+  // If the neon image is loaded, draw it
+  if (neonSignImg.complete && neonSignImg.naturalWidth) {
+    ctx.drawImage(neonSignImg, signX, signY, signW, signH);
+  } else {
+    // Fallback: draw "LOUNGE" text in neon red style
+    ctx.fillStyle = '#ff2040';
+    ctx.shadowColor = '#ff2040';
+    ctx.shadowBlur = 8;
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Lounge', signX + signW / 2, signY + 20);
+    ctx.font = 'bold 18px monospace';
+    ctx.fillText('Nectar', signX + signW / 2, signY + 38);
+    ctx.shadowBlur = 0;
+  }
+  
+  // Windows with warm interior glow
+  ctx.fillStyle = '#ffe090';
+  ctx.fillRect(px + 8, py + h - TILE - 14, 14, 16);
+  ctx.fillRect(px + w - 22, py + h - TILE - 14, 14, 16);
+  ctx.fillRect(px + 8, py + h - TILE * 2 - 14, 14, 16);
+  ctx.fillRect(px + w - 22, py + h - TILE * 2 - 14, 14, 16);
+  
+  // Window panes
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(px + 15, py + h - TILE - 14);
+  ctx.lineTo(px + 15, py + h - TILE + 2);
+  ctx.moveTo(px + w - 15, py + h - TILE - 14);
+  ctx.lineTo(px + w - 15, py + h - TILE + 2);
+  ctx.moveTo(px + 15, py + h - TILE * 2 - 14);
+  ctx.lineTo(px + 15, py + h - TILE * 2 + 2);
+  ctx.moveTo(px + w - 15, py + h - TILE * 2 - 14);
+  ctx.lineTo(px + w - 15, py + h - TILE * 2 + 2);
+  ctx.stroke();
+  
+  ctx.restore();
+}
+
 // ---------------------------------------------------------------- town decorations
 function drawTownDecorations(time) {
   drawGreenDoorArtArea();
@@ -1222,6 +1343,7 @@ function drawTownDecorations(time) {
   drawHeyBudParkedCars();
   drawYardSign(11 * TILE + 4, 15 * TILE);
   drawDeliSeatingArea();
+  drawRiverBench(time);
 }
 
 function drawGreenDoorArtArea() {
@@ -1678,28 +1800,37 @@ function drawBench(x, y, w) {
 }
 
 function drawDeliSeatingArea() {
-  // a small seating nook down by the riverbank, a bit removed from the
-  // deli's front door so it reads as its own little spot
+  // concrete patio seating area with fountain
   const x = 9 * TILE, y = 19 * TILE + 10;
 
-  ctx.fillStyle = 'rgba(110,98,76,0.5)';
+  // Concrete patio base
+  ctx.fillStyle = '#7a7a82';
+  ctx.fillRect(x - 5, y - 2, 100, 38);
+  
+  // Concrete texture - darker patches
+  ctx.fillStyle = '#6a6a72';
+  ctx.fillRect(x + 5, y + 3, 20, 15);
+  ctx.fillRect(x + 40, y + 8, 18, 12);
+  ctx.fillRect(x + 70, y + 2, 22, 18);
+  
+  // Concrete cracks
+  ctx.strokeStyle = '#5a5a62';
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.ellipse(x + 46, y + 20, 60, 32, 0, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.moveTo(x + 15, y);
+  ctx.lineTo(x + 22, y + 35);
+  ctx.moveTo(x + 50, y + 5);
+  ctx.lineTo(x + 48, y + 30);
+  ctx.stroke();
 
+  // Benches on concrete
   drawBench(x, y, 34);
   drawBench(x + 58, y, 34);
 
-  ctx.fillStyle = '#6a4a2a';
-  ctx.fillRect(x + 42, y + 14, 4, 12);
-  ctx.fillStyle = '#9a7a50';
-  ctx.beginPath();
-  ctx.ellipse(x + 44, y + 10, 16, 9, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#5a3e22';
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  // Small fountain between benches
+  drawFountain(x + 42, y + 8);
 
+  // Potted plant
   ctx.fillStyle = '#5a4028';
   ctx.fillRect(x + 90, y - 4, 14, 10);
   ctx.fillStyle = '#4d8c3d';
@@ -1707,10 +1838,98 @@ function drawDeliSeatingArea() {
   ctx.fillRect(x + 98, y - 15, 4, 13);
   ctx.fillRect(x + 102, y - 10, 4, 8);
 
+  // Trash can
   ctx.fillStyle = '#454a4d';
   ctx.fillRect(x - 14, y + 4, 12, 16);
   ctx.fillStyle = '#5c6265';
   ctx.fillRect(x - 15, y + 2, 14, 4);
+}
+
+function drawFountain(x, y) {
+  // Fountain base
+  ctx.fillStyle = '#9a9aa2';
+  ctx.beginPath();
+  ctx.arc(x, y + 12, 14, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Water basin
+  ctx.fillStyle = '#4a8ab8';
+  ctx.beginPath();
+  ctx.arc(x, y + 12, 11, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Center fountain column
+  ctx.fillStyle = '#8a8a92';
+  ctx.fillRect(x - 3, y + 2, 6, 10);
+  
+  // Top of fountain
+  ctx.fillStyle = '#9a9aa2';
+  ctx.beginPath();
+  ctx.arc(x, y + 2, 5, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Water spray effect (simple)
+  ctx.strokeStyle = '#6aa8d0';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x - 4, y + 4);
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + 4, y + 4);
+  ctx.moveTo(x, y);
+  ctx.lineTo(x - 2, y + 6);
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + 2, y + 6);
+  ctx.stroke();
+}
+
+function drawRiverBench(time) {
+  // Bench by the water toward the bottom of the screen with someone sitting
+  const x = 12 * TILE;
+  const y = 23 * TILE;
+  
+  // Simple bench
+  drawBench(x, y, 34);
+  
+  // Person sitting on bench
+  drawSittingPerson(x + 17, y + 6, time);
+}
+
+function drawSittingPerson(x, y, time) {
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(x - 8, y + 18, 16, 4);
+  
+  // Legs (sitting)
+  ctx.fillStyle = '#3a3a46';
+  ctx.fillRect(x - 6, y + 8, 5, 10);
+  ctx.fillRect(x + 1, y + 8, 5, 10);
+  
+  // Body/shirt
+  ctx.fillStyle = '#7a4a9a';
+  ctx.fillRect(x - 6, y - 4, 12, 13);
+  
+  // Arms relaxed
+  ctx.fillStyle = '#7a4a9a';
+  ctx.fillRect(x - 10, y + 2, 5, 6);
+  ctx.fillRect(x + 5, y + 2, 5, 6);
+  
+  // Hands
+  ctx.fillStyle = '#b87954';
+  ctx.fillRect(x - 10, y + 7, 4, 3);
+  ctx.fillRect(x + 6, y + 7, 4, 3);
+  
+  // Head/skin
+  ctx.fillStyle = '#b87954';
+  ctx.fillRect(x - 4, y - 12, 8, 8);
+  
+  // Hair
+  ctx.fillStyle = '#4a3a2a';
+  ctx.fillRect(x - 4, y - 14, 8, 4);
+  
+  // Book or phone in lap (small detail)
+  ctx.fillStyle = '#e8e0d0';
+  ctx.fillRect(x - 3, y + 6, 6, 4);
 }
 
 // ---------------------------------------------------------------- keeper
