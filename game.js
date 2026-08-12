@@ -1262,6 +1262,128 @@ function drawTownDecorations(time) {
   drawHeyBudParkedCars();
   drawSmokingPerson(time);
   drawYardSign(25 * TILE + 4, 20 * TILE);
+  drawFountainArea(time);
+}
+
+function drawFountainArea(time) {
+  // Fountain and seating area in lower left (near coordinates 3,20-22)
+  // Positioned to avoid blocking paths
+  const baseX = 2 * TILE + 8;
+  const baseY = 20 * TILE;
+  
+  // Concrete seating area (patio)
+  const patioW = 3 * TILE + 8;
+  const patioH = 2 * TILE + 8;
+  
+  ctx.fillStyle = '#9a9a9e';
+  ctx.fillRect(baseX, baseY, patioW, patioH);
+  
+  // Concrete texture (subtle lines)
+  ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath();
+    ctx.moveTo(baseX, baseY + i * 18);
+    ctx.lineTo(baseX + patioW, baseY + i * 18);
+    ctx.stroke();
+  }
+  
+  // Fountain (center-left of patio)
+  const fountainX = baseX + 18;
+  const fountainY = baseY + 20;
+  const fountainR = 16;
+  
+  // Fountain base (stone)
+  ctx.fillStyle = '#7a7a7e';
+  ctx.beginPath();
+  ctx.arc(fountainX, fountainY, fountainR, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Water (blue with shimmer)
+  ctx.fillStyle = '#4890d0';
+  ctx.beginPath();
+  ctx.arc(fountainX, fountainY, fountainR - 4, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Water shimmer effect
+  const shimmer = Math.floor(time * 3) % 3;
+  ctx.fillStyle = 'rgba(200,230,255,0.4)';
+  ctx.beginPath();
+  ctx.arc(fountainX - 4 + shimmer * 2, fountainY - 3, 3, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Center fountain spout
+  ctx.fillStyle = '#5a5a5e';
+  ctx.fillRect(fountainX - 2, fountainY - 8, 4, 8);
+  
+  // Water spray (animated)
+  ctx.save();
+  ctx.fillStyle = 'rgba(180,220,255,0.6)';
+  const spray = Math.sin(time * 4) * 2;
+  ctx.fillRect(fountainX - 1, fountainY - 12 - spray, 2, 4 + spray);
+  ctx.fillStyle = 'rgba(180,220,255,0.3)';
+  ctx.fillRect(fountainX - 3, fountainY - 10 - spray, 1, 3);
+  ctx.fillRect(fountainX + 2, fountainY - 10 - spray, 1, 3);
+  ctx.restore();
+  
+  // Bench (right side of patio)
+  const benchX = baseX + patioW - TILE - 10;
+  const benchY = baseY + 16;
+  
+  // Bench seat
+  ctx.fillStyle = '#6a4a3a';
+  ctx.fillRect(benchX, benchY, 32, 6);
+  
+  // Bench back
+  ctx.fillStyle = '#6a4a3a';
+  ctx.fillRect(benchX + 2, benchY - 12, 28, 4);
+  
+  // Bench legs
+  ctx.fillStyle = '#5a3a2a';
+  ctx.fillRect(benchX + 4, benchY + 6, 4, 8);
+  ctx.fillRect(benchX + 24, benchY + 6, 4, 8);
+  
+  // Person sitting on bench
+  const personX = benchX + 12;
+  const personY = benchY - 6;
+  
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(personX - 4, benchY + 6, 10, 3);
+  
+  // Legs (sitting position)
+  ctx.fillStyle = '#3a4a6a';
+  ctx.fillRect(personX - 2, benchY + 6, 3, 8);
+  ctx.fillRect(personX + 3, benchY + 6, 3, 8);
+  
+  // Body
+  ctx.fillStyle = '#7a5a4a';
+  ctx.fillRect(personX - 3, personY, 10, 10);
+  
+  // Head
+  ctx.fillStyle = '#c89a72';
+  ctx.fillRect(personX - 2, personY - 6, 7, 7);
+  
+  // Hair
+  ctx.fillStyle = '#5a3a2a';
+  ctx.fillRect(personX - 2, personY - 8, 7, 3);
+  
+  // Arm resting on bench back
+  ctx.fillStyle = '#c89a72';
+  ctx.fillRect(personX + 7, personY + 2, 6, 2);
+  
+  // Small decorative plants around fountain
+  const plants = [
+    [fountainX - 24, fountainY + 8],
+    [fountainX + 20, fountainY + 10]
+  ];
+  
+  for (const [px, py] of plants) {
+    ctx.fillStyle = '#4d8c3d';
+    ctx.fillRect(px, py - 8, 3, 8);
+    ctx.fillRect(px - 2, py - 10, 2, 4);
+    ctx.fillRect(px + 3, py - 9, 2, 4);
+  }
 }
 
 function drawGreenDoorArtArea() {
