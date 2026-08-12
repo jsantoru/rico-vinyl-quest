@@ -203,7 +203,8 @@ function makeOverworld() {
   const wax    = building(28, 3, 7, 4, 'Hey Bud', '#bf4f6f', '#93384f');
   const diner  = building(4, 14, 5, 4, 'Kountry Kart Deli', '#c07a38', '#96591f'); // smaller - 5 tiles wide
   const nectars = building(9, 14, 4, 6, 'Nectars', '#2a2a3a', '#1a1a2a'); // taller building next to deli
-  const thrift = building(28, 14, 7, 4, 'Pure Pop Records', '#3f8fbf', '#2a6a93');
+  const thrift = building(28, 14, 5, 4, 'Pure Pop Records', '#3f8fbf', '#2a6a93'); // smaller to make room
+  const juniors = building(33, 14, 4, 4, "Junior's", '#d84030', '#a83020'); // pizza shop
 
   // park + winding river, avoiding the building footprints
   const riverTiles = [];
@@ -236,7 +237,7 @@ function makeOverworld() {
   map.crates[key(26,20)] = { junkSeed: 3 };
   map.crates[key(28,21)] = { record: 'white' };
   map.crates[key(30,20)] = { junkSeed: 6 };
-  return { map, doors: { groove, wax, diner, nectars, thrift } };
+  return { map, doors: { groove, wax, diner, nectars, thrift, juniors } };
 }
 
 function key(x, y) { return x + ',' + y; }
@@ -255,6 +256,7 @@ function makeShop(id, opts) {
     keeper: { x: 6, y: 1, ...opts.keeper },
     crates: {}, npcs: [],
     darkClub: opts.darkClub || false,
+    pizzaShop: opts.pizzaShop || false,
   };
   const spots = [[1,4],[1,6],[12,4],[12,6],[2,8],[11,8]];
   opts.crates.forEach((c, i) => {
@@ -316,6 +318,17 @@ const shops = {
       foundLine: 'Enjoy the show! Those fries are legendary.' },
     crates: [],
     darkClub: true,
+  }),
+  juniors: makeShop('juniors', {
+    floor: '#c8a898', plank: '#b89888', wallColor: '#e8d8c8',
+    keeper: { name: 'TONY', shirt: '#e8e8e8', skin: '#d8b898',
+      lines: ['Hey! Welcome to Junior\'s — best slice in town, no question.',
+              'Vinyl records? Nah, we sling pizza here, not platters.',
+              'But I\'ll tell ya — Kountry Kart Deli has some old jukebox connections.',
+              'And that art studio down the street? Those painters are always spinning something weird.'],
+      foundLine: 'Grab a slice before you go. You\'ll need the energy!' },
+    crates: [],
+    pizzaShop: true,
   }),
 };
 
@@ -888,6 +901,7 @@ function render(time) {
     drawAmbient();
   }
   if (map.darkClub) drawNectarsInterior(time);
+  if (map.pizzaShop) drawJuniorsInterior(time);
   if (map.keeper) drawKeeper(map.keeper);
   drawPlayer(time);
 
@@ -1030,6 +1044,7 @@ function drawBuildings(map) {
     const isHeyBud = b.name === 'Hey Bud';
     const isThrift = b.name === 'Pure Pop Records';
     const isNectars = b.name === 'Nectars';
+    const isJuniors = b.name === "Junior's";
 
     ctx.fillStyle = b.wall;
     ctx.fillRect(px, py, w, h);
@@ -1131,6 +1146,7 @@ function drawBuildings(map) {
       drawNectarsDecor(px, py, w, h);
       drawWallPoster(px, py, w, h);
     }
+    if (isJuniors) drawJuniorsDecor(px, py, w, h);
 
     // Draw building name sign (skip for Nectar's - uses neon sign instead)
     if (!isNectars) {
@@ -1244,6 +1260,7 @@ function drawTownDecorations(time) {
   drawAnthillBillboard();
   drawOldLotByHeyBud();
   drawHeyBudParkedCars();
+  drawSmokingPerson(time);
   drawYardSign(25 * TILE + 4, 20 * TILE);
 }
 
@@ -1631,6 +1648,59 @@ function drawHeyBudParkedCars() {
   drawParkedCar(28 * TILE + 168, 7 * TILE + 4, '#8a3f3a');
 }
 
+function drawSmokingPerson(time) {
+  // Person smoking outside Hey Bud on the right side
+  const x = 35 * TILE - 10;
+  const y = 6 * TILE + 8;
+  
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(x - 6, y + 20, 12, 4);
+  
+  // Legs
+  ctx.fillStyle = '#2a3a5a';
+  ctx.fillRect(x - 3, y + 10, 3, 10);
+  ctx.fillRect(x + 1, y + 10, 3, 10);
+  
+  // Body
+  ctx.fillStyle = '#5a4a6a';
+  ctx.fillRect(x - 4, y, 9, 12);
+  
+  // Head
+  ctx.fillStyle = '#c89a72';
+  ctx.fillRect(x - 3, y - 6, 7, 7);
+  
+  // Hair
+  ctx.fillStyle = '#3a2a1a';
+  ctx.fillRect(x - 3, y - 8, 7, 3);
+  
+  // Arm holding cigarette
+  ctx.fillStyle = '#c89a72';
+  ctx.fillRect(x + 5, y + 2, 8, 2);
+  
+  // Cigarette with glowing tip
+  ctx.fillStyle = '#e8e8e8';
+  ctx.fillRect(x + 13, y + 2, 6, 1);
+  
+  // Glowing cigarette tip (flickers)
+  const glow = Math.floor(time * 4) % 3 !== 0;
+  if (glow) {
+    ctx.fillStyle = '#ff6030';
+    ctx.fillRect(x + 19, y + 2, 2, 1);
+  }
+  
+  // Smoke wisps rising
+  ctx.save();
+  ctx.strokeStyle = 'rgba(180,180,190,0.4)';
+  ctx.lineWidth = 1;
+  const smokeOffset = (time * 20) % 15;
+  ctx.beginPath();
+  ctx.moveTo(x + 20, y + 2);
+  ctx.lineTo(x + 21 + Math.sin(smokeOffset) * 2, y - 8 - smokeOffset);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawWallPoster(px, py, w, h) {
   // portrait poster on the side of the storefront wall, between the
   // shop sign and the windows
@@ -1716,6 +1786,176 @@ function drawNectarsDecor(px, py, w, h) {
   ctx.stroke();
   
   ctx.restore();
+}
+
+function drawJuniorsDecor(px, py, w, h) {
+  ctx.save();
+  
+  // Red brick pattern
+  ctx.fillStyle = '#c84030';
+  for (let by = 0; by < 4; by++) {
+    const brickY = py + 34 + by * 16;
+    ctx.strokeStyle = '#a83020';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px, brickY);
+    ctx.lineTo(px + w, brickY);
+    ctx.stroke();
+  }
+  
+  // Pizza slice sign on front
+  const signX = px + w/2;
+  const signY = py + 55;
+  
+  // Pizza slice shape
+  ctx.fillStyle = '#f0d060';
+  ctx.beginPath();
+  ctx.moveTo(signX, signY - 10);
+  ctx.lineTo(signX + 15, signY + 10);
+  ctx.lineTo(signX - 15, signY + 10);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Pizza toppings (pepperoni dots)
+  ctx.fillStyle = '#d04030';
+  ctx.fillRect(signX - 5, signY, 4, 4);
+  ctx.fillRect(signX + 3, signY + 4, 3, 3);
+  ctx.fillRect(signX - 8, signY + 6, 3, 3);
+  
+  // Cheese highlights
+  ctx.fillStyle = '#ffe890';
+  ctx.fillRect(signX - 2, signY - 4, 4, 2);
+  ctx.fillRect(signX + 6, signY + 2, 3, 2);
+  
+  // Window with checkered curtain pattern
+  ctx.fillStyle = '#e8f0f8';
+  ctx.fillRect(px + 8, py + h - TILE - 14, 20, 18);
+  
+  // Checkered curtain
+  ctx.fillStyle = '#d84848';
+  for (let cy = 0; cy < 3; cy++) {
+    for (let cx = 0; cx < 3; cx++) {
+      if ((cx + cy) % 2 === 0) {
+        ctx.fillRect(px + 8 + cx * 6, py + h - TILE - 14 + cy * 6, 6, 6);
+      }
+    }
+  }
+  
+  ctx.restore();
+}
+
+function drawJuniorsInterior(time) {
+  // Classic NY style pizza shop interior
+  
+  // Pizza oven (left side, back wall)
+  const ovenX = 1 * TILE + 8;
+  const ovenY = 1 * TILE + 8;
+  const ovenW = 2 * TILE;
+  const ovenH = TILE + 8;
+  
+  // Oven body (brick)
+  ctx.fillStyle = '#8a4a3a';
+  ctx.fillRect(ovenX, ovenY, ovenW, ovenH);
+  
+  // Oven opening with glow
+  ctx.save();
+  ctx.fillStyle = '#ff6030';
+  ctx.shadowColor = '#ff6030';
+  ctx.shadowBlur = 12;
+  ctx.fillRect(ovenX + 12, ovenY + 10, ovenW - 24, ovenH - 20);
+  ctx.shadowBlur = 0;
+  ctx.restore();
+  
+  // Oven door frame
+  ctx.strokeStyle = '#3a2a1a';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(ovenX + 10, ovenY + 8, ovenW - 20, ovenH - 16);
+  
+  // Pizza peel leaning against wall
+  const peelX = ovenX + ovenW + 6;
+  const peelY = ovenY + ovenH - 30;
+  ctx.fillStyle = '#9a7050';
+  ctx.fillRect(peelX, peelY, 4, 30);
+  ctx.fillRect(peelX - 6, peelY - 4, 16, 6);
+  
+  // Counter (right side)
+  const counterX = 9 * TILE;
+  const counterY = 4 * TILE;
+  const counterW = 3 * TILE;
+  const counterH = 2 * TILE;
+  
+  ctx.fillStyle = '#6a4a3a';
+  ctx.fillRect(counterX, counterY, counterW, counterH);
+  ctx.fillStyle = '#8a6a4a';
+  ctx.fillRect(counterX, counterY, counterW, 8);
+  
+  // Glass display case on counter
+  ctx.fillStyle = 'rgba(200,220,240,0.3)';
+  ctx.fillRect(counterX + 6, counterY + 10, counterW - 12, 24);
+  ctx.strokeStyle = '#9a9a9e';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(counterX + 6, counterY + 10, counterW - 12, 24);
+  
+  // Pizza slices in display
+  ctx.fillStyle = '#f0d060';
+  for (let i = 0; i < 3; i++) {
+    const sliceX = counterX + 12 + i * 14;
+    const sliceY = counterY + 20;
+    ctx.beginPath();
+    ctx.moveTo(sliceX, sliceY - 4);
+    ctx.lineTo(sliceX + 8, sliceY + 4);
+    ctx.lineTo(sliceX, sliceY + 4);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Pepperoni
+    ctx.fillStyle = '#d04030';
+    ctx.fillRect(sliceX + 2, sliceY, 2, 2);
+    ctx.fillStyle = '#f0d060';
+  }
+  
+  // "PIZZA" sign on back wall
+  const signX = 6 * TILE;
+  const signY = 1 * TILE + 2;
+  
+  ctx.fillStyle = '#e8e030';
+  ctx.font = 'bold 16px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('PIZZA', signX, signY + 12);
+  
+  // Menu board
+  ctx.fillStyle = '#2a2a2a';
+  ctx.fillRect(signX + TILE, signY - 8, TILE + 12, 32);
+  ctx.fillStyle = '#f0f0f0';
+  ctx.font = '8px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText('SLICE $3', signX + TILE + 4, signY + 4);
+  ctx.fillText('PIE $18', signX + TILE + 4, signY + 14);
+  
+  // Napkin dispenser on counter
+  ctx.fillStyle = '#c0c0c8';
+  ctx.fillRect(counterX + counterW - 20, counterY + 36, 12, 10);
+  
+  // Oregano shaker
+  ctx.fillStyle = '#d04030';
+  ctx.fillRect(counterX + 10, counterY + 38, 6, 10);
+  ctx.fillStyle = '#e8e8e8';
+  ctx.fillRect(counterX + 11, counterY + 40, 4, 2);
+  
+  // Parmesan shaker  
+  ctx.fillStyle = '#60a060';
+  ctx.fillRect(counterX + 20, counterY + 38, 6, 10);
+  ctx.fillStyle = '#e8e8e8';
+  ctx.fillRect(counterX + 21, counterY + 40, 4, 2);
+  
+  // Checkered floor accent (a few tiles near entrance for NY vibe)
+  const floorChecks = [[6, 8], [7, 8], [6, 9], [7, 9]];
+  for (const [fx, fy] of floorChecks) {
+    if ((fx + fy) % 2 === 0) {
+      ctx.fillStyle = 'rgba(0,0,0,0.1)';
+      ctx.fillRect(fx * TILE, fy * TILE, TILE, TILE);
+    }
+  }
 }
 
 function drawYardSign(x, y) {
