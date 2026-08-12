@@ -198,7 +198,8 @@ function makeOverworld() {
 
   const groove = building(4, 3, 7, 4, 'Green Door Studio', '#76503a', '#4e3328', 9); // door moved to right
   const wax    = building(28, 3, 7, 4, 'Hey Bud', '#bf4f6f', '#93384f');
-  const diner  = building(4, 14, 7, 4, 'Kountry Kart Deli', '#c07a38', '#96591f');
+  const diner  = building(4, 14, 5, 4, 'Kountry Kart Deli', '#c07a38', '#96591f'); // smaller - 5 tiles wide
+  const nectars = building(9, 14, 4, 6, 'Nectars', '#2a2a3a', '#1a1a2a'); // taller building next to deli
   const thrift = building(28, 14, 7, 4, 'Pure Pop Records', '#3f8fbf', '#2a6a93');
 
   // park + winding river, avoiding the building footprints
@@ -232,7 +233,7 @@ function makeOverworld() {
   map.crates[key(26,20)] = { junkSeed: 3 };
   map.crates[key(28,21)] = { record: 'white' };
   map.crates[key(30,20)] = { junkSeed: 6 };
-  return { map, doors: { groove, wax, diner, thrift } };
+  return { map, doors: { groove, wax, diner, nectars, thrift } };
 }
 
 function key(x, y) { return x + ',' + y; }
@@ -1012,6 +1013,7 @@ function drawBuildings(map) {
     const isGreenDoorStudio = b.name === 'Green Door Studio';
     const isHeyBud = b.name === 'Hey Bud';
     const isThrift = b.name === 'Pure Pop Records';
+    const isNectars = b.name === 'Nectars';
 
     ctx.fillStyle = b.wall;
     ctx.fillRect(px, py, w, h);
@@ -1110,6 +1112,7 @@ function drawBuildings(map) {
 
     if (isHeyBud) drawHeyBudDecor(px, py, w, h);
     if (isThrift) drawWallPoster(px, py, w, h);
+    if (isNectars) drawNectarsDecor(px, py, w, h);
 
     ctx.fillStyle = '#f4ecd8';
     const sw = Math.min(w - 10, b.name.length * 9 + 14);
@@ -1381,6 +1384,7 @@ function drawDeliScene(time) {
   const x = 3 * TILE;
   const y = 18 * TILE + 2;
 
+  // Garbage can - moved to the left side of deli
   ctx.fillStyle = '#41454a';
   ctx.fillRect(x + 7, y + 8, 20, 25);
   ctx.fillStyle = '#5c6267';
@@ -1390,12 +1394,14 @@ function drawDeliScene(time) {
   ctx.fillRect(x + 17, y + 13, 3, 15);
   ctx.fillRect(x + 25, y + 13, 2, 15);
 
+  // Small table with items - positioned in front of deli
   ctx.fillStyle = '#d8d0b8';
   ctx.fillRect(x + 11, y + 2, 8, 8);
   ctx.fillStyle = '#9a4038';
   ctx.fillRect(x + 18, y + 4, 6, 5);
 
-  drawGuitarPlayer(x + 50, y + 12, time);
+  // Guitar player - moved further right to avoid Nectar's building (was at x+50, now x+200)
+  drawGuitarPlayer(x + 200, y + 12, time);
 }
 
 function drawGuitarPlayer(x, y, time) {
@@ -1627,6 +1633,53 @@ function drawWallPoster(px, py, w, h) {
   ctx.fillStyle = 'rgba(230,224,200,0.6)';
   ctx.fillRect(x - 4, y - 4, 8, 4);
   ctx.fillRect(x + pw - 4, y - 4, 8, 4);
+}
+
+function drawNectarsDecor(px, py, w, h) {
+  ctx.save();
+  
+  // Dark brick texture for taller rock club building
+  ctx.fillStyle = '#1a1a24';
+  for (let by = 0; by < 6; by++) {
+    const brickY = py + 34 + by * 16;
+    ctx.strokeStyle = '#0a0a14';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px, brickY);
+    ctx.lineTo(px + w, brickY);
+    ctx.stroke();
+  }
+  
+  // Neon "LIVE MUSIC" sign on front
+  const signX = px + 8;
+  const signY = py + 50;
+  ctx.fillStyle = '#ff2040';
+  ctx.shadowColor = '#ff2040';
+  ctx.shadowBlur = 8;
+  ctx.font = 'bold 14px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('LIVE', signX + w/2 - 4, signY + 14);
+  ctx.fillText('MUSIC', signX + w/2 - 4, signY + 28);
+  ctx.shadowBlur = 0;
+  
+  // Windows with warm glow
+  ctx.fillStyle = '#ffe090';
+  ctx.fillRect(px + 8, py + h - TILE - 14, 14, 16);
+  ctx.fillRect(px + w - 22, py + h - TILE - 14, 14, 16);
+  ctx.fillRect(px + 8, py + h - TILE * 2 - 14, 14, 16);
+  ctx.fillRect(px + w - 22, py + h - TILE * 2 - 14, 14, 16);
+  
+  // Window panes
+  ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(px + 15, py + h - TILE - 14);
+  ctx.lineTo(px + 15, py + h - TILE + 2);
+  ctx.moveTo(px + w - 15, py + h - TILE - 14);
+  ctx.lineTo(px + w - 15, py + h - TILE + 2);
+  ctx.stroke();
+  
+  ctx.restore();
 }
 
 function drawYardSign(x, y) {
