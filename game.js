@@ -75,6 +75,33 @@ ctx.imageSmoothingEnabled = false;
   fitCanvas();
 })();
 
+// ---------------------------------------------------------------- iOS/iPadOS zoom-gesture guard
+// iPadOS Safari ignores the `user-scalable=no` viewport hint, and its pinch-
+// zoom / double-tap-zoom gestures are recognized from raw touch events at the
+// WebKit level, not from the Pointer Events our controls use — so
+// preventDefault() inside pointerdown handlers doesn't stop them. Fast taps
+// during play (mashing E, tapping through dialog, etc.) can land close enough
+// together for Safari to read them as a double-tap-zoom. Block both gesture
+// paths explicitly.
+(() => {
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach((type) => {
+    document.addEventListener(type, (e) => e.preventDefault());
+  });
+
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if (now - lastTouchEnd <= 350) e.preventDefault();
+    lastTouchEnd = now;
+  }, { passive: false });
+
+  document.addEventListener('touchmove', (e) => {
+    if (e.scale !== undefined && e.scale !== 1) e.preventDefault();
+  }, { passive: false });
+
+  document.addEventListener('dblclick', (e) => e.preventDefault());
+})();
+
 // ---------------------------------------------------------------- records
 const RECORDS = {
   elm:   { title: 'Elm Street Funk',      artist: 'Static Groove',   year: '1974',
