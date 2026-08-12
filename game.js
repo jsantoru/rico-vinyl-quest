@@ -201,8 +201,8 @@ function makeOverworld() {
 
   const groove = building(4, 3, 7, 4, 'Green Door Studio', '#76503a', '#4e3328', 9); // door moved to right
   const wax    = building(28, 3, 7, 4, 'Hey Bud', '#bf4f6f', '#93384f');
-  const diner  = building(4, 14, 5, 4, 'Kountry Kart Deli', '#c07a38', '#96591f'); // made smaller (5 wide instead of 7)
-  const lounge = building(9, 14, 4, 6, 'Lounge', '#2a2a3a', '#1a1a2a'); // taller building next to deli
+  const diner  = building(2, 18, 5, 4, 'Kountry Kart Deli', '#c07a38', '#96591f'); // moved to left side, lower
+  const lounge = building(7, 18, 4, 6, 'Nectar\'s', '#2a2a3a', '#1a1a2a'); // moved to left side, next to deli
   const thrift = building(28, 14, 7, 4, 'Pure Pop Records', '#3f8fbf', '#2a6a93');
   const juniors = building(35, 14, 4, 4, "Junior's", '#d84a3a', '#a83828');
 
@@ -237,7 +237,7 @@ function makeOverworld() {
   map.crates[key(26,20)] = { junkSeed: 3 };
   map.crates[key(28,21)] = { record: 'white' };
   map.crates[key(30,20)] = { junkSeed: 6 };
-  return { map, doors: { groove, wax, diner, thrift } };
+  return { map, doors: { groove, wax, diner, lounge, thrift, juniors } };
 }
 
 function key(x, y) { return x + ',' + y; }
@@ -267,6 +267,61 @@ function makeShop(id, opts) {
 }
 
 const { map: town, doors } = makeOverworld();
+
+function makeNectars() {
+  const W = 14, H = 10;
+  const g = blankGrid(W, H, '.');
+  for (let x = 0; x < W; x++) { g[0][x] = 'W'; g[H-1][x] = 'W'; }
+  for (let y = 0; y < H; y++) { g[y][0] = 'W'; g[y][W-1] = 'W'; }
+  
+  // Bar/stage area
+  for (let x = 2; x <= 5; x++) g[2][x] = 'B'; // bar
+  g[10][2] = 'S'; // small stage marker
+  g[1][3] = 'K'; // keeper behind bar
+  g[H-1][6] = 'E'; // exit
+  
+  const map = {
+    id: 'nectars', w: W, h: H, grid: g, outside: false,
+    floor: '#1a1a22', plank: '#0a0a12', wallColor: '#0a0a14',
+    keeper: { x: 3, y: 1, name: 'CARTER', shirt: '#1a1a1a', skin: '#9a7050',
+      lines: ['Welcome to Nectar\'s. Dark, loud, and unforgettable.',
+              'Try the Gravy Fries — they\'re legendary around here.',
+              'Looking for vinyl? Pure Pop Records across town has the best collection. Green Door Studio might have some old session tapes too.'],
+      foundLine: 'Enjoy the vibe. The fries are in the kitchen if you\'re hungry.' },
+    crates: {}, npcs: [],
+  };
+  return map;
+}
+
+function makeJuniors() {
+  const W = 14, H = 10;
+  const g = blankGrid(W, H, '=');
+  for (let x = 0; x < W; x++) { g[0][x] = 'W'; g[H-1][x] = 'W'; }
+  for (let y = 0; y < H; y++) { g[y][0] = 'W'; g[y][W-1] = 'W'; }
+  
+  // Counter
+  for (let x = 4; x <= 9; x++) g[2][x] = 'T';
+  g[1][6] = 'K'; // keeper
+  g[H-1][6] = 'E'; // exit
+  
+  // Tables (small crates for chairs/tables)
+  g[5][3] = 'c';
+  g[5][10] = 'c';
+  g[8][3] = 'c';
+  g[8][10] = 'c';
+  
+  const map = {
+    id: 'juniors', w: W, h: H, grid: g, outside: false,
+    floor: '#d8c8b0', plank: '#c8b8a0', wallColor: '#d84a3a',
+    keeper: { x: 6, y: 1, name: 'JUNIOR', shirt: '#e8e8e8', skin: '#c89a72',
+      lines: ['Hey, welcome to Junior\'s! Best pizza and slices in town.',
+              'Vinyl records? Not my thing, but I hear Pure Pop Records has tons.',
+              'The deli next door, Kountry Kart — Rosie used to be in a band. She might know about old records.'],
+      foundLine: 'Grab a slice! Fresh out of the oven.' },
+    crates: {}, npcs: [],
+  };
+  return map;
+}
 
 const shops = {
   groove: makeShop('groove', {
@@ -306,6 +361,8 @@ const shops = {
       foundLine: 'Galactic Hallelujah?! I nearly priced that thing at a dollar. Glad you found it first.' },
     crates: [ { junkSeed: 2 }, { junkSeed: 3 }, { junkSeed: 4 }, { record: 'choir' } ],
   }),
+  nectars: makeNectars(),
+  juniors: makeJuniors(),
 };
 
 // door wiring: town door tile -> shop spawn; shop exit tile -> town spawn
@@ -877,6 +934,8 @@ function render(time) {
     drawAmbient();
   }
   if (map.keeper) drawKeeper(map.keeper);
+  if (map.id === 'nectars') drawNectarsDecor(time);
+  if (map.id === 'juniors') drawJuniorsInteriorDecor();
   drawPlayer(time);
 
   ctx.restore();
@@ -980,6 +1039,22 @@ function drawTiles(map, time) {
           ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 8);
           break;
         }
+        case 'B': {
+          // Bar counter for Nectar's
+          ctx.fillStyle = '#2a1a1a';
+          ctx.fillRect(px, py, TILE, TILE);
+          ctx.fillStyle = '#3a2a2a';
+          ctx.fillRect(px, py, TILE, 10);
+          break;
+        }
+        case 'S': {
+          // Stage marker for Nectar's
+          ctx.fillStyle = '#1a1a22';
+          ctx.fillRect(px, py, TILE, TILE);
+          ctx.fillStyle = '#3a2a2a';
+          ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+          break;
+        }
       }
     }
   }
@@ -1018,7 +1093,7 @@ function drawBuildings(map) {
     const isHeyBud = b.name === 'Hey Bud';
     const isThrift = b.name === 'Pure Pop Records';
     const isJuniors = b.name === "Junior's";
-    const isLounge = b.name === 'Lounge';
+    const isLounge = b.name === 'Nectar\'s';
 
     ctx.fillStyle = b.wall;
     ctx.fillRect(px, py, w, h);
@@ -1116,7 +1191,7 @@ function drawBuildings(map) {
     ctx.fillRect(dx + TILE - 12, py + h - 16, 3, 3);
 
     if (isHeyBud) drawHeyBudDecor(px, py, w, h);
-    if (isThrift) drawWallPoster(px, py, w, h);
+    if (isThrift) {} // removed poster from Pure Pop Records
     if (isJuniors) drawJuniorsDecor(px, py, w, h);
     if (isLounge) drawLoungeNeonSign(px, py, w, h);
 
@@ -1308,6 +1383,9 @@ function drawLoungeNeonSign(px, py, w, h) {
     ctx.fillText('Nectar', signX + signW / 2, signY + 38);
     ctx.shadowBlur = 0;
   }
+  
+  // Pure Pop poster on side wall
+  drawWallPoster(px, py, w, h);
   
   // Windows with warm interior glow
   ctx.fillStyle = '#ffe090';
@@ -1945,6 +2023,134 @@ function drawKeeper(k) {
   ctx.fillRect(px + 12, py + 6, 2, 2);
   ctx.fillRect(px + 18, py + 6, 2, 2);
   ctx.fillRect(px + 10, py, 12, 3);
+}
+
+function drawNectarsDecor(time) {
+  // Dark rock club atmosphere
+  // Stage with instruments
+  const stageX = 10 * TILE + 8;
+  const stageY = 2 * TILE;
+  
+  // Stage platform
+  ctx.fillStyle = '#2a2a2a';
+  ctx.fillRect(stageX, stageY, TILE * 3, TILE + 8);
+  
+  // Drum kit
+  ctx.fillStyle = '#3a3a3a';
+  ctx.fillRect(stageX + 10, stageY + 12, 14, 18);
+  ctx.fillStyle = '#5a5a5a';
+  ctx.beginPath();
+  ctx.arc(stageX + 17, stageY + 10, 8, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Guitar on stand
+  ctx.fillStyle = '#c83030';
+  ctx.fillRect(stageX + 35, stageY + 8, 8, 20);
+  ctx.fillRect(stageX + 35, stageY + 3, 8, 6);
+  
+  // Mic stand
+  ctx.strokeStyle = '#5a5a5a';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(stageX + 55, stageY + 28);
+  ctx.lineTo(stageX + 55, stageY + 5);
+  ctx.stroke();
+  ctx.fillStyle = '#4a4a4a';
+  ctx.fillRect(stageX + 52, stageY + 3, 6, 4);
+  
+  // Neon "LIVE MUSIC" sign on wall
+  const signX = 1 * TILE + 4;
+  const signY = 4 * TILE;
+  ctx.fillStyle = '#ff2040';
+  ctx.shadowColor = '#ff2040';
+  ctx.shadowBlur = 6;
+  ctx.font = 'bold 10px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText('LIVE', signX, signY);
+  ctx.fillText('MUSIC', signX, signY + 12);
+  ctx.shadowBlur = 0;
+  
+  // "GRAVY FRIES" menu board
+  const menuX = 2 * TILE + 4;
+  const menuY = 2 * TILE + 8;
+  ctx.fillStyle = '#3a2a1a';
+  ctx.fillRect(menuX, menuY, 38, 20);
+  ctx.fillStyle = '#f0d860';
+  ctx.font = 'bold 7px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('FAMOUS', menuX + 19, menuY + 8);
+  ctx.fillText('GRAVY', menuX + 19, menuY + 15);
+  ctx.fillText('FRIES', menuX + 19, menuY + 22);
+  
+  // Bar stools
+  for (let i = 0; i < 3; i++) {
+    const stoolX = 3 * TILE + i * TILE;
+    const stoolY = 3 * TILE;
+    ctx.fillStyle = '#4a2a2a';
+    ctx.fillRect(stoolX, stoolY + 8, 12, 4);
+    ctx.fillRect(stoolX + 4, stoolY + 12, 4, 8);
+  }
+}
+
+function drawJuniorsInteriorDecor() {
+  // Classic pizza shop
+  // Pizza oven
+  const ovenX = 1 * TILE + 4;
+  const ovenY = 1 * TILE + 4;
+  ctx.fillStyle = '#5a4a3a';
+  ctx.fillRect(ovenX, ovenY, 28, 24);
+  ctx.fillStyle = '#8a6a4a';
+  ctx.fillRect(ovenX + 4, ovenY + 4, 20, 14);
+  // Oven fire
+  ctx.fillStyle = '#ff6030';
+  ctx.fillRect(ovenX + 8, ovenY + 8, 12, 8);
+  
+  // Pizza on counter
+  const pizzaX = 7 * TILE;
+  const pizzaY = 2 * TILE + 4;
+  ctx.fillStyle = '#f0d060';
+  ctx.beginPath();
+  ctx.arc(pizzaX, pizzaY, 8, 0, Math.PI * 2);
+  ctx.fill();
+  // Pepperoni
+  ctx.fillStyle = '#c83030';
+  for (let i = 0; i < 5; i++) {
+    const angle = (i / 5) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(pizzaX + Math.cos(angle) * 5, pizzaY + Math.sin(angle) * 5, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  // Menu board on wall
+  const menuX = 11 * TILE;
+  const menuY = 1 * TILE + 4;
+  ctx.fillStyle = '#2a2a2a';
+  ctx.fillRect(menuX, menuY, 32, 28);
+  ctx.fillStyle = '#f4ecd8';
+  ctx.font = 'bold 8px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('MENU', menuX + 16, menuY + 10);
+  ctx.font = '6px monospace';
+  ctx.fillText('PIZZA', menuX + 16, menuY + 18);
+  ctx.fillText('SLICES', menuX + 16, menuY + 24);
+  
+  // Tables with red checkered cloths
+  const tables = [[3, 5], [3, 8], [10, 5], [10, 8]];
+  for (const [tx, ty] of tables) {
+    const tableX = tx * TILE;
+    const tableY = ty * TILE;
+    // Checkered pattern
+    ctx.fillStyle = '#e8e0d0';
+    ctx.fillRect(tableX - 4, tableY - 4, 20, 20);
+    ctx.fillStyle = '#d84a3a';
+    for (let dy = 0; dy < 20; dy += 5) {
+      for (let dx = 0; dx < 20; dx += 5) {
+        if ((Math.floor(dx / 5) + Math.floor(dy / 5)) % 2 === 0) {
+          ctx.fillRect(tableX - 4 + dx, tableY - 4 + dy, 5, 5);
+        }
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------- player
