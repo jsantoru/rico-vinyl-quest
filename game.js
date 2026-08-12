@@ -806,40 +806,80 @@ function drawMountainLayer(layer, camX) {
   ctx.fillStyle = layer.color;
   ctx.beginPath();
   ctx.moveTo(-period - offset, VIEW_H);
+  const ridge = [];
   for (let sx = -period; sx <= VIEW_W + period; sx += 40) {
     const n = Math.sin((sx + layer.seed) * 0.02) * 0.6 + Math.sin((sx + layer.seed) * 0.045) * 0.4;
     const py = layer.baseY - Math.abs(n) * layer.amp;
     ctx.lineTo(sx - offset, py);
+    ridge.push([sx - offset, py]);
   }
   ctx.lineTo(VIEW_W + period - offset, VIEW_H);
   ctx.closePath();
   ctx.fill();
 
-  if (layer.snow) {
-    ctx.fillStyle = 'rgba(230,230,240,0.65)';
-    for (let sx = -period; sx <= VIEW_W + period; sx += 40) {
-      const n = Math.sin((sx + layer.seed) * 0.02) * 0.6 + Math.sin((sx + layer.seed) * 0.045) * 0.4;
-      if (Math.abs(n) > 0.75) {
-        const py = layer.baseY - Math.abs(n) * layer.amp;
-        const px = sx - offset;
+  if (layer.treeline) {
+    // ragged tree-covered ridge instead of bare rock, like the forested
+    // slopes of the Green Mountains
+    ctx.fillStyle = layer.treeColor;
+    for (const [px, py] of ridge) {
+      const h = hash2(Math.round(px + camX + 4000), Math.round(py));
+      const bumps = 3 + (h % 3);
+      for (let i = 0; i < bumps; i++) {
+        const bx = px - 16 + i * (32 / bumps);
+        const br = 3 + ((h >> (i * 2)) % 4);
         ctx.beginPath();
-        ctx.moveTo(px - 8, py + 10);
-        ctx.lineTo(px, py);
-        ctx.lineTo(px + 8, py + 10);
-        ctx.closePath();
+        ctx.arc(bx, py + 3, br, 0, Math.PI * 2);
         ctx.fill();
       }
     }
   }
+
+  if (layer.foliage) {
+    // a few flecks of turning maple color along the closest ridgeline
+    const accents = ['#c0522f', '#d68a2c', '#d6b32c'];
+    ridge.forEach(([px, py], i) => {
+      const h = hash2(Math.round(px + camX) + 999, Math.round(py) + i);
+      if (h % 5 === 0) {
+        ctx.fillStyle = accents[h % accents.length];
+        ctx.beginPath();
+        ctx.arc(px + (h % 14) - 7, py + 4, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+  }
+}
+
+function drawSteeple(camX) {
+  // a small white church steeple on the hillside — a classic Vermont
+  // village silhouette against the Green Mountains
+  const speed = 0.10, worldX = 560, y = 152;
+  const x = worldX - camX * speed;
+  if (x < -20 || x > VIEW_W + 20) return;
+  ctx.fillStyle = '#e8e2d4';
+  ctx.fillRect(x - 3, y, 6, 13);
+  ctx.beginPath();
+  ctx.moveTo(x - 5, y);
+  ctx.lineTo(x, y - 9);
+  ctx.lineTo(x + 5, y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#c8c0ac';
+  ctx.fillRect(x - 1, y - 13, 2, 5);
 }
 
 function drawMountains(camX) {
   const layers = [
-    { color: '#241d38', speed: 0.05, baseY: 130, amp: 32, seed: 0,    snow: false },
-    { color: '#332a4c', speed: 0.10, baseY: 155, amp: 48, seed: 700,  snow: true },
-    { color: '#443860', speed: 0.18, baseY: 185, amp: 60, seed: 1500, snow: true },
+    // hazy far ridge — the Adirondacks seen across Lake Champlain
+    { color: '#4d5c7c', speed: 0.05, baseY: 126, amp: 24, seed: 0 },
+    // Green Mountain foothills
+    { color: '#33544a', speed: 0.10, baseY: 156, amp: 42, seed: 700,
+      treeline: true, treeColor: 'rgba(20,38,26,0.55)' },
+    // nearest forested slope, with a bit of turning fall color
+    { color: '#254a34', speed: 0.18, baseY: 188, amp: 54, seed: 1500,
+      treeline: true, treeColor: 'rgba(14,28,20,0.6)', foliage: true },
   ];
   for (const layer of layers) drawMountainLayer(layer, camX);
+  drawSteeple(camX);
 }
 
 function render(time) {
@@ -910,7 +950,7 @@ function drawTiles(map, time) {
           if (h % 6 === 0) ctx.fillRect(px + (h % 18), py + ((h >> 3) % 24), 4, 3);
           break;
         }
-        case '#': drawTree(px, py); break;
+        case '#': drawTree(px, py, h); break;
         case '~': {
           ctx.fillStyle = '#3060b0';
           ctx.fillRect(px, py, TILE, TILE);
@@ -980,14 +1020,21 @@ function drawTiles(map, time) {
   }
 }
 
-function drawTree(px, py) {
+function drawTree(px, py, h) {
+  const palettes = [
+    { mid: '#2e6428', top: '#38782e', hi: '#4a9038' }, // still-green
+    { mid: '#8a4a1e', top: '#c07a28', hi: '#e0a83c' }, // gold
+    { mid: '#7a2a1e', top: '#a83c28', hi: '#d0602c' }, // maple red
+    { mid: '#7a5a1e', top: '#c0a028', hi: '#e0c83c' }, // yellow
+  ];
+  const p = palettes[(h || 0) % palettes.length];
   ctx.fillStyle = '#6a4a2a';
   ctx.fillRect(px + 13, py + 20, 6, 10);
-  ctx.fillStyle = '#2e6428';
+  ctx.fillStyle = p.mid;
   ctx.fillRect(px + 4, py + 10, 24, 12);
-  ctx.fillStyle = '#38782e';
+  ctx.fillStyle = p.top;
   ctx.fillRect(px + 8, py + 2, 16, 14);
-  ctx.fillStyle = '#4a9038';
+  ctx.fillStyle = p.hi;
   ctx.fillRect(px + 10, py + 4, 8, 6);
 }
 
