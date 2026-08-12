@@ -170,6 +170,9 @@ splashImg.src = 'assets/splash.png';
 const purePopPosterImg = new Image();
 purePopPosterImg.src = 'assets/purepop_poster.png';
 
+const anthillLogoImg = new Image();
+anthillLogoImg.src = 'assets/anthill_logo.png';
+
 const nectarsNeonImg = new Image();
 nectarsNeonImg.src = 'assets/nectars_neon.png';
 
@@ -1086,7 +1089,10 @@ function drawBuildings(map) {
       ctx.fillStyle = '#ffe9a0';
     }
 
-    if (isGreenDoorStudio) drawGraffiti(px, py, w, h);
+    if (isGreenDoorStudio) {
+      drawGraffiti(px, py, w, h);
+      drawAnthillLogo(px, py, w, h);
+    }
 
     // Garage door on left side of Green Door Studio (closed, graffiti-covered)
     if (isGreenDoorStudio) {
@@ -2069,6 +2075,27 @@ function drawNectarsDecor(px, py, w, h) {
   ctx.stroke();
   
   ctx.restore();
+}
+
+function drawAnthillLogo(px, py, w, h) {
+  // Large Anthill logo on the front of Green Door Studio
+  const logoW = 120;
+  const logoH = 90;
+  const logoX = px + (w - logoW) / 2;
+  const logoY = py + 40;
+  
+  if (anthillLogoImg.complete && anthillLogoImg.naturalWidth) {
+    ctx.save();
+    
+    // Optional: Add a slight background for the logo to stand out
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(logoX - 4, logoY - 4, logoW + 8, logoH + 8);
+    
+    // Draw the Anthill logo
+    ctx.drawImage(anthillLogoImg, logoX, logoY, logoW, logoH);
+    
+    ctx.restore();
+  }
 }
 
 function drawJuniorsDecor(px, py, w, h) {
