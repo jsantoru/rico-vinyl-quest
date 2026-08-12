@@ -219,7 +219,7 @@ const purePopPosterImg = new Image();
 purePopPosterImg.src = 'assets/purepop_poster.png';
 
 const anthillBillboardImg = new Image();
-anthillBillboardImg.src = 'assets/adog_billboard.png';
+anthillBillboardImg.src = 'assets/anthill_billboard.png';
 
 const nectarsNeonImg = new Image();
 nectarsNeonImg.src = 'assets/nectars_neon.png';
@@ -269,6 +269,13 @@ function makeOverworld() {
       g[y][x] = onRoad ? 'b' : '~';
       if (!onRoad) riverTiles.push({ x, y });
     }
+  }
+
+  // second bridge across the river near the bottom of the map, giving the
+  // player another way to cross to the other side (rows 9-10 are the first)
+  const lowerBridgeRow = 20;
+  for (let x = 1; x < W - 1; x++) {
+    if (g[lowerBridgeRow][x] === '~') g[lowerBridgeRow][x] = 'b';
   }
 
   const trees = [[3,20],[5,22],[7,19],[13,21],[15,23],[3,23],[10,23],[16,19],[36,20],[34,23],[9,12],[14,13],[25,12],[36,12],[2,12],[37,7],[2,7],[24,23],[13,6],[26,6]];
@@ -1614,6 +1621,7 @@ function drawPlantPot(x, y) {
 // ---------------------------------------------------------------- town decorations
 function drawTownDecorations(time) {
   drawGreenDoorArtArea();
+  drawWallPainter(time);
   drawDeliScene(time);
   drawCoffeeCart();
   drawAnthillBillboard();
@@ -1850,6 +1858,69 @@ function drawSprayCan(x, y, color) {
   ctx.fillRect(x + 4, y + 2, 6, 4);
   ctx.fillStyle = '#141218';
   ctx.fillRect(x + 5, y, 4, 3);
+}
+
+function drawWallPainter(time) {
+  // A painter on a scaffold up against the side of the Green Door Studio,
+  // rolling paint onto the wall with a fresh coat dripping down.
+  const wallBase = 4 * TILE + 6;  // where the roller meets the building wall
+  const groundY  = 7 * TILE;      // ground below the building
+  const platY    = 5 * TILE + 12; // scaffold platform height (high on the wall)
+  const rollerY  = 4 * TILE + 10; // roller height on the wall
+
+  // scaffold frame
+  ctx.fillStyle = '#7a4a34';
+  ctx.fillRect(wallBase + 2, platY - 3, 3, groundY - platY + 8);
+  ctx.fillRect(wallBase + 28, platY - 3, 3, groundY - platY + 8);
+  ctx.fillStyle = '#8a6a3a';
+  ctx.fillRect(wallBase - 1, platY - 3, 36, 5);
+
+  // painter standing on the platform
+  const px = wallBase + 18, py = platY;
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(px - 8, py - 2, 16, 4);            // shadow
+  ctx.fillStyle = '#2c2c3a';                       // legs
+  ctx.fillRect(px - 6, py - 30, 5, 28);
+  ctx.fillRect(px + 1, py - 30, 5, 28);
+  ctx.fillStyle = '#e8e4dc';                       // paint overalls / body
+  ctx.fillRect(px - 7, py - 42, 14, 14);
+  ctx.fillStyle = '#b87954';                       // head
+  ctx.fillRect(px - 4, py - 50, 9, 9);
+  ctx.fillStyle = '#2a2020';                       // hair
+  ctx.fillRect(px - 5, py - 52, 11, 3);
+  ctx.fillStyle = '#f0d060';                       // cap
+  ctx.fillRect(px - 5, py - 53, 11, 2);
+
+  // arm + roller pole reaching up to the wall
+  ctx.strokeStyle = '#5a4a30';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(px + 5, py - 38);
+  ctx.lineTo(wallBase + 2, rollerY + 6);
+  ctx.stroke();
+
+  // roller head against the wall
+  ctx.fillStyle = '#d04030';
+  ctx.fillRect(wallBase + 2, rollerY, 11, 13);
+  ctx.fillStyle = '#a03020';
+  ctx.fillRect(wallBase + 2, rollerY + 9, 11, 4);
+
+  // paint splatter on the wall around the roller
+  ctx.fillStyle = 'rgba(208,64,48,0.6)';
+  ctx.fillRect(wallBase - 2, rollerY + 3, 3, 3);
+  ctx.fillRect(wallBase + 15, rollerY + 8, 3, 3);
+  ctx.fillRect(wallBase - 4, rollerY + 13, 2, 2);
+
+  // paint drips rolling down the wall
+  ctx.fillStyle = '#d04030';
+  for (let i = 0; i < 3; i++) {
+    const dx = wallBase + 5 + i * 4;
+    ctx.fillRect(dx, rollerY + 15, 2, 5 + i * 2);
+  }
+  // an animated drip that slides down the wall
+  const drip = (time * 14) % 42;
+  ctx.fillStyle = '#c84030';
+  ctx.fillRect(wallBase + 11, rollerY + 16 + drip, 2, 6);
 }
 
 function drawCanvas(x, y, w, h, style) {
