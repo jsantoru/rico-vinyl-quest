@@ -224,6 +224,11 @@ anthillBillboardImg.src = 'assets/anthill_billboard.png';
 const nectarsNeonImg = new Image();
 nectarsNeonImg.src = 'assets/nectars_neon.png';
 
+const titleMenuImg = new Image();
+titleMenuImg.src = 'assets/title_menu.png';
+const titleSkyImg = new Image();
+titleSkyImg.src = 'assets/title_sky.png';
+
 // ---------------------------------------------------------------- maps
 const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J']);
 
@@ -1061,7 +1066,7 @@ function render(time) {
   ctx.restore();
   if (state !== 'splash') drawHUD();
   if (state === 'splash') drawSplash();
-  if (state === 'title') drawTitle();
+  if (state === 'title') drawTitle(time);
   if (state === 'dialog') drawDialog();
   if (state === 'record') drawRecordCard();
   if (state === 'win') drawWin();
@@ -2929,7 +2934,53 @@ function drawSplash() {
   ctx.fillText('- PRESS E OR TAP TO BEGIN -', VIEW_W / 2, VIEW_H - 26);
 }
 
-function drawTitle() {
+let titleMenuKeyed = null; // offscreen canvas with the chroma-green removed
+
+// Build the chroma-keyed menu once the image loads: any pixel that is the
+// backdrop's chroma-green (green dominant & strong) is made transparent so the
+// drifting sky/clouds show through behind the UI art.
+function buildKeyedTitleMenu() {
+  if (titleMenuKeyed || !titleMenuImg.complete || !titleMenuImg.naturalWidth) return;
+  const w = titleMenuImg.naturalWidth, h = titleMenuImg.naturalHeight;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.drawImage(titleMenuImg, 0, 0);
+  const id = g.getImageData(0, 0, w, h);
+  const d = id.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i], grn = d[i + 1], b = d[i + 2];
+    if (grn > 140 && (grn - b) > 90 && (grn - r) > 55) d[i + 3] = 0;
+  }
+  g.putImageData(id, 0, 0);
+  titleMenuKeyed = c;
+}
+
+function drawTitle(time) {
+  buildKeyedTitleMenu();
+
+  // Menu ready: chroma-keyed menu centered over a slowly drifting sky.
+  if (titleMenuKeyed) {
+    if (titleSkyImg.complete && titleSkyImg.naturalWidth) {
+      const tw = titleSkyImg.naturalWidth * (VIEW_H / titleSkyImg.naturalHeight);
+      const off = (time * 16) % tw;   // clouds slowly float by
+      ctx.fillStyle = '#9fd0ee';
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+      for (let x = -off; x < VIEW_W; x += tw) {
+        ctx.drawImage(titleSkyImg, x, 0, tw, VIEW_H);
+      }
+    } else {
+      ctx.fillStyle = 'rgba(8,6,12,0.93)';
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    }
+    const mw = titleMenuKeyed.width, mh = titleMenuKeyed.height;
+    const s = Math.min(VIEW_W / mw, VIEW_H / mh);
+    const dw = mw * s, dh = mh * s;
+    ctx.drawImage(titleMenuKeyed, (VIEW_W - dw) / 2, (VIEW_H - dh) / 2, dw, dh);
+    return;
+  }
+
+  // fallback text-only title (used until the menu image loads)
   ctx.fillStyle = 'rgba(8,6,12,0.93)';
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   ctx.textAlign = 'center';
@@ -2940,7 +2991,7 @@ function drawTitle() {
   ctx.font = '15px monospace';
   const story = [
     'Your sampler is empty. Your beat is due.',
-    'Five legendary records are hiding somewhere in this town —',
+    'Five legendary records are hiding somewhere in this town \u2014',
     'in shop crates, diner backrooms, and flea market stalls.',
     'Dig them ALL up and the whole town hears your beat come alive.',
   ];
