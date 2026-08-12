@@ -170,6 +170,9 @@ splashImg.src = 'assets/splash.png';
 const purePopPosterImg = new Image();
 purePopPosterImg.src = 'assets/purepop_poster.png';
 
+const nectarsNeonImg = new Image();
+nectarsNeonImg.src = 'assets/nectars_neon.png';
+
 // ---------------------------------------------------------------- maps
 const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J']);
 
@@ -1617,7 +1620,7 @@ function drawWallPoster(px, py, w, h) {
   // shop sign and the windows
   const pw = 34, ph = Math.round(pw * 806 / 555);
   const x = px + w - pw - 14;
-  const y = py + 30;
+  const y = py + 100; // moved down to make room for neon sign
 
   ctx.fillStyle = '#1c1a20';
   ctx.fillRect(x - 3, y - 3, pw + 6, ph + 6);
@@ -1651,17 +1654,19 @@ function drawNectarsDecor(px, py, w, h) {
     ctx.stroke();
   }
   
-  // Neon "LIVE MUSIC" sign on front
-  const signX = px + 8;
-  const signY = py + 50;
-  ctx.fillStyle = '#ff2040';
-  ctx.shadowColor = '#ff2040';
-  ctx.shadowBlur = 8;
-  ctx.font = 'bold 14px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('LIVE', signX + w/2 - 4, signY + 14);
-  ctx.fillText('MUSIC', signX + w/2 - 4, signY + 28);
-  ctx.shadowBlur = 0;
+  // Neon sign image on front
+  const signX = px + 4;
+  const signY = py + 45;
+  const signW = w - 8;
+  const signH = 50;
+  
+  if (nectarsNeonImg.complete) {
+    // Add glow effect
+    ctx.shadowColor = '#ff2040';
+    ctx.shadowBlur = 12;
+    ctx.drawImage(nectarsNeonImg, signX, signY, signW, signH);
+    ctx.shadowBlur = 0;
+  }
   
   // Windows with warm glow
   ctx.fillStyle = '#ffe090';
