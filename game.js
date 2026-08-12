@@ -1111,8 +1111,10 @@ function drawBuildings(map) {
     ctx.fillRect(dx + TILE - 12, py + h - 16, 3, 3);
 
     if (isHeyBud) drawHeyBudDecor(px, py, w, h);
-    if (isThrift) drawWallPoster(px, py, w, h);
-    if (isNectars) drawNectarsDecor(px, py, w, h);
+    if (isNectars) {
+      drawNectarsDecor(px, py, w, h);
+      drawWallPoster(px, py, w, h);
+    }
 
     ctx.fillStyle = '#f4ecd8';
     const sw = Math.min(w - 10, b.name.length * 9 + 14);
@@ -1223,8 +1225,7 @@ function drawTownDecorations(time) {
   drawAnthillBillboard();
   drawOldLotByHeyBud();
   drawHeyBudParkedCars();
-  drawYardSign(11 * TILE + 4, 15 * TILE);
-  drawDeliSeatingArea();
+  drawYardSign(25 * TILE + 4, 20 * TILE);
 }
 
 function drawGreenDoorArtArea() {
@@ -1400,8 +1401,8 @@ function drawDeliScene(time) {
   ctx.fillStyle = '#9a4038';
   ctx.fillRect(x + 18, y + 4, 6, 5);
 
-  // Guitar player - moved further right to avoid Nectar's building (was at x+50, now x+200)
-  drawGuitarPlayer(x + 200, y + 12, time);
+  // Guitar player - positioned next to garbage can
+  drawGuitarPlayer(x + 50, y + 12, time);
 }
 
 function drawGuitarPlayer(x, y, time) {
