@@ -1119,13 +1119,16 @@ function drawBuildings(map) {
       drawWallPoster(px, py, w, h);
     }
 
-    ctx.fillStyle = '#f4ecd8';
-    const sw = Math.min(w - 10, b.name.length * 9 + 14);
-    ctx.fillRect(px + (w - sw) / 2, py + 6, sw, 20);
-    ctx.fillStyle = '#2a2020';
-    ctx.font = 'bold 12px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(b.name, px + w / 2, py + 20);
+    // Draw building name sign (skip for Nectar's - uses neon sign instead)
+    if (!isNectars) {
+      ctx.fillStyle = '#f4ecd8';
+      const sw = Math.min(w - 10, b.name.length * 9 + 14);
+      ctx.fillRect(px + (w - sw) / 2, py + 6, sw, 20);
+      ctx.fillStyle = '#2a2020';
+      ctx.font = 'bold 12px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(b.name, px + w / 2, py + 20);
+    }
   }
 }
 
@@ -1654,19 +1657,33 @@ function drawNectarsDecor(px, py, w, h) {
     ctx.stroke();
   }
   
-  // Neon sign image on front
-  const signX = px + 4;
-  const signY = py + 45;
-  const signW = w - 8;
-  const signH = 50;
+  // Neon script sign - "Nectar's"
+  const signX = px + w/2;
+  const signY = py + 60;
   
-  if (nectarsNeonImg.complete) {
-    // Add glow effect
-    ctx.shadowColor = '#ff2040';
-    ctx.shadowBlur = 12;
-    ctx.drawImage(nectarsNeonImg, signX, signY, signW, signH);
-    ctx.shadowBlur = 0;
-  }
+  // Outer glow
+  ctx.shadowColor = '#ff2040';
+  ctx.shadowBlur = 20;
+  ctx.strokeStyle = '#ff2040';
+  ctx.lineWidth = 1;
+  ctx.font = 'italic bold 32px cursive';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.strokeText("Nectar's", signX, signY);
+  
+  // Inner bright glow
+  ctx.shadowBlur = 15;
+  ctx.strokeStyle = '#ff4060';
+  ctx.lineWidth = 2;
+  ctx.strokeText("Nectar's", signX, signY);
+  
+  // Bright core
+  ctx.shadowBlur = 10;
+  ctx.fillStyle = '#ffe0e6';
+  ctx.fillText("Nectar's", signX, signY);
+  
+  // Reset shadow
+  ctx.shadowBlur = 0;
   
   // Windows with warm glow
   ctx.fillStyle = '#ffe090';
