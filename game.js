@@ -102,25 +102,51 @@ ctx.imageSmoothingEnabled = false;
   document.addEventListener('dblclick', (e) => e.preventDefault());
 })();
 
-// ---------------------------------------------------------------- records
-const RECORDS = {
-  elm:   { title: 'Elm Street Funk',      artist: 'Static Groove',   year: '1974',
-           sample: 'Drum Break',  layer: 'drums', color: '#e0a030', pad: 'DRM',
-           flavor: 'The drummer lived right on Elm Street. 500 copies pressed, most lost. Not this one.' },
-  cola:  { title: 'Cherry Cola Bounce',   artist: 'Rosie & The Fizz', year: '1968',
-           sample: 'Bassline',    layer: 'bass',  color: '#d04830', pad: 'BAS',
-           flavor: 'A jukebox 45 so greasy it still smells like fries. The bassline walks for days.' },
-  stab:  { title: 'Midnight Stab',        artist: 'The Velvet Horns', year: '1977',
-           sample: 'Horn Stab',   layer: 'horns', color: '#c04070', pad: 'HRN',
-           flavor: 'Four trombones, one take, recorded at 2am. You can hear somebody knock over a chair.' },
-  choir: { title: 'Galactic Hallelujah',  artist: 'Cosmic Choir',     year: '1972',
-           sample: 'Vocal Chop',  layer: 'vox',   color: '#4870d0', pad: 'VOX',
-           flavor: 'A church choir that thought they were singing to outer space. Maybe they were.' },
-  white: { title: 'White Label',          artist: 'Unknown',          year: '197?',
-           sample: 'Lead Melody', layer: 'lead',  color: '#e8e4dc', pad: 'LD',
-           flavor: 'No sleeve. No name. Just a hand-drawn star on the label. The holy grail.' },
+// ---------------------------------------------------------------- worlds & records
+// Each world owns its own 5 records + pad order. To add a new world, add an
+// entry here (a records object + a 5-slot padOrder) and set `world` on the maps
+// that belong to it. The HUD, record card, win screen and music sampler all
+// derive from the CURRENT world automatically, so adding a world gives you a
+// fresh set of 5 to find. Each record's `layer` should be one of the sampler
+// types the music engine already knows: drums / bass / horns / vox / lead.
+const WORLD_DEFS = {
+  town: {
+    name: 'Burlington',
+    records: {
+      elm:   { title: 'Elm Street Funk',      artist: 'Static Groove',   year: '1974',
+               sample: 'Drum Break',  layer: 'drums', color: '#e0a030', pad: 'DRM',
+               flavor: 'The drummer lived right on Elm Street. 500 copies pressed, most lost. Not this one.' },
+      cola:  { title: 'Cherry Cola Bounce',   artist: 'Rosie & The Fizz', year: '1968',
+               sample: 'Bassline',    layer: 'bass',  color: '#d04830', pad: 'BAS',
+               flavor: 'A jukebox 45 so greasy it still smells like fries. The bassline walks for days.' },
+      stab:  { title: 'Midnight Stab',        artist: 'The Velvet Horns', year: '1977',
+               sample: 'Horn Stab',   layer: 'horns', color: '#c04070', pad: 'HRN',
+               flavor: 'Four trombones, one take, recorded at 2am. You can hear somebody knock over a chair.' },
+      choir: { title: 'Galactic Hallelujah',  artist: 'Cosmic Choir',     year: '1972',
+               sample: 'Vocal Chop',  layer: 'vox',   color: '#4870d0', pad: 'VOX',
+               flavor: 'A church choir that thought they were singing to outer space. Maybe they were.' },
+      white: { title: 'White Label',          artist: 'Unknown',          year: '197?',
+               sample: 'Lead Melody', layer: 'lead',  color: '#e8e4dc', pad: 'LD',
+               flavor: 'No sleeve. No name. Just a hand-drawn star on the label. The holy grail.' },
+    },
+    padOrder: ['elm', 'cola', 'stab', 'choir', 'white'],
+  },
+  // ADD MORE WORLDS HERE, e.g.:
+  // subway: {
+  //   name: 'The Subway',
+  //   records: { /* ...5 records, each with layer drums/bass/horns/vox/lead... */ },
+  //   padOrder: ['a','b','c','d','e'],
+  // },
 };
-const PAD_ORDER = ['elm', 'cola', 'stab', 'choir', 'white'];
+
+// Runtime helpers — resolve the CURRENT world from the map the player is in.
+// (They reference `maps`/`collected`, which are declared later in the file;
+// that's fine because these are only *called* at runtime.)
+function currentWorldId() { return maps[player.map].world; }
+function worldDef()      { return WORLD_DEFS[currentWorldId()] || WORLD_DEFS.town; }
+function worldRecords()  { return worldDef().records; }
+function worldPadOrder() { return worldDef().padOrder; }
+function worldComplete() { return worldPadOrder().every(id => collected.has(id)); }
 
 const JUNK = [
   'A water-damaged polka compilation. Hard pass.',
@@ -169,6 +195,12 @@ splashImg.src = 'assets/splash.png';
 
 const purePopPosterImg = new Image();
 purePopPosterImg.src = 'assets/purepop_poster.png';
+
+const anthillLogoImg = new Image();
+anthillLogoImg.src = 'assets/anthill_logo.png';
+
+const anthillBillboardImg = new Image();
+anthillBillboardImg.src = 'assets/adog_billboard.png';
 
 const nectarsNeonImg = new Image();
 nectarsNeonImg.src = 'assets/nectars_neon.png';
@@ -231,8 +263,10 @@ function makeOverworld() {
   g[20][26] = 'c'; g[21][28] = 'c'; g[20][30] = 'c';
 
   const map = {
-    id: 'town', w: W, h: H, grid: g, outside: true, buildings,
+    id: 'town', world: 'town', w: W, h: H, grid: g, outside: true, buildings,
     doors: {}, crates: {}, npcs: [], riverTiles,
+    // ambient life lanes for this overworld (which road rows each spawns on)
+    ambient: { bikeRows: [9, 10], walkerRow: 12, dogRow: 23 },
   };
   map.crates[key(26,20)] = { junkSeed: 3 };
   map.crates[key(28,21)] = { record: 'white' };
@@ -251,7 +285,7 @@ function makeShop(id, opts) {
   g[1][6] = 'K';
   g[H-1][6] = 'E';
   const map = {
-    id, w: W, h: H, grid: g, outside: false,
+    id, world: opts.world || 'town', w: W, h: H, grid: g, outside: false,
     floor: opts.floor, plank: opts.plank, wallColor: opts.wallColor,
     keeper: { x: 6, y: 1, ...opts.keeper },
     crates: {}, npcs: [],
@@ -349,7 +383,7 @@ const collected = new Set();
 let state = 'splash'; // splash | title | play | dialog | record | win
 let dialog = null;   // { name, lines, i }
 let shownRecord = null;
-let winShown = false;
+const completedWorlds = new Set(); // worlds whose 5 records have all been found
 let toast = null;    // { text, t }
 
 function toggleSkate() {
@@ -550,7 +584,7 @@ function doInteract() {
     if (!c) return;
     if (c.record && !collected.has(c.record)) {
       collected.add(c.record);
-      music.enable(RECORDS[c.record].layer);
+      music.enable(worldRecords()[c.record].layer);
       music.sting();
       shownRecord = c.record;
       state = 'record';
@@ -572,16 +606,20 @@ const ambient = [];
 const ambientTimers = { bike: 4, walker: 3, dog: 6, fish: 2 };
 
 function updateAmbient(dt) {
-  if (player.map !== 'town') { if (ambient.length) ambient.length = 0; return; }
+  const map = maps[player.map];
+  const amb = map && map.ambient;
+  if (!amb) { if (ambient.length) ambient.length = 0; return; }
 
   ambientTimers.bike -= dt;
-  if (ambientTimers.bike <= 0) { spawnBike(); ambientTimers.bike = 7 + Math.random() * 9; }
+  if (ambientTimers.bike <= 0) { spawnBike(map); ambientTimers.bike = 7 + Math.random() * 9; }
   ambientTimers.walker -= dt;
-  if (ambientTimers.walker <= 0) { spawnWalker(); ambientTimers.walker = 5 + Math.random() * 8; }
+  if (ambientTimers.walker <= 0) { spawnWalker(map); ambientTimers.walker = 5 + Math.random() * 8; }
   ambientTimers.dog -= dt;
-  if (ambientTimers.dog <= 0) { spawnDog(); ambientTimers.dog = 9 + Math.random() * 10; }
+  if (ambientTimers.dog <= 0) { spawnDog(map); ambientTimers.dog = 9 + Math.random() * 10; }
   ambientTimers.fish -= dt;
-  if (ambientTimers.fish <= 0 && town.riverTiles.length) { spawnFish(); ambientTimers.fish = 2 + Math.random() * 3; }
+  if (ambientTimers.fish <= 0 && map.riverTiles && map.riverTiles.length) {
+    spawnFish(map); ambientTimers.fish = 2 + Math.random() * 3;
+  }
 
   for (let i = ambient.length - 1; i >= 0; i--) {
     const a = ambient[i];
@@ -591,30 +629,38 @@ function updateAmbient(dt) {
       continue;
     }
     a.x += a.vx * dt;
-    if (a.x < -50 || a.x > town.w * TILE + 50) ambient.splice(i, 1);
+    if (a.x < -50 || a.x > map.w * TILE + 50) ambient.splice(i, 1);
   }
 }
 
-function spawnBike() {
+// Spawn helpers now read from the current map, so any overworld with an
+// `ambient` config gets its own life without hardcoding 'town'.
+function spawnBike(map) {
+  const amb = map.ambient || {};
+  const rows = amb.bikeRows || [9, 10];
   const dir = Math.random() < 0.5 ? 1 : -1;
-  const row = Math.random() < 0.5 ? 9 : 10;
-  ambient.push({ type: 'bike', x: dir > 0 ? -30 : town.w * TILE + 30, y: row * TILE + 16, vx: dir * 115, dir, t: 0 });
+  const row = rows[Math.floor(Math.random() * rows.length)];
+  ambient.push({ type: 'bike', x: dir > 0 ? -30 : map.w * TILE + 30, y: row * TILE + 16, vx: dir * 115, dir, t: 0 });
 }
-function spawnWalker() {
+function spawnWalker(map) {
+  const amb = map.ambient || {};
   const dir = Math.random() < 0.5 ? 1 : -1;
-  const shirts = ['#c86a3c', '#4a7ab0', '#7a4a9a', '#3a9a5a'];
+  const shirts = ['#c86a3a', '#4a7ab0', '#7a4a9a', '#3a9a5a'];
+  const row = amb.walkerRow !== undefined ? amb.walkerRow : 12;
   ambient.push({
-    type: 'walker', x: dir > 0 ? -20 : town.w * TILE + 20, y: 12 * TILE + 24,
+    type: 'walker', x: dir > 0 ? -20 : map.w * TILE + 20, y: row * TILE + 24,
     vx: dir * 44, dir, t: 0,
     shirt: shirts[Math.floor(Math.random() * shirts.length)], skin: '#b87954',
   });
 }
-function spawnDog() {
+function spawnDog(map) {
+  const amb = map.ambient || {};
   const dir = Math.random() < 0.5 ? 1 : -1;
-  ambient.push({ type: 'dog', x: dir > 0 ? -20 : town.w * TILE + 20, y: 23 * TILE + 20, vx: dir * 58, dir, t: 0 });
+  const row = amb.dogRow !== undefined ? amb.dogRow : 23;
+  ambient.push({ type: 'dog', x: dir > 0 ? -20 : map.w * TILE + 20, y: row * TILE + 20, vx: dir * 58, dir, t: 0 });
 }
-function spawnFish() {
-  const tile = town.riverTiles[Math.floor(Math.random() * town.riverTiles.length)];
+function spawnFish(map) {
+  const tile = map.riverTiles[Math.floor(Math.random() * map.riverTiles.length)];
   ambient.push({
     type: 'fish',
     x: tile.x * TILE + 10 + Math.random() * 12,
@@ -806,7 +852,10 @@ function update(dt) {
   } else if (state === 'record') {
     if (interactPressed) {
       shownRecord = null;
-      if (collected.size === PAD_ORDER.length && !winShown) { winShown = true; state = 'win'; }
+      if (worldComplete() && !completedWorlds.has(currentWorldId())) {
+        completedWorlds.add(currentWorldId());
+        state = 'win';
+      }
       else state = 'play';
     }
   } else if (state === 'win') {
@@ -894,7 +943,7 @@ function render(time) {
     ctx.scale(zoom, zoom);
   }
 
-  drawTiles(map, time);
+  drawTiles(map, time, camX, camY);
   if (map.outside) {
     drawBuildings(map);
     drawTownDecorations(time);
@@ -916,9 +965,16 @@ function render(time) {
 }
 
 // ---------------------------------------------------------------- tiles
-function drawTiles(map, time) {
-  for (let ty = 0; ty < map.h; ty++) {
-    for (let tx = 0; tx < map.w; tx++) {
+function drawTiles(map, time, camX = 0, camY = 0) {
+  // Camera culling: only draw tiles that are actually on screen. This keeps
+  // per-frame work bounded no matter how big the map is — the #1 way to grow
+  // worlds without lag.
+  const x0 = Math.max(0, Math.floor(camX / TILE));
+  const y0 = Math.max(0, Math.floor(camY / TILE));
+  const x1 = Math.min(map.w, Math.ceil((camX + VIEW_W) / TILE));
+  const y1 = Math.min(map.h, Math.ceil((camY + VIEW_H) / TILE));
+  for (let ty = y0; ty < y1; ty++) {
+    for (let tx = x0; tx < x1; tx++) {
       const px = tx * TILE, py = ty * TILE;
       const ch = map.grid[ty][tx];
       const h = hash2(tx, ty);
@@ -1086,7 +1142,10 @@ function drawBuildings(map) {
       ctx.fillStyle = '#ffe9a0';
     }
 
-    if (isGreenDoorStudio) drawGraffiti(px, py, w, h);
+    if (isGreenDoorStudio) {
+      drawGraffiti(px, py, w, h);
+      drawAnthillLogo(px, py, w, h);
+    }
 
     // Garage door on left side of Green Door Studio (closed, graffiti-covered)
     if (isGreenDoorStudio) {
@@ -1136,10 +1195,17 @@ function drawBuildings(map) {
     }
 
     const dx = b.doorX * TILE;
-    ctx.fillStyle = isGreenDoorStudio ? '#245b2b' : '#3a2414';
-    ctx.fillRect(dx + 4, py + h - TILE + 2, TILE - 8, TILE - 2);
-    ctx.fillStyle = isGreenDoorStudio ? '#b7d96a' : '#e0c060';
-    ctx.fillRect(dx + TILE - 12, py + h - 16, 3, 3);
+    
+    // Special mural door for Green Door Studio
+    if (isGreenDoorStudio) {
+      drawGreenDoorMural(dx, py + h - TILE);
+    } else {
+      // Standard door for other buildings
+      ctx.fillStyle = '#3a2414';
+      ctx.fillRect(dx + 4, py + h - TILE + 2, TILE - 8, TILE - 2);
+      ctx.fillStyle = '#e0c060';
+      ctx.fillRect(dx + TILE - 12, py + h - 16, 3, 3);
+    }
 
     if (isHeyBud) drawHeyBudDecor(px, py, w, h);
     if (isNectars) {
@@ -1159,6 +1225,160 @@ function drawBuildings(map) {
       ctx.fillText(b.name, px + w / 2, py + 20);
     }
   }
+}
+
+function drawGreenDoorMural(doorX, doorY) {
+  // Vibrant mural on Green Door Studio entrance
+  // Based on the green character with purple hair and blue background
+  
+  const w = TILE;
+  const h = TILE;
+  
+  ctx.save();
+  
+  // Bright cyan/turquoise background
+  ctx.fillStyle = '#20c0d8';
+  ctx.fillRect(doorX, doorY, w, h);
+  
+  // Add some texture/splatter to background
+  ctx.fillStyle = '#18a8c0';
+  ctx.fillRect(doorX + 2, doorY + 4, 4, 3);
+  ctx.fillRect(doorX + w - 8, doorY + 8, 5, 4);
+  ctx.fillRect(doorX + 5, doorY + h - 10, 3, 3);
+  
+  // Purple hair swirls (left side)
+  ctx.fillStyle = '#9060b0';
+  ctx.beginPath();
+  ctx.ellipse(doorX + 8, doorY + 10, 6, 8, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.fillStyle = '#b080d0';
+  ctx.beginPath();
+  ctx.ellipse(doorX + 6, doorY + 12, 4, 6, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Purple hair swirls (right side)
+  ctx.fillStyle = '#9060b0';
+  ctx.beginPath();
+  ctx.ellipse(doorX + w - 10, doorY + 11, 6, 8, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.fillStyle = '#b080d0';
+  ctx.beginPath();
+  ctx.ellipse(doorX + w - 8, doorY + 13, 4, 6, 0.4, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Green face (center)
+  ctx.fillStyle = '#40d050';
+  ctx.beginPath();
+  ctx.ellipse(doorX + w/2, doorY + h/2 - 2, 10, 12, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Face outline/shadow
+  ctx.strokeStyle = '#2a9838';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.ellipse(doorX + w/2, doorY + h/2 - 2, 10, 12, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // Left eye (bright blue)
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.ellipse(doorX + w/2 - 4, doorY + h/2 - 4, 3, 3.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.fillStyle = '#20d0f0';
+  ctx.beginPath();
+  ctx.ellipse(doorX + w/2 - 4, doorY + h/2 - 4, 2, 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.fillStyle = '#1a1a1e';
+  ctx.beginPath();
+  ctx.ellipse(doorX + w/2 - 4, doorY + h/2 - 4, 1, 1.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Right eye (bright blue)
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.ellipse(doorX + w/2 + 4, doorY + h/2 - 4, 3, 3.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.fillStyle = '#20d0f0';
+  ctx.beginPath();
+  ctx.ellipse(doorX + w/2 + 4, doorY + h/2 - 4, 2, 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.fillStyle = '#1a1a1e';
+  ctx.beginPath();
+  ctx.ellipse(doorX + w/2 + 4, doorY + h/2 - 4, 1, 1.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Nose (small)
+  ctx.fillStyle = '#2a9838';
+  ctx.beginPath();
+  ctx.moveTo(doorX + w/2, doorY + h/2);
+  ctx.lineTo(doorX + w/2 - 1, doorY + h/2 + 2);
+  ctx.lineTo(doorX + w/2 + 1, doorY + h/2 + 2);
+  ctx.closePath();
+  ctx.fill();
+  
+  // Big smile (pink/magenta lips)
+  ctx.fillStyle = '#f060a0';
+  ctx.beginPath();
+  ctx.ellipse(doorX + w/2, doorY + h/2 + 5, 6, 3, 0, 0, Math.PI);
+  ctx.fill();
+  
+  // Teeth highlight
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(doorX + w/2 - 3, doorY + h/2 + 4, 6, 2);
+  
+  // Yellow sunflower (right side of hair)
+  ctx.fillStyle = '#f0d060';
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2;
+    const petalX = doorX + w - 6 + Math.cos(angle) * 3;
+    const petalY = doorY + 8 + Math.sin(angle) * 3;
+    ctx.beginPath();
+    ctx.ellipse(petalX, petalY, 2, 3, angle, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  // Flower center
+  ctx.fillStyle = '#8a5a3a';
+  ctx.beginPath();
+  ctx.arc(doorX + w - 6, doorY + 8, 2, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Earring/jewelry (yellow)
+  ctx.fillStyle = '#f0d860';
+  ctx.beginPath();
+  ctx.arc(doorX + w/2 + 8, doorY + h/2 + 2, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(doorX + w/2 + 7, doorY + h/2 + 4, 2, 3);
+  
+  // Green body/shoulders (bottom)
+  ctx.fillStyle = '#40d050';
+  ctx.fillRect(doorX + w/2 - 8, doorY + h - 8, 16, 8);
+  
+  // Darker outfit/belt area
+  ctx.fillStyle = '#2a5a30';
+  ctx.fillRect(doorX + w/2 - 8, doorY + h - 4, 16, 4);
+  
+  // Belt studs
+  ctx.fillStyle = '#7a7a7e';
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.arc(doorX + w/2 - 4 + i * 4, doorY + h - 2, 1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  
+  // Door handle (small circle)
+  ctx.fillStyle = '#8a8a8e';
+  ctx.beginPath();
+  ctx.arc(doorX + w - 8, doorY + h/2 + 8, 2, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.restore();
 }
 
 function drawGraffiti(px, py, w, h) {
@@ -1261,7 +1481,9 @@ function drawTownDecorations(time) {
   drawOldLotByHeyBud();
   drawHeyBudParkedCars();
   drawSmokingPerson(time);
-  drawYardSign(25 * TILE + 4, 20 * TILE);
+  // Widened sign: shifted left of its old anchor so its right edge still lines
+  // up with the flea-market crate at tile (26,20) instead of growing into it.
+  drawYardSign(25 * TILE - 10, 20 * TILE);
   drawFountainArea(time);
 }
 
@@ -1671,17 +1893,25 @@ function drawAnthillBillboard() {
   ctx.fillStyle = '#d6c35e';
   ctx.fillRect(x, y, w, h);
 
+  // Graffiti mural artwork fills the board (cover-fit, cropped to the frame)
+  if (anthillBillboardImg.complete && anthillBillboardImg.naturalWidth) {
+    const ix = x + 4, iy = y + 4, iw = w - 8, ih = h - 8;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(ix, iy, iw, ih);
+    ctx.clip();
+    const scale = Math.max(iw / anthillBillboardImg.naturalWidth, ih / anthillBillboardImg.naturalHeight);
+    const dw = anthillBillboardImg.naturalWidth * scale;
+    const dh = anthillBillboardImg.naturalHeight * scale;
+    const dx = ix + (iw - dw) / 2;
+    const dy = iy + (ih - dh) / 2;
+    ctx.drawImage(anthillBillboardImg, dx, dy, dw, dh);
+    ctx.restore();
+  }
+
   ctx.strokeStyle = '#4b3928';
   ctx.lineWidth = 3;
   ctx.strokeRect(x + 4, y + 4, w - 8, h - 8);
-
-  ctx.fillStyle = '#3b2724';
-  ctx.font = 'bold 28px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('ANTHILL', x + w / 2, y + 35);
-
-  ctx.fillStyle = '#a34332';
-  ctx.fillRect(x + 24, y + 41, w - 48, 4);
 }
 
 function drawOldLotByHeyBud() {
@@ -1910,6 +2140,27 @@ function drawNectarsDecor(px, py, w, h) {
   ctx.restore();
 }
 
+function drawAnthillLogo(px, py, w, h) {
+  // Large Anthill ant logo on the front of Green Door Studio
+  const logoW = 170;
+  const logoH = 100;
+  const logoX = px + (w - logoW) / 2;
+  const logoY = py + 28;
+  
+  if (anthillLogoImg.complete && anthillLogoImg.naturalWidth) {
+    ctx.save();
+    
+    // Optional: Add a slight background for the logo to stand out
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(logoX - 4, logoY - 4, logoW + 8, logoH + 8);
+    
+    // Draw the Anthill logo
+    ctx.drawImage(anthillLogoImg, logoX, logoY, logoW, logoH);
+    
+    ctx.restore();
+  }
+}
+
 function drawJuniorsDecor(px, py, w, h) {
   ctx.save();
   
@@ -2084,29 +2335,29 @@ function drawYardSign(x, y) {
   ctx.strokeStyle = '#9a9a9a';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(x + 6, y + 18);
-  ctx.lineTo(x + 6, y + 30);
-  ctx.moveTo(x + 22, y + 18);
-  ctx.lineTo(x + 22, y + 30);
+  ctx.moveTo(x + 9, y + 27);
+  ctx.lineTo(x + 9, y + 44);
+  ctx.moveTo(x + 33, y + 27);
+  ctx.lineTo(x + 33, y + 44);
   ctx.stroke();
 
   ctx.fillStyle = '#f4ecd8';
-  ctx.fillRect(x, y, 30, 20);
+  ctx.fillRect(x, y, 44, 29);
   ctx.strokeStyle = '#c0392b';
   ctx.lineWidth = 2;
-  ctx.strokeRect(x + 1, y + 1, 28, 18);
+  ctx.strokeRect(x + 1, y + 1, 42, 27);
 
   ctx.textAlign = 'center';
   ctx.fillStyle = '#1c3f7a';
-  ctx.font = 'bold 7px monospace';
-  ctx.fillText('KANGA', x + 15, y + 10);
+  ctx.font = 'bold 10px monospace';
+  ctx.fillText('KANGA', x + 22, y + 14);
   ctx.fillStyle = '#c0392b';
-  ctx.font = 'bold 6px monospace';
-  ctx.fillText('FOR MAYOR', x + 15, y + 17);
+  ctx.font = 'bold 9px monospace';
+  ctx.fillText('FOR MAYOR', x + 22, y + 25);
 
   ctx.fillStyle = '#c0392b';
-  ctx.fillRect(x + 2, y + 2, 2, 2);
-  ctx.fillRect(x + 26, y + 2, 2, 2);
+  ctx.fillRect(x + 3, y + 3, 3, 3);
+  ctx.fillRect(x + 38, y + 3, 3, 3);
 }
 
 function drawBench(x, y, w) {
@@ -2337,8 +2588,8 @@ function drawHUD() {
   ctx.textAlign = 'left';
   ctx.fillStyle = '#c8c0d8';
   ctx.fillText('SAMPLES', 18, 26);
-  PAD_ORDER.forEach((id, i) => {
-    const r = RECORDS[id];
+  worldPadOrder().forEach((id, i) => {
+    const r = worldRecords()[id];
     const x = 88 + i * 46, y = 14;
     ctx.fillStyle = collected.has(id) ? r.color : '#262030';
     ctx.fillRect(x, y, 38, 30);
@@ -2411,7 +2662,7 @@ function wrapText(text, x, y, maxW, lh) {
 }
 
 function drawRecordCard() {
-  const r = RECORDS[shownRecord];
+  const r = worldRecords()[shownRecord];
   ctx.fillStyle = 'rgba(6,4,10,0.85)';
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   const w = 560, h = 300, x = (VIEW_W - w) / 2, y = (VIEW_H - h) / 2;
@@ -2529,8 +2780,8 @@ function drawWin() {
   ctx.fillStyle = '#f4ecd8';
   ctx.font = '15px monospace';
   ctx.fillText('All five samples on the pads. The whole town is bumping your track.', VIEW_W / 2, 165);
-  PAD_ORDER.forEach((id, i) => {
-    const r = RECORDS[id];
+  worldPadOrder().forEach((id, i) => {
+    const r = worldRecords()[id];
     const x = VIEW_W / 2 - 230 + i * 92, y = 210;
     ctx.fillStyle = r.color;
     ctx.fillRect(x, y, 76, 76);
