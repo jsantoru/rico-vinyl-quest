@@ -276,7 +276,7 @@ function makeNectars() {
   
   // Bar/stage area
   for (let x = 2; x <= 5; x++) g[2][x] = 'B'; // bar
-  g[10][2] = 'S'; // small stage marker
+  g[8][2] = 'S'; // small stage marker (changed from 10 to 8)
   g[1][3] = 'K'; // keeper behind bar
   g[H-1][6] = 'E'; // exit
   
