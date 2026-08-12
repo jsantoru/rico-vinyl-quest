@@ -254,6 +254,7 @@ function makeShop(id, opts) {
     floor: opts.floor, plank: opts.plank, wallColor: opts.wallColor,
     keeper: { x: 6, y: 1, ...opts.keeper },
     crates: {}, npcs: [],
+    darkClub: opts.darkClub || false,
   };
   const spots = [[1,4],[1,6],[12,4],[12,6],[2,8],[11,8]];
   opts.crates.forEach((c, i) => {
@@ -304,6 +305,17 @@ const shops = {
               'Might be filed on the RIGHT side. Might be misfiled entirely, honestly.'],
       foundLine: 'Galactic Hallelujah?! I nearly priced that thing at a dollar. Glad you found it first.' },
     crates: [ { junkSeed: 2 }, { junkSeed: 3 }, { junkSeed: 4 }, { record: 'choir' } ],
+  }),
+  nectars: makeShop('nectars', {
+    floor: '#1a1520', plank: '#0f0a15', wallColor: '#2a1a2f',
+    keeper: { name: 'JADE', shirt: '#8a2040', skin: '#b08a72',
+      lines: ['Welcome to Nectar\'s! Best gravy fries in town, live music every night.',
+              'Vinyl? We don\'t stock records, but I know the scene.',
+              'Try Pure Pop Records for rare finds, or Hey Bud — they get weird stuff with plant shipments.',
+              'Green Door Studio might have some old session reels too.'],
+      foundLine: 'Enjoy the show! Those fries are legendary.' },
+    crates: [],
+    darkClub: true,
   }),
 };
 
@@ -875,6 +887,7 @@ function render(time) {
     drawTownDecorations(time);
     drawAmbient();
   }
+  if (map.darkClub) drawNectarsInterior(time);
   if (map.keeper) drawKeeper(map.keeper);
   drawPlayer(time);
 
@@ -1751,6 +1764,126 @@ function drawBench(x, y, w) {
   ctx.fillRect(x + 2, y, 4, 12);
   ctx.fillRect(x + w / 2 - 2, y, 4, 12);
   ctx.fillRect(x + w - 6, y, 4, 12);
+}
+
+function drawNectarsInterior(time) {
+  // Dark rock club atmosphere with stage, bar, and gravy fries station
+  
+  // Stage area (top center with small platform)
+  const stageX = 5 * TILE;
+  const stageY = 2 * TILE + TILE;
+  const stageW = 4 * TILE;
+  const stageH = 12;
+  
+  // Stage platform
+  ctx.fillStyle = '#3a2a40';
+  ctx.fillRect(stageX, stageY, stageW, stageH);
+  ctx.fillStyle = '#2a1a30';
+  ctx.fillRect(stageX + 2, stageY + 2, stageW - 4, 2);
+  
+  // Microphone stand on stage
+  ctx.fillStyle = '#8a8a8e';
+  ctx.fillRect(stageX + stageW/2 - 1, stageY - 20, 2, 20);
+  ctx.fillStyle = '#5a5a5e';
+  ctx.fillRect(stageX + stageW/2 - 3, stageY - 24, 6, 6);
+  
+  // Amp on stage
+  ctx.fillStyle = '#1a1a1e';
+  ctx.fillRect(stageX + 8, stageY - 14, 16, 14);
+  ctx.fillStyle = '#4a3a2a';
+  ctx.fillRect(stageX + 10, stageY - 12, 12, 10);
+  ctx.fillStyle = '#2a2a2e';
+  for (let i = 0; i < 3; i++) {
+    ctx.fillRect(stageX + 11, stageY - 11 + i * 3, 3, 2);
+    ctx.fillRect(stageX + 16, stageY - 11 + i * 3, 3, 2);
+  }
+  
+  // Bar area (left side)
+  const barX = TILE;
+  const barY = 4 * TILE;
+  const barW = 2 * TILE;
+  const barH = 3 * TILE;
+  
+  // Bar counter
+  ctx.fillStyle = '#4a3a2a';
+  ctx.fillRect(barX, barY, barW, barH);
+  ctx.fillStyle = '#6a5a3a';
+  ctx.fillRect(barX, barY, barW, 6);
+  
+  // Glasses on bar
+  ctx.fillStyle = 'rgba(200,220,240,0.4)';
+  ctx.fillRect(barX + 8, barY + 10, 6, 8);
+  ctx.fillRect(barX + 18, barY + 10, 6, 8);
+  
+  // Gravy Fries station sign (right side)
+  const signX = 10 * TILE;
+  const signY = 4 * TILE;
+  
+  ctx.fillStyle = '#5a3a2a';
+  ctx.fillRect(signX, signY, 3 * TILE, 18);
+  
+  // "GRAVY FRIES" text
+  ctx.save();
+  ctx.fillStyle = '#f0d060';
+  ctx.shadowColor = '#f0d060';
+  ctx.shadowBlur = 6;
+  ctx.font = 'bold 10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('GRAVY', signX + 1.5 * TILE, signY + 8);
+  ctx.fillText('FRIES', signX + 1.5 * TILE, signY + 16);
+  ctx.shadowBlur = 0;
+  ctx.restore();
+  
+  // Neon "OPEN" sign (flickering)
+  const openX = 11 * TILE;
+  const openY = 6 * TILE;
+  const flicker = Math.floor(time * 3) % 7 !== 0;
+  
+  if (flicker) {
+    ctx.save();
+    ctx.fillStyle = '#ff2060';
+    ctx.shadowColor = '#ff2060';
+    ctx.shadowBlur = 10;
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('OPEN', openX, openY);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+  
+  // Hanging lights (dim red/purple glow)
+  const lights = [[3, 5], [7, 5], [11, 5]];
+  for (const [lx, ly] of lights) {
+    const lightX = lx * TILE + TILE/2;
+    const lightY = ly * TILE;
+    
+    ctx.save();
+    ctx.fillStyle = '#8a2040';
+    ctx.shadowColor = '#8a2040';
+    ctx.shadowBlur = 15;
+    ctx.beginPath();
+    ctx.arc(lightX, lightY, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+    
+    // Light cord
+    ctx.strokeStyle = '#3a3a3e';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(lightX, lightY - 4);
+    ctx.lineTo(lightX, lightY - 20);
+    ctx.stroke();
+  }
+  
+  // Bar stools (simple rectangles)
+  const stools = [[barX + barW + 4, barY + 8], [barX + barW + 4, barY + 24]];
+  for (const [sx, sy] of stools) {
+    ctx.fillStyle = '#5a3a2a';
+    ctx.fillRect(sx, sy, 8, 4);
+    ctx.fillStyle = '#4a2a1a';
+    ctx.fillRect(sx + 2, sy - 8, 4, 8);
+  }
 }
 
 function drawDeliSeatingArea() {
