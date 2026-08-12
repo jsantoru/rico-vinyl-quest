@@ -502,6 +502,7 @@ const music = {
   ctx: null, master: null, noiseBuf: null, muted: false,
   step: 0, nextTime: 0, BPM: 92,
   layers: new Set(['tick']),
+  menuDusty: false,
 
   start() {
     if (this.ctx) return;
@@ -525,6 +526,18 @@ const music = {
     toast = { text: this.muted ? 'Music: MUTED' : 'Music: ON', t: 1.2 };
   },
   enable(layer) { this.layers.add(layer); },
+  setMenuBreak(on) { this.menuDusty = on; },
+  crackle(t, s, stepDur) {
+    const src = this.ctx.createBufferSource(); src.buffer = this.noiseBuf;
+    const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 2800;
+    const g = this.ctx.createGain();
+    const pop = (s % 4 === 3); // occasional louder vinyl pop
+    const gain = pop ? 0.05 : 0.016;
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + (pop ? 0.05 : stepDur * 0.6));
+    src.connect(f); f.connect(g); g.connect(this.master);
+    src.start(t); src.stop(t + (pop ? 0.06 : stepDur));
+  },
 
   pump() {
     const stepDur = 60 / this.BPM / 4;
@@ -535,7 +548,16 @@ const music = {
     }
   },
   schedule(gs, t, stepDur) {
-    const s = gs % 16, bar = Math.floor(gs / 16);
+    const s = gs % 16;
+    // old, dusty vinyl drum break while on the title screen
+    if (this.menuDusty) {
+      if ([0, 7, 10].includes(s)) this.kick(t);
+      if (s === 4 || s === 12) this.snare(t);
+      if (s % 2 === 0) this.hat(t, s === 14, 0.10);
+      this.crackle(t, s, stepDur);
+      return;
+    }
+    const bar = Math.floor(gs / 16);
     const L = this.layers;
     if (L.has('drums')) {
       if ([0, 7, 10].includes(s)) this.kick(t);
@@ -946,9 +968,9 @@ function update(dt) {
   if (toast) { toast.t -= dt; if (toast.t <= 0) toast = null; }
 
   if (state === 'splash') {
-    if (interactPressed) state = 'title';
+    if (interactPressed) { state = 'title'; music.setMenuBreak(true); }
   } else if (state === 'title') {
-    if (interactPressed) state = 'play';
+    if (interactPressed) { state = 'play'; music.setMenuBreak(false); }
   } else if (state === 'play') {
     movePlayer(dt);
     if (interactPressed) doInteract();
