@@ -55,23 +55,10 @@ ctx.imageSmoothingEnabled = false;
       touch-action: none;
     }
     #touchControls .tc-btn:active { background: rgba(244,236,216,0.35); }
-    #touchControls .tc-dpad {
-      position: absolute;
-      pointer-events: auto;
-      background-repeat: no-repeat;
-      background-position: center;
-      background-size: contain;
-      opacity: 0.5;
-      filter: drop-shadow(0 1px 3px rgba(0,0,0,0.4));
-      -webkit-user-select: none; user-select: none;
-      -webkit-touch-callout: none;
-      touch-action: none;
-    }
-    #touchControls .tc-dpad:active { opacity: 0.8; }
-    #dpadUp    { left: 68px;  bottom: 156px; width: 56px; height: 56px; background-image: url('assets/arrow_up.png'); }
-    #dpadDown  { left: 68px;  bottom: 88px;  width: 56px; height: 56px; background-image: url('assets/arrow_down.png'); }
-    #dpadLeft  { left: 18px;  bottom: 122px; width: 56px; height: 56px; background-image: url('assets/arrow_left.png'); }
-    #dpadRight { left: 118px; bottom: 122px; width: 56px; height: 56px; background-image: url('assets/arrow_right.png'); }
+    #dpadUp    { left: 68px;  bottom: 156px; width: 56px; height: 56px; font-size: 18px; }
+    #dpadDown  { left: 68px;  bottom: 88px;  width: 56px; height: 56px; font-size: 18px; }
+    #dpadLeft  { left: 18px;  bottom: 122px; width: 56px; height: 56px; font-size: 18px; }
+    #dpadRight { left: 118px; bottom: 122px; width: 56px; height: 56px; font-size: 18px; }
     #btnE { right: 22px;  bottom: 116px; width: 78px; height: 78px; border-radius: 50%; font-size: 20px; }
     #btnB { right: 114px; bottom: 148px; width: 54px; height: 54px; border-radius: 50%; }
     #btnM { right: 114px; bottom: 78px;  width: 54px; height: 54px; border-radius: 50%; }
@@ -182,12 +169,6 @@ splashImg.src = 'assets/splash.png';
 
 const purePopPosterImg = new Image();
 purePopPosterImg.src = 'assets/purepop_poster.png';
-
-const anthillLogoImg = new Image();
-anthillLogoImg.src = 'assets/anthill_logo.png';
-
-const anthillBillboardImg = new Image();
-anthillBillboardImg.src = 'assets/adog_billboard.png';
 
 const nectarsNeonImg = new Image();
 nectarsNeonImg.src = 'assets/nectars_neon.png';
@@ -760,14 +741,14 @@ function createTouchControls() {
   wrap.addEventListener('contextmenu', (e) => e.preventDefault());
 
   const dpad = [
-    ['dpadUp', 'arrowup'],
-    ['dpadDown', 'arrowdown'],
-    ['dpadLeft', 'arrowleft'],
-    ['dpadRight', 'arrowright'],
+    ['dpadUp', 'arrowup', '▲'],
+    ['dpadDown', 'arrowdown', '▼'],
+    ['dpadLeft', 'arrowleft', '◀'],
+    ['dpadRight', 'arrowright', '▶'],
   ];
-  dpad.forEach(([id, k]) => {
+  dpad.forEach(([id, k, label]) => {
     const btn = document.createElement('div');
-    btn.id = id; btn.className = 'tc-dpad';
+    btn.id = id; btn.className = 'tc-btn'; btn.textContent = label;
     bindHold(btn, () => { keys[k] = true; music.start(); }, () => { keys[k] = false; });
     wrap.appendChild(btn);
   });
@@ -1105,10 +1086,7 @@ function drawBuildings(map) {
       ctx.fillStyle = '#ffe9a0';
     }
 
-    if (isGreenDoorStudio) {
-      drawGraffiti(px, py, w, h);
-      drawAnthillLogo(px, py, w, h);
-    }
+    if (isGreenDoorStudio) drawGraffiti(px, py, w, h);
 
     // Garage door on left side of Green Door Studio (closed, graffiti-covered)
     if (isGreenDoorStudio) {
@@ -1158,17 +1136,10 @@ function drawBuildings(map) {
     }
 
     const dx = b.doorX * TILE;
-    
-    // Special mural door for Green Door Studio
-    if (isGreenDoorStudio) {
-      drawGreenDoorMural(dx, py + h - TILE);
-    } else {
-      // Standard door for other buildings
-      ctx.fillStyle = '#3a2414';
-      ctx.fillRect(dx + 4, py + h - TILE + 2, TILE - 8, TILE - 2);
-      ctx.fillStyle = '#e0c060';
-      ctx.fillRect(dx + TILE - 12, py + h - 16, 3, 3);
-    }
+    ctx.fillStyle = isGreenDoorStudio ? '#245b2b' : '#3a2414';
+    ctx.fillRect(dx + 4, py + h - TILE + 2, TILE - 8, TILE - 2);
+    ctx.fillStyle = isGreenDoorStudio ? '#b7d96a' : '#e0c060';
+    ctx.fillRect(dx + TILE - 12, py + h - 16, 3, 3);
 
     if (isHeyBud) drawHeyBudDecor(px, py, w, h);
     if (isNectars) {
@@ -1188,160 +1159,6 @@ function drawBuildings(map) {
       ctx.fillText(b.name, px + w / 2, py + 20);
     }
   }
-}
-
-function drawGreenDoorMural(doorX, doorY) {
-  // Vibrant mural on Green Door Studio entrance
-  // Based on the green character with purple hair and blue background
-  
-  const w = TILE;
-  const h = TILE;
-  
-  ctx.save();
-  
-  // Bright cyan/turquoise background
-  ctx.fillStyle = '#20c0d8';
-  ctx.fillRect(doorX, doorY, w, h);
-  
-  // Add some texture/splatter to background
-  ctx.fillStyle = '#18a8c0';
-  ctx.fillRect(doorX + 2, doorY + 4, 4, 3);
-  ctx.fillRect(doorX + w - 8, doorY + 8, 5, 4);
-  ctx.fillRect(doorX + 5, doorY + h - 10, 3, 3);
-  
-  // Purple hair swirls (left side)
-  ctx.fillStyle = '#9060b0';
-  ctx.beginPath();
-  ctx.ellipse(doorX + 8, doorY + 10, 6, 8, -0.3, 0, Math.PI * 2);
-  ctx.fill();
-  
-  ctx.fillStyle = '#b080d0';
-  ctx.beginPath();
-  ctx.ellipse(doorX + 6, doorY + 12, 4, 6, -0.4, 0, Math.PI * 2);
-  ctx.fill();
-  
-  // Purple hair swirls (right side)
-  ctx.fillStyle = '#9060b0';
-  ctx.beginPath();
-  ctx.ellipse(doorX + w - 10, doorY + 11, 6, 8, 0.3, 0, Math.PI * 2);
-  ctx.fill();
-  
-  ctx.fillStyle = '#b080d0';
-  ctx.beginPath();
-  ctx.ellipse(doorX + w - 8, doorY + 13, 4, 6, 0.4, 0, Math.PI * 2);
-  ctx.fill();
-  
-  // Green face (center)
-  ctx.fillStyle = '#40d050';
-  ctx.beginPath();
-  ctx.ellipse(doorX + w/2, doorY + h/2 - 2, 10, 12, 0, 0, Math.PI * 2);
-  ctx.fill();
-  
-  // Face outline/shadow
-  ctx.strokeStyle = '#2a9838';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.ellipse(doorX + w/2, doorY + h/2 - 2, 10, 12, 0, 0, Math.PI * 2);
-  ctx.stroke();
-  
-  // Left eye (bright blue)
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath();
-  ctx.ellipse(doorX + w/2 - 4, doorY + h/2 - 4, 3, 3.5, 0, 0, Math.PI * 2);
-  ctx.fill();
-  
-  ctx.fillStyle = '#20d0f0';
-  ctx.beginPath();
-  ctx.ellipse(doorX + w/2 - 4, doorY + h/2 - 4, 2, 2.5, 0, 0, Math.PI * 2);
-  ctx.fill();
-  
-  ctx.fillStyle = '#1a1a1e';
-  ctx.beginPath();
-  ctx.ellipse(doorX + w/2 - 4, doorY + h/2 - 4, 1, 1.5, 0, 0, Math.PI * 2);
-  ctx.fill();
-  
-  // Right eye (bright blue)
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath();
-  ctx.ellipse(doorX + w/2 + 4, doorY + h/2 - 4, 3, 3.5, 0, 0, Math.PI * 2);
-  ctx.fill();
-  
-  ctx.fillStyle = '#20d0f0';
-  ctx.beginPath();
-  ctx.ellipse(doorX + w/2 + 4, doorY + h/2 - 4, 2, 2.5, 0, 0, Math.PI * 2);
-  ctx.fill();
-  
-  ctx.fillStyle = '#1a1a1e';
-  ctx.beginPath();
-  ctx.ellipse(doorX + w/2 + 4, doorY + h/2 - 4, 1, 1.5, 0, 0, Math.PI * 2);
-  ctx.fill();
-  
-  // Nose (small)
-  ctx.fillStyle = '#2a9838';
-  ctx.beginPath();
-  ctx.moveTo(doorX + w/2, doorY + h/2);
-  ctx.lineTo(doorX + w/2 - 1, doorY + h/2 + 2);
-  ctx.lineTo(doorX + w/2 + 1, doorY + h/2 + 2);
-  ctx.closePath();
-  ctx.fill();
-  
-  // Big smile (pink/magenta lips)
-  ctx.fillStyle = '#f060a0';
-  ctx.beginPath();
-  ctx.ellipse(doorX + w/2, doorY + h/2 + 5, 6, 3, 0, 0, Math.PI);
-  ctx.fill();
-  
-  // Teeth highlight
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(doorX + w/2 - 3, doorY + h/2 + 4, 6, 2);
-  
-  // Yellow sunflower (right side of hair)
-  ctx.fillStyle = '#f0d060';
-  for (let i = 0; i < 6; i++) {
-    const angle = (i / 6) * Math.PI * 2;
-    const petalX = doorX + w - 6 + Math.cos(angle) * 3;
-    const petalY = doorY + 8 + Math.sin(angle) * 3;
-    ctx.beginPath();
-    ctx.ellipse(petalX, petalY, 2, 3, angle, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  
-  // Flower center
-  ctx.fillStyle = '#8a5a3a';
-  ctx.beginPath();
-  ctx.arc(doorX + w - 6, doorY + 8, 2, 0, Math.PI * 2);
-  ctx.fill();
-  
-  // Earring/jewelry (yellow)
-  ctx.fillStyle = '#f0d860';
-  ctx.beginPath();
-  ctx.arc(doorX + w/2 + 8, doorY + h/2 + 2, 2, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillRect(doorX + w/2 + 7, doorY + h/2 + 4, 2, 3);
-  
-  // Green body/shoulders (bottom)
-  ctx.fillStyle = '#40d050';
-  ctx.fillRect(doorX + w/2 - 8, doorY + h - 8, 16, 8);
-  
-  // Darker outfit/belt area
-  ctx.fillStyle = '#2a5a30';
-  ctx.fillRect(doorX + w/2 - 8, doorY + h - 4, 16, 4);
-  
-  // Belt studs
-  ctx.fillStyle = '#7a7a7e';
-  for (let i = 0; i < 3; i++) {
-    ctx.beginPath();
-    ctx.arc(doorX + w/2 - 4 + i * 4, doorY + h - 2, 1, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  
-  // Door handle (small circle)
-  ctx.fillStyle = '#8a8a8e';
-  ctx.beginPath();
-  ctx.arc(doorX + w - 8, doorY + h/2 + 8, 2, 0, Math.PI * 2);
-  ctx.fill();
-  
-  ctx.restore();
 }
 
 function drawGraffiti(px, py, w, h) {
@@ -1444,9 +1261,7 @@ function drawTownDecorations(time) {
   drawOldLotByHeyBud();
   drawHeyBudParkedCars();
   drawSmokingPerson(time);
-  // Widened sign: shifted left of its old anchor so its right edge still lines
-  // up with the flea-market crate at tile (26,20) instead of growing into it.
-  drawYardSign(25 * TILE - 10, 20 * TILE);
+  drawYardSign(25 * TILE + 4, 20 * TILE);
   drawFountainArea(time);
 }
 
@@ -1856,25 +1671,17 @@ function drawAnthillBillboard() {
   ctx.fillStyle = '#d6c35e';
   ctx.fillRect(x, y, w, h);
 
-  // Graffiti mural artwork fills the board (cover-fit, cropped to the frame)
-  if (anthillBillboardImg.complete && anthillBillboardImg.naturalWidth) {
-    const ix = x + 4, iy = y + 4, iw = w - 8, ih = h - 8;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(ix, iy, iw, ih);
-    ctx.clip();
-    const scale = Math.max(iw / anthillBillboardImg.naturalWidth, ih / anthillBillboardImg.naturalHeight);
-    const dw = anthillBillboardImg.naturalWidth * scale;
-    const dh = anthillBillboardImg.naturalHeight * scale;
-    const dx = ix + (iw - dw) / 2;
-    const dy = iy + (ih - dh) / 2;
-    ctx.drawImage(anthillBillboardImg, dx, dy, dw, dh);
-    ctx.restore();
-  }
-
   ctx.strokeStyle = '#4b3928';
   ctx.lineWidth = 3;
   ctx.strokeRect(x + 4, y + 4, w - 8, h - 8);
+
+  ctx.fillStyle = '#3b2724';
+  ctx.font = 'bold 28px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('ANTHILL', x + w / 2, y + 35);
+
+  ctx.fillStyle = '#a34332';
+  ctx.fillRect(x + 24, y + 41, w - 48, 4);
 }
 
 function drawOldLotByHeyBud() {
@@ -2103,27 +1910,6 @@ function drawNectarsDecor(px, py, w, h) {
   ctx.restore();
 }
 
-function drawAnthillLogo(px, py, w, h) {
-  // Large Anthill ant logo on the front of Green Door Studio
-  const logoW = 170;
-  const logoH = 100;
-  const logoX = px + (w - logoW) / 2;
-  const logoY = py + 28;
-  
-  if (anthillLogoImg.complete && anthillLogoImg.naturalWidth) {
-    ctx.save();
-    
-    // Optional: Add a slight background for the logo to stand out
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillRect(logoX - 4, logoY - 4, logoW + 8, logoH + 8);
-    
-    // Draw the Anthill logo
-    ctx.drawImage(anthillLogoImg, logoX, logoY, logoW, logoH);
-    
-    ctx.restore();
-  }
-}
-
 function drawJuniorsDecor(px, py, w, h) {
   ctx.save();
   
@@ -2298,29 +2084,29 @@ function drawYardSign(x, y) {
   ctx.strokeStyle = '#9a9a9a';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(x + 9, y + 27);
-  ctx.lineTo(x + 9, y + 44);
-  ctx.moveTo(x + 33, y + 27);
-  ctx.lineTo(x + 33, y + 44);
+  ctx.moveTo(x + 6, y + 18);
+  ctx.lineTo(x + 6, y + 30);
+  ctx.moveTo(x + 22, y + 18);
+  ctx.lineTo(x + 22, y + 30);
   ctx.stroke();
 
   ctx.fillStyle = '#f4ecd8';
-  ctx.fillRect(x, y, 44, 29);
+  ctx.fillRect(x, y, 30, 20);
   ctx.strokeStyle = '#c0392b';
   ctx.lineWidth = 2;
-  ctx.strokeRect(x + 1, y + 1, 42, 27);
+  ctx.strokeRect(x + 1, y + 1, 28, 18);
 
   ctx.textAlign = 'center';
   ctx.fillStyle = '#1c3f7a';
-  ctx.font = 'bold 10px monospace';
-  ctx.fillText('KANGA', x + 22, y + 14);
+  ctx.font = 'bold 7px monospace';
+  ctx.fillText('KANGA', x + 15, y + 10);
   ctx.fillStyle = '#c0392b';
-  ctx.font = 'bold 9px monospace';
-  ctx.fillText('FOR MAYOR', x + 22, y + 25);
+  ctx.font = 'bold 6px monospace';
+  ctx.fillText('FOR MAYOR', x + 15, y + 17);
 
   ctx.fillStyle = '#c0392b';
-  ctx.fillRect(x + 3, y + 3, 3, 3);
-  ctx.fillRect(x + 38, y + 3, 3, 3);
+  ctx.fillRect(x + 2, y + 2, 2, 2);
+  ctx.fillRect(x + 26, y + 2, 2, 2);
 }
 
 function drawBench(x, y, w) {
