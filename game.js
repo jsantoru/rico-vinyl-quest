@@ -187,16 +187,16 @@ function makeOverworld() {
   for (let y = 1; y < H-1; y++) { g[y][19] = 'r'; g[y][20] = 'r'; }
 
   const buildings = [];
-  function building(x, y, w, h, name, wall, roof) {
+  function building(x, y, w, h, name, wall, roof, customDoorX) {
     for (let yy = y; yy < y+h; yy++)
       for (let xx = x; xx < x+w; xx++) g[yy][xx] = 'w';
-    const doorX = x + Math.floor(w/2);
+    const doorX = customDoorX !== undefined ? customDoorX : x + Math.floor(w/2);
     g[y+h-1][doorX] = 'D';
     buildings.push({ x, y, w, h, name, wall, roof, doorX });
     return { doorX, doorY: y+h-1 };
   }
 
-  const groove = building(4, 3, 7, 4, 'Green Door Studio', '#76503a', '#4e3328');
+  const groove = building(4, 3, 7, 4, 'Green Door Studio', '#76503a', '#4e3328', 9); // door moved to right
   const wax    = building(28, 3, 7, 4, 'Hey Bud', '#bf4f6f', '#93384f');
   const diner  = building(4, 14, 7, 4, 'Kountry Kart Deli', '#c07a38', '#96591f');
   const thrift = building(28, 14, 7, 4, 'Pure Pop Records', '#3f8fbf', '#2a6a93');
@@ -1055,6 +1055,53 @@ function drawBuildings(map) {
 
     if (isGreenDoorStudio) drawGraffiti(px, py, w, h);
 
+    // Garage door on left side of Green Door Studio (closed, graffiti-covered)
+    if (isGreenDoorStudio) {
+      const garageDoorX = px + TILE + 4;
+      const garageDoorY = py + h - TILE + 2;
+      const garageDoorW = TILE + 8;
+      const garageDoorH = TILE - 2;
+      
+      // Garage door panels
+      ctx.fillStyle = '#3a3a3e';
+      ctx.fillRect(garageDoorX, garageDoorY, garageDoorW, garageDoorH);
+      
+      // Panel lines
+      ctx.strokeStyle = '#2a2a2e';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(garageDoorX, garageDoorY + i * 8);
+        ctx.lineTo(garageDoorX + garageDoorW, garageDoorY + i * 8);
+        ctx.stroke();
+      }
+      
+      // Graffiti on garage door
+      ctx.strokeStyle = '#e06a38';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(garageDoorX + 4, garageDoorY + 8);
+      ctx.lineTo(garageDoorX + 12, garageDoorY + 4);
+      ctx.lineTo(garageDoorX + 18, garageDoorY + 10);
+      ctx.stroke();
+      
+      ctx.fillStyle = '#3d83b8';
+      ctx.font = 'bold 10px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText('BEAT', garageDoorX + 5, garageDoorY + 22);
+      
+      ctx.strokeStyle = '#9b4f9f';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(garageDoorX + 24, garageDoorY + 5);
+      ctx.lineTo(garageDoorX + 32, garageDoorY + 12);
+      ctx.lineTo(garageDoorX + 26, garageDoorY + 18);
+      ctx.stroke();
+      
+      ctx.fillStyle = '#f0a83c';
+      ctx.fillRect(garageDoorX + 30, garageDoorY + 24, 3, 3);
+    }
+
     const dx = b.doorX * TILE;
     ctx.fillStyle = isGreenDoorStudio ? '#245b2b' : '#3a2414';
     ctx.fillRect(dx + 4, py + h - TILE + 2, TILE - 8, TILE - 2);
@@ -1203,6 +1250,72 @@ function drawGreenDoorArtArea() {
   ctx.fillRect(baseX + 42, baseY + 25, 3, 3);
   ctx.fillStyle = '#e0b33c';
   ctx.fillRect(baseX + 47, baseY + 28, 3, 3);
+
+  // Artist 1 - painting on canvas
+  drawArtist1(baseX + 75, baseY + 28);
+  
+  // Artist 2 - sitting with spray can
+  drawArtist2(baseX + 105, baseY + 30);
+}
+
+function drawArtist1(x, y) {
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(x - 8, y + 14, 16, 4);
+  
+  // Legs
+  ctx.fillStyle = '#2a3a46';
+  ctx.fillRect(x - 5, y + 2, 4, 12);
+  ctx.fillRect(x + 1, y + 2, 4, 12);
+  
+  // Body/shirt
+  ctx.fillStyle = '#c86a3c';
+  ctx.fillRect(x - 6, y - 8, 12, 11);
+  
+  // Arm reaching toward canvas
+  ctx.fillStyle = '#c86a3c';
+  ctx.fillRect(x + 5, y - 4, 8, 4);
+  
+  // Head/skin
+  ctx.fillStyle = '#b87954';
+  ctx.fillRect(x - 4, y - 16, 8, 8);
+  
+  // Hair
+  ctx.fillStyle = '#2a2020';
+  ctx.fillRect(x - 4, y - 18, 8, 4);
+}
+
+function drawArtist2(x, y) {
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(x - 8, y + 14, 16, 4);
+  
+  // Legs (sitting position)
+  ctx.fillStyle = '#3a3a46';
+  ctx.fillRect(x - 6, y + 6, 5, 8);
+  ctx.fillRect(x + 1, y + 6, 5, 8);
+  
+  // Body/shirt
+  ctx.fillStyle = '#4a7ab0';
+  ctx.fillRect(x - 6, y - 4, 12, 11);
+  
+  // Arm with spray can
+  ctx.fillStyle = '#4a7ab0';
+  ctx.fillRect(x - 10, y, 6, 4);
+  
+  // Spray can in hand
+  ctx.fillStyle = '#e34b3c';
+  ctx.fillRect(x - 12, y - 2, 4, 6);
+  ctx.fillStyle = '#202026';
+  ctx.fillRect(x - 12, y - 4, 4, 2);
+  
+  // Head/skin
+  ctx.fillStyle = '#c89a72';
+  ctx.fillRect(x - 4, y - 12, 8, 8);
+  
+  // Hair
+  ctx.fillStyle = '#4a3a2a';
+  ctx.fillRect(x - 4, y - 14, 8, 4);
 }
 
 function drawSprayCan(x, y, color) {
