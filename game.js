@@ -1248,23 +1248,36 @@ function drawTiles(map, time, camX = 0, camY = 0) {
         const p = map.palette;
         ctx.fillStyle = (h % 7 === 0) ? (p ? p.groundB : '#3e7c34') : (p ? p.groundA : '#468a3a');
         ctx.fillRect(px, py, TILE, TILE);
+        // gentle bottom-edge shade on every tile — cheap depth cue at high tile counts
+        ctx.fillStyle = 'rgba(0,0,0,0.07)';
+        ctx.fillRect(px, py + TILE - 3, TILE, 3);
         if (h % 5 === 0) {
+          // small grass tuft (stem + lighter tip) instead of a flat dot
+          const tx2 = px + (h % 20), ty2 = py + (h % 22);
+          ctx.fillStyle = p ? p.leafDark : '#2e6428';
+          ctx.fillRect(tx2, ty2, 2, 4);
           ctx.fillStyle = p ? p.groundDot : '#54a046';
-          ctx.fillRect(px + (h % 20), py + (h % 22), 3, 3);
+          ctx.fillRect(tx2, ty2 - 1, 2, 2);
         }
       } else {
         ctx.fillStyle = map.floor;
         ctx.fillRect(px, py, TILE, TILE);
-        ctx.fillStyle = map.plank;
+        ctx.fillStyle = 'rgba(0,0,0,0.1)';
         ctx.fillRect(px, py + 10, TILE, 2);
         ctx.fillRect(px, py + 24, TILE, 2);
+        ctx.fillStyle = map.plank;
+        ctx.fillRect(px, py + 11, TILE, 1);
+        ctx.fillRect(px, py + 25, TILE, 1);
       }
       switch (ch) {
         case 'r': {
-          ctx.fillStyle = '#44424a';
+          ctx.fillStyle = '#312f36';
           ctx.fillRect(px, py, TILE, TILE);
-          ctx.fillStyle = '#504e58';
-          if (h % 6 === 0) ctx.fillRect(px + (h % 18), py + ((h >> 3) % 24), 4, 3);
+          ctx.fillStyle = '#44424a';
+          ctx.fillRect(px + 2, py + 1, TILE - 4, TILE - 4);
+          ctx.fillStyle = '#54525c';
+          ctx.fillRect(px + 2, py + 1, TILE - 4, 3);
+          if (h % 6 === 0) { ctx.fillStyle = '#605e68'; ctx.fillRect(px + (h % 18), py + ((h >> 3) % 22) + 4, 4, 3); }
           break;
         }
         case '#': drawTree(px, py, map); break;
@@ -1272,6 +1285,8 @@ function drawTiles(map, time, camX = 0, camY = 0) {
           const p = map.palette;
           ctx.fillStyle = p ? p.water : '#3060b0';
           ctx.fillRect(px, py, TILE, TILE);
+          ctx.fillStyle = 'rgba(0,0,0,0.12)';
+          ctx.fillRect(px, py + TILE - 10, TILE, 10);
           ctx.fillStyle = p ? p.waterHi : '#4878cc';
           const off = Math.floor(time * 6) % 2 === 0 ? 4 : 12;
           ctx.fillRect(px + off, py + 8, 10, 2);
@@ -1279,58 +1294,78 @@ function drawTiles(map, time, camX = 0, camY = 0) {
           break;
         }
         case 'b': {
-          ctx.fillStyle = '#8a6a42';
+          ctx.fillStyle = '#5a4326';
           ctx.fillRect(px, py, TILE, TILE);
-          ctx.strokeStyle = '#5a4326';
-          ctx.lineWidth = 1;
-          for (let i = 4; i < TILE; i += 6) {
-            ctx.beginPath();
-            ctx.moveTo(px + i, py);
-            ctx.lineTo(px + i, py + TILE);
-            ctx.stroke();
-          }
-          ctx.fillStyle = 'rgba(0,0,0,0.15)';
+          ctx.fillStyle = '#8a6a42';
+          ctx.fillRect(px, py + 2, TILE, TILE - 4);
+          for (let i = 3; i < TILE; i += 7) ctx.fillRect(px + i, py + 2, 2, TILE - 4);
+          ctx.fillStyle = 'rgba(0,0,0,0.2)';
           ctx.fillRect(px, py, TILE, 2);
           ctx.fillRect(px, py + TILE - 2, TILE, 2);
           break;
         }
         case 'f': {
+          ctx.fillStyle = '#3a2c18';
+          ctx.fillRect(px + 3, py + 7, TILE - 6, TILE - 7);
+          ctx.fillRect(px + 3, py + 3, 5, TILE - 3);
+          ctx.fillRect(px + TILE - 9, py + 3, 5, TILE - 3);
           ctx.fillStyle = '#8a6a42';
           ctx.fillRect(px + 2, py + 8, TILE - 4, 6);
           ctx.fillRect(px + 4, py + 4, 4, 20);
           ctx.fillRect(px + TILE - 8, py + 4, 4, 20);
+          ctx.fillStyle = 'rgba(255,255,255,0.12)';
+          ctx.fillRect(px + 4, py + 4, 1, 20);
+          ctx.fillRect(px + TILE - 8, py + 4, 1, 20);
           break;
         }
         case 'c': case 'C': drawCrate(px, py, map.crates[key(tx, ty)]); break;
         case 'W': {
-          ctx.fillStyle = map.wallColor;
+          ctx.fillStyle = shadeColor(map.wallColor, -35);
           ctx.fillRect(px, py, TILE, TILE);
+          ctx.fillStyle = map.wallColor;
+          ctx.fillRect(px, py, TILE, TILE - 2);
+          ctx.fillStyle = 'rgba(255,255,255,0.05)';
+          ctx.fillRect(px, py, TILE, 3);
           ctx.fillStyle = 'rgba(0,0,0,0.18)';
           ctx.fillRect(px, py + 14, TILE, 2);
           ctx.fillRect(px + (ty % 2 === 0 ? 8 : 20), py, 2, 14);
           break;
         }
         case 'T': {
+          ctx.fillStyle = '#2a1c10';
+          ctx.fillRect(px, py + 5, TILE, TILE - 5);
           ctx.fillStyle = '#6a4a2a';
-          ctx.fillRect(px, py + 6, TILE, TILE - 6);
+          ctx.fillRect(px + 1, py + 6, TILE - 2, TILE - 7);
           ctx.fillStyle = '#9a7040';
           ctx.fillRect(px, py, TILE, 10);
+          ctx.fillStyle = 'rgba(255,255,255,0.15)';
+          ctx.fillRect(px, py, TILE, 2);
           break;
         }
         case 'J': {
+          ctx.fillStyle = '#1c140f';
+          ctx.fillRect(px + 3, py - 1, TILE - 6, TILE + 1);
           ctx.fillStyle = '#b03030';
           ctx.fillRect(px + 4, py, TILE - 8, TILE);
+          ctx.fillStyle = shadeColor('#b03030', -30);
+          ctx.fillRect(px + 4, py, 4, TILE);
           ctx.fillStyle = '#f0d060';
           ctx.fillRect(px + 8, py + 4, TILE - 16, 8);
           ctx.fillStyle = Math.floor(time * 2) % 2 ? '#60d0f0' : '#f06090';
           ctx.fillRect(px + 8, py + 16, TILE - 16, 4);
+          ctx.fillStyle = 'rgba(255,255,255,0.25)';
+          ctx.fillRect(px + 9, py + 5, 3, 3);
           break;
         }
         case 'E': {
-          ctx.fillStyle = '#7a3a20';
+          ctx.fillStyle = '#3a1c10';
           ctx.fillRect(px, py, TILE, TILE);
+          ctx.fillStyle = '#7a3a20';
+          ctx.fillRect(px + 1, py + 1, TILE - 2, TILE - 2);
           ctx.fillStyle = '#9a5a30';
           ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 8);
+          ctx.fillStyle = 'rgba(255,255,255,0.1)';
+          ctx.fillRect(px + 4, py + 4, TILE - 8, 3);
           break;
         }
       }
@@ -1340,14 +1375,38 @@ function drawTiles(map, time, camX = 0, camY = 0) {
 
 function drawTree(px, py, map) {
   const p = map && map.palette;
-  ctx.fillStyle = p ? p.trunk : '#6a4a2a';
+  const trunk = p ? p.trunk : '#6a4a2a';
+  const leafDark = p ? p.leafDark : '#2e6428';
+  const leafMid = p ? p.leafMid : '#38782e';
+  const leafLight = p ? p.leafLight : '#4a9038';
+  const outline = '#16110a';
+
+  // ground shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(px + 16, py + 29, 11, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // trunk: outline, base, and a shaded side for roundness
+  ctx.fillStyle = outline;
+  ctx.fillRect(px + 12, py + 19, 8, 12);
+  ctx.fillStyle = trunk;
   ctx.fillRect(px + 13, py + 20, 6, 10);
-  ctx.fillStyle = p ? p.leafDark : '#2e6428';
+  ctx.fillStyle = shadeColor(trunk, -30);
+  ctx.fillRect(px + 13, py + 20, 2, 10);
+
+  // foliage: outlined silhouette, then three layered tones, then a highlight clump
+  ctx.fillStyle = outline;
+  ctx.fillRect(px + 3, py + 9, 26, 14);
+  ctx.fillRect(px + 7, py + 1, 18, 15);
+  ctx.fillStyle = leafDark;
   ctx.fillRect(px + 4, py + 10, 24, 12);
-  ctx.fillStyle = p ? p.leafMid : '#38782e';
+  ctx.fillStyle = leafMid;
   ctx.fillRect(px + 8, py + 2, 16, 14);
-  ctx.fillStyle = p ? p.leafLight : '#4a9038';
+  ctx.fillStyle = leafLight;
   ctx.fillRect(px + 10, py + 4, 8, 6);
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  ctx.fillRect(px + 4, py + 18, 24, 4);
 }
 
 // Scatter lily pads + cattails over the swamp's water. Called from render
