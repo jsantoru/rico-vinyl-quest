@@ -802,13 +802,21 @@ function spawnBike(map) {
 function spawnWalker(map) {
   const amb = map.ambient || {};
   const dir = Math.random() < 0.5 ? 1 : -1;
-  const shirts = ['#c86a3a', '#4a7ab0', '#7a4a9a', '#3a9a5a'];
+  const shirts = ['#c86a3a', '#4a7ab0', '#7a4a9a', '#3a9a5a', '#c2a23a', '#3a8a8a'];
+  const skins = ['#b87954', '#8a5a34', '#d8a878', '#e8c8a0'];
+  const hairs = ['#2a2018', '#4a3020', '#6a4020', '#8a8a8a', '#c8a860'];
+  const backpacks = ['#4a5a3a', '#8a4030', '#2a3a5a'];
   const row = amb.walkerRow !== undefined ? amb.walkerRow : 12;
   if (row < 0) return;                  // no walker lane -> no walkers
+  const shirt = shirts[Math.floor(Math.random() * shirts.length)];
   ambient.push({
     type: 'walker', x: dir > 0 ? -20 : map.w * TILE + 20, y: row * TILE + 24,
     vx: dir * 44, dir, t: 0,
-    shirt: shirts[Math.floor(Math.random() * shirts.length)], skin: '#b87954',
+    shirt, shirtDark: shadeColor(shirt, -45), shirtLight: shadeColor(shirt, 40),
+    skin: skins[Math.floor(Math.random() * skins.length)],
+    pants: '#3a3a46', shoe: '#241c18',
+    hair: hairs[Math.floor(Math.random() * hairs.length)],
+    backpack: Math.random() < 0.35 ? backpacks[Math.floor(Math.random() * backpacks.length)] : null,
   });
 }
 function spawnDog(map) {
@@ -816,7 +824,12 @@ function spawnDog(map) {
   const dir = Math.random() < 0.5 ? 1 : -1;
   const row = amb.dogRow !== undefined ? amb.dogRow : 23;
   if (row < 0) return;                  // no dog lane -> no dogs
-  ambient.push({ type: 'dog', x: dir > 0 ? -20 : map.w * TILE + 20, y: row * TILE + 20, vx: dir * 58, dir, t: 0 });
+  const furs = ['#a9713f', '#3a2e26', '#e8d8b8', '#8a5a34'];
+  const fur = furs[Math.floor(Math.random() * furs.length)];
+  ambient.push({
+    type: 'dog', x: dir > 0 ? -20 : map.w * TILE + 20, y: row * TILE + 20, vx: dir * 58, dir, t: 0,
+    fur, furDark: shadeColor(fur, -40), furLight: shadeColor(fur, 35),
+  });
 }
 function spawnFish(map) {
   const tile = map.riverTiles[Math.floor(Math.random() * map.riverTiles.length)];
@@ -826,6 +839,19 @@ function spawnFish(map) {
     y: tile.y * TILE + 10 + Math.random() * 12,
     t: 0, life: 1 + Math.random() * 0.8,
   });
+}
+
+// Darken (negative percent) or lighten (positive percent) a '#rrggbb' color.
+// Used to build the shadow/highlight tones for the layered pixel-art look.
+function shadeColor(hex, amount) {
+  const num = parseInt(hex.slice(1), 16);
+  let r = (num >> 16) + amount;
+  let g = ((num >> 8) & 0xff) + amount;
+  let b = (num & 0xff) + amount;
+  r = Math.max(0, Math.min(255, r));
+  g = Math.max(0, Math.min(255, g));
+  b = Math.max(0, Math.min(255, b));
+  return '#' + (0x1000000 + r * 0x10000 + g * 0x100 + b).toString(16).slice(1);
 }
 
 function drawAmbient() {
@@ -876,15 +902,62 @@ function drawWalkerActor(a) {
   ctx.translate(a.x, a.y);
   if (flip) ctx.scale(-1, 1);
   const stride = Math.sin(a.t * 8) * 3;
+  const outline = '#1c140f';
+  const backSwing = -stride * 0.4, frontSwing = stride * 0.4;
+
+  // ground shadow
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.fillRect(-8, 14, 16, 4);
-  ctx.fillStyle = '#3a3a46';
-  ctx.fillRect(-5, 2 + stride * 0.4, 4, 12);
-  ctx.fillRect(1, 2 - stride * 0.4, 4, 12);
+
+  // back leg (outline, then pants, then shoe)
+  ctx.fillStyle = outline;
+  ctx.fillRect(-6, 1 + backSwing, 6, 14);
+  ctx.fillStyle = a.pants;
+  ctx.fillRect(-5, 2 + backSwing, 4, 10);
+  ctx.fillStyle = a.shoe;
+  ctx.fillRect(-5, 11 + backSwing, 4, 3);
+
+  // front leg
+  ctx.fillStyle = outline;
+  ctx.fillRect(0, 1 + frontSwing, 6, 14);
+  ctx.fillStyle = a.pants;
+  ctx.fillRect(1, 2 + frontSwing, 4, 10);
+  ctx.fillStyle = a.shoe;
+  ctx.fillRect(1, 11 + frontSwing, 4, 3);
+
+  // optional backpack, tucked behind the torso
+  if (a.backpack) {
+    ctx.fillStyle = outline;
+    ctx.fillRect(-10, -8, 6, 11);
+    ctx.fillStyle = a.backpack;
+    ctx.fillRect(-9, -7, 4, 9);
+  }
+
+  // torso: outline, base shirt, trailing-side shadow, leading-side highlight
+  ctx.fillStyle = outline;
+  ctx.fillRect(-7, -9, 14, 13);
   ctx.fillStyle = a.shirt;
   ctx.fillRect(-6, -8, 12, 11);
+  ctx.fillStyle = a.shirtDark;
+  ctx.fillRect(-6, -8, 4, 11);
+  ctx.fillStyle = a.shirtLight;
+  ctx.fillRect(3, -8, 3, 4);
+
+  // arms, swinging opposite the legs
+  ctx.fillStyle = a.skin;
+  ctx.fillRect(-8, -6 + frontSwing * 0.5, 2, 7);
+  ctx.fillRect(6, -6 + backSwing * 0.5, 2, 7);
+
+  // head: outline, skin, hair/cap with a shaded brim line
+  ctx.fillStyle = outline;
+  ctx.fillRect(-5, -17, 10, 10);
   ctx.fillStyle = a.skin;
   ctx.fillRect(-4, -16, 8, 8);
+  ctx.fillStyle = a.hair;
+  ctx.fillRect(-4, -17, 8, 4);
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.fillRect(-4, -13, 8, 2);
+
   ctx.restore();
 }
 
@@ -894,15 +967,48 @@ function drawDogActor(a) {
   ctx.translate(a.x, a.y);
   if (flip) ctx.scale(-1, 1);
   const legOff = Math.sin(a.t * 10) * 2;
+  const outline = '#241a12';
+
+  // ground shadow
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.fillRect(-9, 8, 18, 3);
-  ctx.fillStyle = '#8a5a34';
+
+  // legs: outline then darker fur
+  ctx.fillStyle = outline;
+  ctx.fillRect(-8, 1 + legOff, 4, 8);
+  ctx.fillRect(3, 1 - legOff, 4, 8);
+  ctx.fillStyle = a.furDark;
   ctx.fillRect(-7, 2 + legOff, 2, 6);
   ctx.fillRect(4, 2 - legOff, 2, 6);
-  ctx.fillStyle = '#a9713f';
-  ctx.fillRect(-9, -4, 18, 8);
-  ctx.fillRect(7, -8, 6, 6);
+
+  // tail
+  ctx.fillStyle = outline;
+  ctx.fillRect(-12, -3, 5, 4);
+  ctx.fillStyle = a.fur;
   ctx.fillRect(-11, -2, 4, 3);
+
+  // body: outline, base fur, top highlight, belly shadow
+  ctx.fillStyle = outline;
+  ctx.fillRect(-10, -5, 20, 10);
+  ctx.fillStyle = a.fur;
+  ctx.fillRect(-9, -4, 18, 8);
+  ctx.fillStyle = a.furLight;
+  ctx.fillRect(-9, -4, 18, 2);
+  ctx.fillStyle = a.furDark;
+  ctx.fillRect(-9, 1, 18, 3);
+
+  // head: outline, fur, ear shading, snout with a small nose dot
+  ctx.fillStyle = outline;
+  ctx.fillRect(6, -9, 8, 8);
+  ctx.fillStyle = a.fur;
+  ctx.fillRect(7, -8, 6, 6);
+  ctx.fillStyle = a.furDark;
+  ctx.fillRect(7, -9, 3, 3);
+  ctx.fillStyle = outline;
+  ctx.fillRect(12, -3, 3, 3);
+  ctx.fillStyle = '#2a1c14';
+  ctx.fillRect(13, -2, 1, 1);
+
   ctx.restore();
 }
 
@@ -1766,26 +1872,26 @@ function drawTownDecorations(time) {
 // Decor buildings around the center road (purely cosmetic, no doors).
 // ----------------------------------------------------------------------
 function drawCobblePath(tx, ty, w, h) {
-  // grey & red cobblestone path over w x h tiles starting at tile (tx,ty)
+  // a narrow single-strip grey & red cobblestone footpath over w x h tiles
+  // starting at tile (tx,ty). Each tile shows one column of stones, so a
+  // 1-wide path reads as one clean middle strip.
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const px = (tx + x) * TILE, py = (ty + y) * TILE;
-      ctx.fillStyle = '#989ba0';
-      ctx.fillRect(px, py, TILE, TILE);
-      // grey stones
+      // narrow strip base
+      ctx.fillStyle = '#9a9da1';
+      ctx.fillRect(px + 8, py, TILE - 16, TILE);
+      // grey stones (one column)
       ctx.fillStyle = '#c4c7cc';
-      ctx.fillRect(px + 2, py + 3, 13, 13);
-      ctx.fillRect(px + 18, py + 3, 12, 13);
-      ctx.fillRect(px + 2, py + 18, 13, 12);
-      ctx.fillRect(px + 18, py + 18, 12, 12);
+      ctx.fillRect(px + 9, py + 2, 11, 13);
+      ctx.fillRect(px + 9, py + 17, 11, 13);
       // mortar
       ctx.fillStyle = '#7d8085';
-      ctx.fillRect(px, py + 16, TILE, 2);
-      ctx.fillRect(px + 16, py, 2, TILE);
+      ctx.fillRect(px + 8, py + 16, TILE - 16, 2);
       // red accent stones
       ctx.fillStyle = '#c06a55';
-      ctx.fillRect(px + 9, py + 4, 6, 6);
-      ctx.fillRect(px + 19, py + 19, 8, 8);
+      ctx.fillRect(px + 12, py + 5, 6, 6);
+      ctx.fillRect(px + 13, py + 19, 6, 6);
     }
   }
 }
@@ -1888,9 +1994,8 @@ function drawStand(px, py, c) {
 }
 
 function drawCenterStretch() {
-  // cobblestone path leading away from the church (south)
-  drawCobblePath(21, 14, 3, 1);
-  drawCobblePath(22, 15, 2, 3);
+  // single middle strip of cobblestone leading away from the church door (south)
+  drawCobblePath(22, 14, 1, 4);
   // the little white church
   drawChurch();
 
