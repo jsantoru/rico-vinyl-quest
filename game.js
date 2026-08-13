@@ -74,11 +74,12 @@ ctx.imageSmoothingEnabled = false;
        footprint identical to just E + MUTE + one more button. */
     #btnE { right: 14px; bottom: 14px; width: 62px; height: 62px; border-radius: 50%; font-size: 16px; }
     #btnX { right: 14px; bottom: 84px; width: 40px; height: 40px; border-radius: 50%; font-size: 16px; }
+    #btnSK8 { right: 86px; bottom: 114px; width: 40px; height: 40px; border-radius: 50%; font-size: 11px; }
     #btnExtras { right: 86px; bottom: 64px; width: 40px; height: 40px; border-radius: 50%; font-size: 16px; }
     #btnM { right: 86px; bottom: 14px; width: 40px; height: 40px; border-radius: 50%; font-size: 9px; }
     #extrasPanel {
       position: absolute;
-      right: 86px; bottom: 112px;
+      right: 86px; bottom: 162px;
       display: none;
       flex-direction: column;
       gap: 6px;
@@ -91,7 +92,7 @@ ctx.imageSmoothingEnabled = false;
       border-radius: 8px;
       font-size: 9px;
     }
-    #extrasPanel .tc-btn.tc-on {
+    .tc-btn.tc-on {
       background: rgba(224,176,64,0.4);
       border-color: rgba(224,176,64,0.9);
       color: #f4ecd8;
@@ -1168,13 +1169,23 @@ function createTouchControls() {
   bindTap(mBtn, () => { music.toggleMute(); music.start(); });
   wrap.appendChild(mBtn);
 
-  // "Extras" — a small popup menu (skateboard, cold brew, iced tea)
-  // so the resting button cluster stays minimal instead of growing a
-  // permanent button for every toggle.
+  // SK8 gets its own always-visible button — it's the toggle players reach
+  // for most, so it shouldn't be buried in the Extras dropdown.
+  const skBtn = document.createElement('div');
+  skBtn.id = 'btnSK8'; skBtn.className = 'tc-btn'; skBtn.textContent = 'SK8';
+  bindTap(skBtn, () => {
+    toggleSkate();
+    music.start();
+    skBtn.classList.toggle('tc-on', player.skating);
+  });
+  wrap.appendChild(skBtn);
+
+  // "Extras" — a small popup menu (cold brew, iced tea) so the resting
+  // button cluster stays minimal instead of growing a permanent button
+  // for every toggle.
   const extrasPanel = document.createElement('div');
   extrasPanel.id = 'extrasPanel';
   const extras = [
-    ['SK8',   () => toggleSkate(),      () => player.skating],
     ['BREW',  () => toggleCoffee(),     () => player.holdingCoffee],
     ['YERBA', () => toggleTea(),        () => player.holdingTea],
   ];
