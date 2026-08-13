@@ -286,12 +286,42 @@ function makeOverworld() {
   const trees = [[3,20],[5,22],[7,19],[13,21],[15,23],[3,23],[10,23],[16,19],[36,20],[34,23],[9,12],[14,13],[25,12],[36,12],[2,12],[37,7],[2,7],[24,23],[13,6],[26,6]];
   for (const [tx, ty] of trees) if (g[ty][tx] === '.') g[ty][tx] = '#';
 
+  // ------------------------------------------------------------------
+  // A broad lake at the top of the map: the river opens into a wide body
+  // of water with an irregular shoreline. Its open top edge reads as a
+  // lead-in to a larger lake that will live on the map above this one.
+  // ------------------------------------------------------------------
+  // open the water at the very top so it continues into the map above
+  for (let x = 15; x <= 27; x++) { g[0][x] = '~'; g[1][x] = '~'; g[2][x] = '~'; }
+  // lake body with an irregular southern shore (kept clear of Hey Bud on col 28)
+  const lakeBottom = { 17:3, 18:4, 19:5, 20:6, 21:7, 22:7, 23:7, 24:6, 25:6, 26:5, 27:4 };
+  for (const xs in lakeBottom) {
+    const x = +xs, b = lakeBottom[xs];
+    for (let y = 3; y <= b; y++) g[y][x] = '~';
+  }
+  // wooden docks reaching out from the shore into the lake
+  for (const [dx, top, bottom] of [[20, 4, 7], [25, 4, 7]]) {
+    for (let y = top; y <= bottom; y++) g[y][dx] = 'b';
+  }
+
   // flea market corner: stalls (fences) + crates, one holds the white label
   // NOTE: skip the tile directly above the Pure Pop Records door so the fence
   // doesn't block access to it.
   for (let x = 25; x <= 31; x++) { if (x === thrift.doorX) continue; g[18][x] = 'f'; }
   for (let y = 18; y <= 22; y++) g[y][32] = 'f';
   g[20][26] = 'c'; g[21][28] = 'c'; g[20][30] = 'c';
+
+  // ------------------------------------------------------------------
+  // A little village corner: a white church, a red-brick sidewalk, and a
+  // row of small shops. The church is scenery (no door, not enterable).
+  // Footprints are 'w' (solid); the art is drawn in drawTownDecorations.
+  // ------------------------------------------------------------------
+  for (let yy = 11; yy <= 12; yy++)
+    for (let xx = 21; xx <= 23; xx++) g[yy][xx] = 'w';      // church
+  for (let yy = 13; yy <= 14; yy++)
+    for (let xx = 21; xx <= 26; xx++) g[yy][xx] = 'B';      // red-brick sidewalk
+  for (let yy = 16; yy <= 17; yy++)
+    for (let xx = 21; xx <= 26; xx++) g[yy][xx] = 'w';      // row of shops (across the grass gap)
 
   const map = {
     id: 'town', world: 'town', w: W, h: H, grid: g, outside: true, buildings,
@@ -1159,6 +1189,18 @@ function drawTiles(map, time, camX = 0, camY = 0) {
           ctx.fillRect(px, py + TILE - 2, TILE, 2);
           break;
         }
+        case 'B': {
+          // red-brick sidewalk / promenade
+          ctx.fillStyle = '#b04838';
+          ctx.fillRect(px, py, TILE, TILE);
+          ctx.fillStyle = '#c25644';
+          if (h % 2 === 0) ctx.fillRect(px, py + 9, TILE, 3);
+          if (h % 3 === 0) ctx.fillRect(px + 10, py, 3, TILE);
+          if (h % 5 === 0) ctx.fillRect(px, py + 21, TILE, 3);
+          ctx.fillStyle = 'rgba(255,255,255,0.10)';
+          ctx.fillRect(px, py, TILE, 2);
+          break;
+        }
         case 'f': {
           ctx.fillStyle = '#8a6a42';
           ctx.fillRect(px + 2, py + 8, TILE - 4, 6);
@@ -1659,6 +1701,192 @@ function drawTownDecorations(time) {
   // up with the flea-market crate at tile (26,20) instead of growing into it.
   drawYardSign(25 * TILE - 10, 20 * TILE);
   drawFountainArea(time);
+  drawLakeFringe(time);
+  drawVillage(time);
+}
+
+// Pilings + a moored rowboat on the wooden docks that reach into the new
+// lake. The planks themselves are the 'b' boardwalk tiles in the grid.
+function drawLakeFringe(time) {
+  const docks = [
+    { x: 20, y: 4, boat: true },
+    { x: 25, y: 4, boat: false },
+  ];
+  for (const d of docks) {
+    const px = d.x * TILE, py = d.y * TILE;
+    // a couple of pilings at the water's end of the dock
+    ctx.fillStyle = '#4a351f';
+    ctx.fillRect(px + 8, py - 4, 5, 10);
+    ctx.fillRect(px + 24, py - 4, 5, 10);
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(px + 8, py - 4, 5, 2);
+    ctx.fillRect(px + 24, py - 4, 5, 2);
+    if (d.boat) {
+      // little moored rowboat beside the dock
+      const bx = px + 42, by = py + 10;
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.beginPath(); ctx.ellipse(bx + 13, by + 12, 17, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#7a4a28';
+      ctx.beginPath();
+      ctx.moveTo(bx, by); ctx.lineTo(bx + 26, by);
+      ctx.lineTo(bx + 20, by + 10); ctx.lineTo(bx + 6, by + 10);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#e0e0e0';
+      ctx.fillRect(bx + 11, by - 7, 4, 7);
+      ctx.strokeStyle = '#5a3a20';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(bx + 13, by - 7); ctx.lineTo(bx + 13, by - 16);
+      ctx.stroke();
+    }
+  }
+}
+
+// The village nook: a white church with a red roof/steeple, and a row of
+// small shops along a red-brick promenade. All scenery (no doors).
+function drawVillage(time) {
+  // --- tiny white church, fully contained inside its 2x3 footprint so it
+  // never spills onto the road above ---
+  const cx = 21 * TILE, cy = 11 * TILE, cw = 3 * TILE, ch = 2 * TILE;
+  ctx.fillStyle = 'rgba(0,0,0,0.16)';
+  ctx.fillRect(cx + 2, cy + ch - 6, cw - 4, 6);
+
+  // white clapboard walls
+  ctx.fillStyle = '#f2ecdf';
+  ctx.fillRect(cx, cy + 18, cw, ch - 18);
+  ctx.strokeStyle = 'rgba(0,0,0,0.10)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(cx + 1, cy + 19, cw - 2, ch - 20);
+
+  // red gabled roof (apex kept just inside the top of the footprint)
+  ctx.fillStyle = '#a1202a';
+  ctx.beginPath();
+  ctx.moveTo(cx - 2, cy + 18);
+  ctx.lineTo(cx + cw / 2, cy + 4);
+  ctx.lineTo(cx + cw + 2, cy + 18);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#7a221a';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // small steeple cupola on the ridge (contained)
+  const sX = cx + cw / 2 - 6, sY = cy + 4;
+  ctx.fillStyle = '#d9d2c2';
+  ctx.fillRect(sX, sY, 12, 6);
+  ctx.fillStyle = '#a1202a';
+  ctx.beginPath();
+  ctx.moveTo(sX, sY); ctx.lineTo(cx + cw / 2, sY - 4); ctx.lineTo(sX + 12, sY);
+  ctx.closePath();
+  ctx.fill();
+  // cross worked into the front gable
+  ctx.strokeStyle = '#26262a';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx + cw / 2, cy + 33); ctx.lineTo(cx + cw / 2, cy + 24);
+  ctx.moveTo(cx + cw / 2 - 3, cy + 28); ctx.lineTo(cx + cw / 2 + 3, cy + 28);
+  ctx.stroke();
+
+  // pointed-arch front window (no door; the church is just scenery)
+  ctx.fillStyle = '#9fb2cc';
+  ctx.beginPath();
+  ctx.moveTo(cx + cw / 2 - 7, cy + ch - 6);
+  ctx.lineTo(cx + cw / 2 - 7, cy + 42);
+  ctx.arc(cx + cw / 2, cy + 42, 7, Math.PI, 0);
+  ctx.lineTo(cx + cw / 2 + 7, cy + ch - 6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#e8e0d0';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(40,40,70,0.35)';
+  ctx.beginPath();
+  ctx.moveTo(cx + cw / 2, cy + ch - 6); ctx.lineTo(cx + cw / 2, cy + 42);
+  ctx.moveTo(cx + cw / 2 - 7, cy + 42); ctx.lineTo(cx + cw / 2 + 7, cy + 42);
+  ctx.stroke();
+
+  // a small side arched window
+  ctx.fillStyle = '#8fa8c0';
+  ctx.fillRect(cx + 5, cy + 44, 9, 12);
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(cx + 5, cy + 44, 9, 12);
+
+  // small stone step
+  ctx.fillStyle = '#b9b3a5';
+  ctx.fillRect(cx + cw / 2 - 12, cy + ch - 6, 24, 6);
+
+  // --- row of small shops (each 2x2) along the bottom of the promenade ---
+  const shops = [
+    { x: 21, wall: '#8c96b8', aw: ['#3f6f9e', '#e8e8e8'], name: 'BAZAAR' },
+    { x: 23, wall: '#c4a6b2', aw: ['#c25d4a', '#e8e8e8'], name: 'PETAL' },
+    { x: 25, wall: '#a8c49a', aw: ['#5f8f4a', '#e8e8e8'], name: 'MEND' },
+  ];
+  for (const s of shops) {
+    const px = s.x * TILE, py = 16 * TILE;
+    ctx.fillStyle = 'rgba(0,0,0,0.14)';
+    ctx.fillRect(px + 2, py + 60, 60, 5);
+    // body
+    ctx.fillStyle = s.wall;
+    ctx.fillRect(px, py, 64, 60);
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(px, py, 64, 60);
+    // striped awning
+    for (let i = 0; i < 8; i++) {
+      ctx.fillStyle = i % 2 ? s.aw[0] : s.aw[1];
+      ctx.fillRect(px + i * 8, py, 8, 14);
+    }
+    // shop name board on the awning (kept on the shop so the brick stays clear)
+    ctx.fillStyle = '#2a2020';
+    ctx.fillRect(px + 8, py + 4, 48, 10);
+    ctx.fillStyle = '#f4ecd8';
+    ctx.font = 'bold 7px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(s.name, px + 32, py + 12);
+    // window
+    ctx.fillStyle = '#dce4ee';
+    ctx.fillRect(px + 6, py + 22, 22, 18);
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px + 17, py + 22); ctx.lineTo(px + 17, py + 40);
+    ctx.moveTo(px + 6, py + 31); ctx.lineTo(px + 28, py + 31);
+    ctx.stroke();
+    // door
+    ctx.fillStyle = '#5a4228';
+    ctx.fillRect(px + 34, py + 44, 24, 16);
+    ctx.fillStyle = '#f0d060';
+    ctx.fillRect(px + 38, py + 48, 4, 6);
+  }
+
+  // --- lampposts + a bench dressing the red-brick promenade ---
+  const posts = [[21, 13], [26, 13]];
+  for (const [pX, pY] of posts) {
+    const lx = pX * TILE + 16, ly = pY * TILE;
+    ctx.fillStyle = '#2a2a2e';
+    ctx.fillRect(lx - 2, ly + 4, 4, 20);
+    ctx.fillStyle = '#f0e090';
+    ctx.fillRect(lx - 5, ly - 2, 10, 8);
+    if (Math.floor(time * 2) % 2 === 0) {
+      ctx.fillStyle = 'rgba(255,228,120,0.35)';
+      ctx.beginPath();
+      ctx.arc(lx, ly + 2, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  drawBench(22 * TILE, 14 * TILE, 20);
+  // a couple of shrubs beside the church
+  for (const [bx2, by2] of [[24, 12], [27, 12]]) {
+    const sxx = bx2 * TILE, syy = by2 * TILE;
+    ctx.fillStyle = '#4d8c3d';
+    ctx.fillRect(sxx + 12, syy + 22, 8, 8);
+    ctx.fillStyle = '#5fa34a';
+    ctx.beginPath();
+    ctx.arc(sxx + 16, syy + 22, 7, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 function drawFountainArea(time) {
