@@ -226,7 +226,6 @@ window.addEventListener('keydown', (e) => {
     if (k === 'm') music.toggleMute();
     if (k === 'c') toggleCoffee();
     if (k === 'y') toggleTea();
-    if (k === 'h') toggleHeadphones();
   }
   keys[k] = true;
   music.start(); // audio needs a user gesture
@@ -541,7 +540,7 @@ const maps = { town, ...shops, swamp };
 const player = {
   map: 'town', x: 19.5 * TILE, y: 12.5 * TILE,
   dir: 'down', moving: false, skating: false, animT: 0,
-  holdingCoffee: false, holdingTea: false, wearingHeadphones: false,
+  holdingCoffee: false, holdingTea: false,
 };
 const collected = new Set();
 let state = 'splash'; // splash | title | play | dialog | record | win
@@ -570,12 +569,6 @@ function toggleTea() {
   player.holdingTea = !player.holdingTea;
   if (player.holdingTea) player.holdingCoffee = false;
   toast = { text: player.holdingTea ? 'Yerba Mate: ON' : 'Yerba Mate: OFF', t: 1.2 };
-}
-
-function toggleHeadphones() {
-  if (state !== 'play') return;
-  player.wearingHeadphones = !player.wearingHeadphones;
-  toast = { text: player.wearingHeadphones ? 'Headphones: ON' : 'Headphones: OFF', t: 1.2 };
 }
 
 // ---------------------------------------------------------------- audio
@@ -739,7 +732,8 @@ function movePlayer(dt) {
   else if (dx > 0) player.dir = 'right';
 
   const map = maps[player.map];
-  const speed = player.skating ? SKATE_SPEED : WALK_SPEED;
+  const baseSpeed = player.skating ? SKATE_SPEED : WALK_SPEED;
+  const speed = (player.holdingCoffee || player.holdingTea) ? baseSpeed * 1.15 : baseSpeed;
   const mag = Math.hypot(dx, dy) || 1;
   const stepX = (dx / mag) * speed * dt;
   const stepY = (dy / mag) * speed * dt;
@@ -1134,16 +1128,15 @@ function createTouchControls() {
   bindTap(mBtn, () => { music.toggleMute(); music.start(); });
   wrap.appendChild(mBtn);
 
-  // "Extras" — a small popup menu (skateboard, cold brew, iced tea,
-  // headphones) so the resting button cluster stays minimal instead of
-  // growing a permanent button for every toggle.
+  // "Extras" — a small popup menu (skateboard, cold brew, iced tea)
+  // so the resting button cluster stays minimal instead of growing a
+  // permanent button for every toggle.
   const extrasPanel = document.createElement('div');
   extrasPanel.id = 'extrasPanel';
   const extras = [
     ['SK8',   () => toggleSkate(),      () => player.skating],
     ['BREW',  () => toggleCoffee(),     () => player.holdingCoffee],
-    ['MATE',  () => toggleTea(),        () => player.holdingTea],
-    ['FONES', () => toggleHeadphones(), () => player.wearingHeadphones],
+    ['YERBA', () => toggleTea(),        () => player.holdingTea],
   ];
   extras.forEach(([label, action, isOn]) => {
     const btn = document.createElement('div');
@@ -3587,32 +3580,8 @@ function drawPlayer(time) {
   }
 
   const spriteTopY = footY - SPR_H - (player.skating ? 4 : 0) + bob;
-  if (player.wearingHeadphones) drawPlayerHeadphones(spriteTopY);
   if (player.holdingCoffee) drawPlayerColdBrew(spriteTopY);
   if (player.holdingTea) drawPlayerIcedTea(spriteTopY);
-}
-
-// White over-ear headphones sitting on top of Rico's head — a band arcing
-// over the crown plus a rounded cup on each side.
-function drawPlayerHeadphones(spriteTopY) {
-  const hx = player.x, hy = spriteTopY + 9;
-  ctx.strokeStyle = '#f4f4f4';
-  ctx.lineWidth = 3;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.arc(hx, hy + 5, 11, Math.PI * 1.08, Math.PI * 1.92);
-  ctx.stroke();
-  for (const side of [-1, 1]) {
-    const ex = hx + side * 11;
-    ctx.fillStyle = '#f4f4f4';
-    ctx.beginPath();
-    ctx.ellipse(ex, hy + 8, 4, 6, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#c4c4c4';
-    ctx.beginPath();
-    ctx.ellipse(ex, hy + 8, 2.2, 3.6, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
 }
 
 // A cold brew coffee, iced and dark, in a to-go cup with a straw — held at
@@ -4124,7 +4093,6 @@ function drawTitle(time) {
     'B, OR ON-SCREEN "SK8" ........ skateboard on & off',
     'C ....................... cold brew coffee on & off',
     'Y ......................... iced yerba mate on & off',
-    'H .............................. headphones on & off',
     'M, OR ON-SCREEN "MUTE" ....................... mute',
   ];
   controls.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, 320 + i * 20));
