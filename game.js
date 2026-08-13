@@ -296,12 +296,30 @@ function makeOverworld() {
   const map = {
     id: 'town', world: 'town', w: W, h: H, grid: g, outside: true, buildings,
     doors: {}, crates: {}, npcs: [], riverTiles,
-    // ambient life lanes for this overworld (which road rows each spawns on)
+    // ambient life lanes for this map (which road rows each spawns on)
     ambient: { bikeRows: [9, 10], walkerRow: 12, dogRow: 23 },
   };
-  map.crates[key(26,20)] = { junkSeed: 3 };
-  map.crates[key(28,21)] = { record: 'white' };
-  map.crates[key(30,20)] = { junkSeed: 6 };
+  // Talkable townsfolk: Krishna (guitarist by the deli garbage can) and
+  // Willie (the painter out front of Green Door Studio).
+  map.npcs = [
+    { id: 'krishna', tx: 5, ty: 18, name: 'KRISHNA',
+      lines: [
+        'Hey there — I\'m Krishna. Music, yoga, and good energy, that\'s my whole wavelength. What\'s bringing you this way?',
+        'Me, Rico and Tha Truth roll together as Solo Lexicon — we play shows all over Vermont. Real soulful crew.',
+        'This corner by the trash can has the best acoustics in town. Junk never judged a good tune yet.',
+        'Feeling heavy? Sit, breathe, play a chord. The drop\'s always worth waiting for.'
+      ] },
+    { id: 'willie', tx: 5, ty: 8, name: 'WILLIE',
+      lines: [
+        'Hey now, welcome to the wall! I\'m Willie — painter, free spirit, full of love and creativity.',
+        'I paint what I feel about the day — the state of things, the color of people, all of it.',
+        'Stay a while. Hang, create, talk some good bullshit about life. This wall\'s got room for one more coat.',
+        'Every color\'s a story, and yours is one of the good ones.'
+      ] },
+  ];
+  map.crates[key(26, 20)] = { junkSeed: 3 };
+  map.crates[key(28, 21)] = { record: 'white' };
+  map.crates[key(30, 20)] = { junkSeed: 6 };
   return { map, doors: { groove, wax, diner, nectars, thrift, juniors } };
 }
 
@@ -411,8 +429,11 @@ const { map: town, doors } = makeOverworld();
 const shops = {
   groove: makeShop('groove', {
     floor: '#8a6a4a', plank: '#7a5a3c', wallColor: '#4a3a5f',
-    keeper: { name: 'MARCUS', shirt: '#c8b030', skin: '#8a5a34',
-      lines: ['Rico! Come on in — mind the wet paint by the door.',
+    keeper: { name: 'SK1', shirt: '#1f1d26', skin: '#8a5a34',
+      lines: ['Welcome to Green Door Studio — mind the wet paint by the door.',
+              'You already know: Third Thursdays, the monthly hip hop night. The whole Anthill Collective moves when the bass drops.',
+              'I\'m with The Anthill Collective — the crew keeps the color on the walls and the sessions open.',
+              'Support the independent hustle, family. We\'re all building our own creative thing in this world.',
               'We cut a few tracks back here between mural sessions. A Static Groove reel ended up in a crate somewhere.',
               'Try digging through the crates against the LEFT wall — should still be under some old spray cans.'],
       foundLine: 'Elm Street Funk?! I thought that tape got lost under the primer. Go make some noise with it.' },
@@ -694,6 +715,10 @@ function facingTarget() {
   if (ch === 'T' && map.keeper && Math.abs(tx - map.keeper.x) <= 2 && ty === 2)
     return { type: 'keeper', data: map.keeper };
   if (ch === 'J') return { type: 'jukebox' };
+  if (map.npcs) {
+    const np = map.npcs.find(n => n.tx === tx && n.ty === ty);
+    if (np) return { type: 'npc', data: np };
+  }
   return null;
 }
 
@@ -724,6 +749,10 @@ function doInteract() {
     }
   } else if (target.type === 'jukebox') {
     dialog = { name: 'JUKEBOX', lines: ['B7: "Cherry Cola Bounce". The button is worn smooth from decades of plays.'], i: 0 };
+    state = 'dialog';
+  } else if (target.type === 'npc') {
+    const n = target.data;
+    dialog = { name: n.name, lines: n.lines, i: 0 };
     state = 'dialog';
   }
 }
@@ -1322,24 +1351,28 @@ function drawBuildings(map) {
 
     // Garage door on left side of Green Door Studio (closed, graffiti-covered)
     if (isGreenDoorStudio) {
-      const garageDoorX = px + TILE + 4;
+      const garageDoorX = px + TILE + 2;
       const garageDoorY = py + h - TILE + 2;
-      const garageDoorW = TILE + 8;
+      const garageDoorW = TILE + 22;   // a little wider so it reads as a proper garage door
       const garageDoorH = TILE - 2;
       
       // Garage door panels
       ctx.fillStyle = '#3a3a3e';
       ctx.fillRect(garageDoorX, garageDoorY, garageDoorW, garageDoorH);
       
-      // Panel lines
+      // Panel lines (horizontal + vertical ribs)
       ctx.strokeStyle = '#2a2a2e';
       ctx.lineWidth = 2;
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < 5; i++) {
         ctx.beginPath();
-        ctx.moveTo(garageDoorX, garageDoorY + i * 8);
-        ctx.lineTo(garageDoorX + garageDoorW, garageDoorY + i * 8);
+        ctx.moveTo(garageDoorX, garageDoorY + i * (garageDoorH / 5));
+        ctx.lineTo(garageDoorX + garageDoorW, garageDoorY + i * (garageDoorH / 5));
         ctx.stroke();
       }
+      ctx.beginPath();
+      ctx.moveTo(garageDoorX + garageDoorW / 2, garageDoorY);
+      ctx.lineTo(garageDoorX + garageDoorW / 2, garageDoorY + garageDoorH);
+      ctx.stroke();
       
       // Graffiti on garage door
       ctx.strokeStyle = '#e06a38';
@@ -1365,6 +1398,18 @@ function drawBuildings(map) {
       
       ctx.fillStyle = '#f0a83c';
       ctx.fillRect(garageDoorX + 30, garageDoorY + 24, 3, 3);
+
+      // a few more tags to fill out the wider door
+      ctx.fillStyle = '#3d83b8';
+      ctx.fillRect(garageDoorX + garageDoorW - 12, garageDoorY + 8, 5, 4);
+      ctx.fillStyle = '#f0a83c';
+      ctx.fillRect(garageDoorX + garageDoorW - 9, garageDoorY + 18, 4, 3);
+      ctx.strokeStyle = '#e06a38';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(garageDoorX + garageDoorW - 20, garageDoorY + 26);
+      ctx.lineTo(garageDoorX + garageDoorW - 14, garageDoorY + 26);
+      ctx.stroke();
     }
 
     const dx = b.doorX * TILE;
@@ -1372,6 +1417,9 @@ function drawBuildings(map) {
     // Special mural door for Green Door Studio
     if (isGreenDoorStudio) {
       drawGreenDoorMural(dx, py + h - TILE);
+      drawOpenDoorSign(dx, py + h - TILE);
+      // "3rd Thursdays" hip-hop night flyer taped in a window near the entrance
+      drawThursPoster(dx - TILE - 4, py + h - TILE - 18);
     } else {
       // Standard door for other buildings
       ctx.fillStyle = '#3a2414';
@@ -1386,6 +1434,8 @@ function drawBuildings(map) {
       drawWallPoster(px, py, w, h);
     }
     if (isJuniors) drawJuniorsDecor(px, py, w, h);
+    // "3rd Thursdays" flyer on the outside wall of Pure Pop Records
+    if (isThrift) drawThursPoster(px + 6, py + 40);
 
     // Draw building name sign (skip for Nectar's - uses neon sign instead)
     if (!isNectars) {
@@ -1398,6 +1448,56 @@ function drawBuildings(map) {
       ctx.fillText(b.name, px + w / 2, py + 20);
     }
   }
+}
+
+function drawOpenDoorSign(doorX, doorY) {
+  // "OPEN" sign with a glowing arrow above the Green Door Studio entrance.
+  // doorX/doorY is the top-left of the door tile; the sign hangs in the wall
+  // row directly above it and points down at the doorway.
+  const cx = doorX + TILE / 2;
+  const signY = doorY - 24;
+  const sw = 30, sh = 15;
+
+  // soft glow behind the sign so it pops off the brick wall
+  ctx.fillStyle = 'rgba(255,233,160,0.28)';
+  ctx.fillRect(cx - sw / 2 - 4, signY - 3, sw + 8, sh + 8);
+
+  // wooden hanger/mount
+  ctx.fillStyle = '#4a3020';
+  ctx.fillRect(cx - 3, signY - 3, 6, 3);
+
+  // the glowing plaque
+  ctx.fillStyle = '#ffe9a0';
+  ctx.fillRect(cx - sw / 2, signY, sw, sh);
+  ctx.strokeStyle = '#a8782a';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(cx - sw / 2, signY, sw, sh);
+  ctx.fillStyle = '#4a2006';
+  ctx.font = 'bold 11px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('OPEN', cx, signY + 13);
+
+  // small lit bulb above the "O" for a neon vibe
+  ctx.fillStyle = '#fff6c8';
+  ctx.beginPath();
+  ctx.arc(cx - 7, signY + 3, 1.6, 0, Math.PI * 2);
+  ctx.fill();
+
+  // downward arrow pointing at the doorway
+  const ay = signY + sh + 3;
+  ctx.strokeStyle = '#ffe9a0';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(cx, ay);
+  ctx.lineTo(cx, ay + 10);
+  ctx.stroke();
+  ctx.fillStyle = '#ffe9a0';
+  ctx.beginPath();
+  ctx.moveTo(cx - 6, ay + 5);
+  ctx.lineTo(cx, ay + 11);
+  ctx.lineTo(cx + 6, ay + 5);
+  ctx.closePath();
+  ctx.fill();
 }
 
 function drawGreenDoorMural(doorX, doorY) {
@@ -1659,6 +1759,147 @@ function drawTownDecorations(time) {
   // up with the flea-market crate at tile (26,20) instead of growing into it.
   drawYardSign(25 * TILE - 10, 20 * TILE);
   drawFountainArea(time);
+  drawCenterStretch();
+}
+
+// ----------------------------------------------------------------------
+// Decor buildings around the center road (purely cosmetic, no doors).
+// ----------------------------------------------------------------------
+function drawCobblePath(tx, ty, w, h) {
+  // grey & red cobblestone path over w x h tiles starting at tile (tx,ty)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const px = (tx + x) * TILE, py = (ty + y) * TILE;
+      ctx.fillStyle = '#989ba0';
+      ctx.fillRect(px, py, TILE, TILE);
+      // grey stones
+      ctx.fillStyle = '#c4c7cc';
+      ctx.fillRect(px + 2, py + 3, 13, 13);
+      ctx.fillRect(px + 18, py + 3, 12, 13);
+      ctx.fillRect(px + 2, py + 18, 13, 12);
+      ctx.fillRect(px + 18, py + 18, 12, 12);
+      // mortar
+      ctx.fillStyle = '#7d8085';
+      ctx.fillRect(px, py + 16, TILE, 2);
+      ctx.fillRect(px + 16, py, 2, TILE);
+      // red accent stones
+      ctx.fillStyle = '#c06a55';
+      ctx.fillRect(px + 9, py + 4, 6, 6);
+      ctx.fillRect(px + 19, py + 19, 8, 8);
+    }
+  }
+}
+
+function drawChurch() {
+  const px = 21 * TILE, py = 11 * TILE;
+  const w = 3 * TILE, h = 3 * TILE;
+  const cx = px + w / 2;
+
+  // ground shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.fillRect(px - 4, py + h - 8, w + 8, 12);
+
+  // white body
+  ctx.fillStyle = '#f4efe3';
+  ctx.fillRect(px, py + 28, w, h - 28);
+  ctx.fillStyle = 'rgba(0,0,0,0.12)';
+  ctx.fillRect(px, py + h - 8, w, 8);
+
+  // slate gable roof
+  ctx.fillStyle = '#3c3e45';
+  ctx.beginPath();
+  ctx.moveTo(px - 6, py + 36);
+  ctx.lineTo(cx, py + 6);
+  ctx.lineTo(px + w + 6, py + 36);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#52555f';
+  ctx.fillRect(px - 2, py + 32, w + 4, 5);
+
+  // bell tower / steeple
+  ctx.fillStyle = '#4a4d56';
+  ctx.fillRect(cx - 7, py - 12, 14, 16);
+  ctx.fillStyle = '#f4efe3';
+  ctx.fillRect(cx - 5, py - 6, 10, 16);
+  ctx.fillStyle = '#3c3e45';
+  ctx.fillRect(cx - 7, py - 17, 14, 7);
+  // cross
+  ctx.fillStyle = '#e8e4d6';
+  ctx.fillRect(cx - 1, py - 27, 3, 12);
+  ctx.fillRect(cx - 4, py - 22, 9, 3);
+
+  // arched blue windows
+  ctx.fillStyle = '#8aa0c4';
+  ctx.fillRect(px + 16, py + 52, 17, 20);
+  ctx.fillRect(px + w - 33, py + 52, 17, 20);
+  ctx.beginPath(); ctx.arc(px + 24, py + 52, 8, Math.PI, 0); ctx.fill();
+  ctx.beginPath(); ctx.arc(px + w - 24, py + 52, 8, Math.PI, 0); ctx.fill();
+  ctx.fillStyle = '#dcecf6';
+  ctx.fillRect(px + 16, py + 50, 17, 5);
+  ctx.fillRect(px + w - 33, py + 50, 17, 5);
+
+  // rounded wooden door
+  ctx.fillStyle = '#6b4a28';
+  ctx.fillRect(cx - 20, py + 62, 40, 30);
+  ctx.beginPath(); ctx.arc(cx, py + 62, 20, Math.PI, 0); ctx.fill();
+  ctx.fillStyle = '#8a6238';
+  ctx.fillRect(cx - 20, py + 62, 40, 7);
+  ctx.fillStyle = '#e0b460';
+  ctx.fillRect(cx - 4, py + h - 16, 3, 3);
+
+  // stone steps
+  ctx.fillStyle = '#d9d2c2';
+  ctx.fillRect(cx - 16, py + h - 4, 32, 6);
+}
+
+function drawStand(px, py, c) {
+  // a small street stall: c = {top, top2, body, a, b}
+  const W = 30, H = 32;
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.fillRect(px + 2, py + H - 6, W, 5);
+  // posts
+  ctx.fillStyle = '#5a3a22';
+  ctx.fillRect(px + 3, py + 16, 3, H - 18);
+  ctx.fillRect(px + W - 6, py + 16, 3, H - 18);
+  // counter
+  ctx.fillStyle = c.body;
+  ctx.fillRect(px, py + 16, W, H - 16);
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.fillRect(px, py + 16, W, 3);
+  // items on the counter
+  ctx.fillStyle = c.a;
+  ctx.fillRect(px + 5, py + 9, 6, 4);
+  ctx.fillRect(px + 13, py + 8, 4, 5);
+  ctx.fillStyle = c.b;
+  ctx.fillRect(px + 20, py + 10, 5, 3);
+  // awning
+  ctx.fillStyle = c.top;
+  ctx.fillRect(px, py, W, 9);
+  ctx.fillStyle = c.top2;
+  for (let i = 0; i < 3; i++) ctx.fillRect(px + 4 + i * 10, py, 4, 9);
+  // scalloped edge
+  for (let i = 0; i < 3; i++) {
+    ctx.fillStyle = c.top;
+    ctx.beginPath(); ctx.arc(px + 6 + i * 10, py + 9, 5, 0, Math.PI); ctx.fill();
+    ctx.fillStyle = c.top2;
+    ctx.fillRect(px + 5 + i * 10, py + 5, 3, 4);
+  }
+}
+
+function drawCenterStretch() {
+  // cobblestone path leading away from the church (south)
+  drawCobblePath(21, 14, 3, 1);
+  drawCobblePath(22, 15, 2, 3);
+  // the little white church
+  drawChurch();
+
+  // small row of food stands / shops running along the center road
+  drawStand(21 * TILE, 4 * TILE + 6,   { top: '#d84030', top2: '#f4efe3', body: '#8a5a32', a: '#e06a38', b: '#c8d84a' });
+  drawStand(21 * TILE, 8 * TILE + 6,   { top: '#d0a02c', top2: '#f4efe3', body: '#4a7ab0', a: '#c8443c', b: '#9ac84a' });
+  drawStand(21 * TILE, 16 * TILE + 6,  { top: '#7a5a92', top2: '#f4efe3', body: '#b89878', a: '#d8b050', b: '#c8785a' });
+  drawStand(21 * TILE, 19 * TILE + 6,  { top: '#3f6fb0', top2: '#f4efe3', body: '#e8e0d0', a: '#7a4a2a', b: '#d0c06a' });
+  drawStand(18 * TILE, 6 * TILE + 6,   { top: '#b8508a', top2: '#f4efe3', body: '#6a9a4a', a: '#e0609a', b: '#4a8a5a' });
 }
 
 function drawFountainArea(time) {
@@ -2314,6 +2555,52 @@ function drawWallPoster(px, py, w, h) {
   ctx.fillRect(x + pw - 4, y - 4, 8, 4);
 }
 
+function drawThursPoster(x, y) {
+  // "3rd Thursdays" monthly hip-hop night flyer (SK1's event) taped to a window/wall.
+  const pw = 28, ph = 38;
+
+  // tape corners
+  ctx.fillStyle = 'rgba(230,224,200,0.75)';
+  ctx.fillRect(x - 3, y - 4, 7, 4);
+  ctx.fillRect(x + pw - 4, y - 4, 7, 4);
+  ctx.fillRect(x - 3, y + ph - 1, 7, 4);
+  ctx.fillRect(x + pw - 4, y + ph - 1, 7, 4);
+
+  // paper
+  ctx.fillStyle = '#efe6c9';
+  ctx.fillRect(x, y, pw, ph);
+  ctx.strokeStyle = '#a9a876';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, pw, ph);
+
+  // red header ribbon
+  ctx.fillStyle = '#c92c2a';
+  ctx.fillRect(x, y, pw, 9);
+  ctx.fillStyle = '#fbe6b0';
+  ctx.font = 'bold 8px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('3RD', x + pw / 2, y + 8);
+
+  // body lines
+  ctx.fillStyle = '#20232c';
+  ctx.font = 'bold 7px monospace';
+  ctx.fillText('THURS', x + pw / 2, y + 16);
+  ctx.font = 'bold 5px monospace';
+  ctx.fillText('HIP HOP', x + pw / 2, y + 23);
+  ctx.font = 'bold 7px monospace';
+  ctx.fillText('NIGHT', x + pw / 2, y + 29);
+
+  // little vinyl record icon
+  ctx.fillStyle = '#1a1a1e';
+  ctx.beginPath();
+  ctx.arc(x + pw / 2, y + 33, 3.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#c92b2a';
+  ctx.beginPath();
+  ctx.arc(x + pw / 2, y + 33, 1.2, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 function drawNectarsDecor(px, py, w, h) {
   ctx.save();
   
@@ -2752,6 +3039,32 @@ function drawDeliSeatingArea() {
 }
 
 // ---------------------------------------------------------------- keeper
+function drawAnt(cx, cy, s) {
+  // A white ant silhouette (the Anthill Collective mark), drawn on SK1's hat.
+  // Side profile: head + antennae at the front-right, thorax, big abdomen at the rear.
+  ctx.fillStyle = '#f4f0e2';
+  // abdomen (rear, left)
+  ctx.beginPath(); ctx.arc(cx - 3.0 * s, cy + 0.4 * s, 1.9 * s, 0, Math.PI * 2); ctx.fill();
+  // thorax (middle)
+  ctx.beginPath(); ctx.arc(cx - 0.4 * s, cy - 0.1 * s, 1.2 * s, 0, Math.PI * 2); ctx.fill();
+  // head (front, right)
+  ctx.beginPath(); ctx.arc(cx + 2.1 * s, cy - 0.4 * s, 1.2 * s, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#f2efe3';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx - 1.8 * s, cy); ctx.lineTo(cx - 0.8 * s, cy);           // waist
+  // antennae (up off the head)
+  ctx.moveTo(cx + 1.7 * s, cy - 1.0 * s); ctx.lineTo(cx + 2.4 * s, cy - 2.2 * s);
+  ctx.moveTo(cx + 2.5 * s, cy - 0.9 * s); ctx.lineTo(cx + 3.3 * s, cy - 2.0 * s);
+  // legs (down off the body)
+  ctx.moveTo(cx - 0.9 * s, cy + 0.5 * s); ctx.lineTo(cx - 1.5 * s, cy + 2.3 * s);
+  ctx.moveTo(cx - 0.1 * s, cy + 0.6 * s); ctx.lineTo(cx - 0.2 * s, cy + 2.4 * s);
+  ctx.moveTo(cx + 1.0 * s, cy + 0.3 * s); ctx.lineTo(cx + 1.6 * s, cy + 2.0 * s);
+  ctx.moveTo(cx - 2.3 * s, cy + 1.0 * s); ctx.lineTo(cx - 3.0 * s, cy + 2.3 * s);
+  ctx.moveTo(cx - 3.6 * s, cy + 0.9 * s); ctx.lineTo(cx - 4.2 * s, cy + 2.1 * s);
+  ctx.stroke();
+}
+
 function drawKeeper(k) {
   const px = k.x * TILE, py = k.y * TILE;
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
@@ -2763,7 +3076,17 @@ function drawKeeper(k) {
   ctx.fillStyle = '#201818';
   ctx.fillRect(px + 12, py + 6, 2, 2);
   ctx.fillRect(px + 18, py + 6, 2, 2);
-  ctx.fillRect(px + 10, py, 12, 3);
+  if (k.name === 'SK1') {
+    // black hat with a white Anthill ant on the front
+    ctx.fillStyle = '#15131a';                     // hat crown
+    ctx.fillRect(px + 6, py - 4, 20, 7);
+    ctx.fillStyle = '#0d0b12';                     // hat brim
+    ctx.fillRect(px + 7, py + 3, 22, 3);
+    drawAnt(px + 15, py + 1, 1.4);
+  } else {
+    ctx.fillStyle = '#201818';
+    ctx.fillRect(px + 10, py, 12, 3);
+  }
 }
 
 // ---------------------------------------------------------------- player
@@ -2820,7 +3143,7 @@ function drawHUD() {
     const target = facingTarget();
     if (target) {
       const label = target.type === 'crate' ? '[E] DIG CRATE'
-                  : target.type === 'keeper' ? '[E] TALK'
+                  : (target.type === 'keeper' || target.type === 'npc') ? '[E] TALK'
                   : '[E] LOOK';
       pill(label, VIEW_W / 2, VIEW_H - 34);
     }
