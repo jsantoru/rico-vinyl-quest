@@ -3144,6 +3144,8 @@ function drawDeliSeatingArea() {
 }
 
 // ---------------------------------------------------------------- keeper
+const KEEPER_HAIR = { DEE: '#5a2e1c', ROSIE: '#c8c0b0', ZEKE: '#241a12', JADE: '#141014', TONY: '#2a2018' };
+
 function drawAnt(cx, cy, s) {
   // A white ant silhouette (the Anthill Collective mark), drawn on SK1's hat.
   // Side profile: head + antennae at the front-right, thorax, big abdomen at the rear.
@@ -3172,15 +3174,61 @@ function drawAnt(cx, cy, s) {
 
 function drawKeeper(k) {
   const px = k.x * TILE, py = k.y * TILE;
+  const outline = '#1c140f';
+  const shirtDark = shadeColor(k.shirt, -45);
+  const shirtLight = shadeColor(k.shirt, 35);
+  const skinDark = shadeColor(k.skin, -30);
+  const skinLight = shadeColor(k.skin, 22);
+  const hair = KEEPER_HAIR[k.name] || '#241a14';
+  const hairDark = shadeColor(hair, -35);
+
+  // ground shadow
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.fillRect(px + 8, py + 26, 16, 4);
+
+  // torso: outline, base shirt, shadowed side, highlighted side
+  ctx.fillStyle = outline;
+  ctx.fillRect(px + 7, py + 11, 18, 16);
   ctx.fillStyle = k.shirt;
   ctx.fillRect(px + 8, py + 12, 16, 14);
+  ctx.fillStyle = shirtDark;
+  ctx.fillRect(px + 8, py + 12, 5, 14);
+  ctx.fillStyle = shirtLight;
+  ctx.fillRect(px + 19, py + 12, 4, 5);
+
+  // arms at the sides, with hands
+  ctx.fillStyle = outline;
+  ctx.fillRect(px + 4, py + 13, 6, 11);
+  ctx.fillRect(px + 22, py + 13, 6, 11);
+  ctx.fillStyle = k.shirt;
+  ctx.fillRect(px + 5, py + 14, 4, 7);
+  ctx.fillRect(px + 23, py + 14, 4, 7);
+  ctx.fillStyle = k.skin;
+  ctx.fillRect(px + 5, py + 20, 4, 4);
+  ctx.fillRect(px + 23, py + 20, 4, 4);
+
+  // head: outline, base skin, shadowed/highlighted sides
+  ctx.fillStyle = outline;
+  ctx.fillRect(px + 9, py + 1, 14, 13);
   ctx.fillStyle = k.skin;
   ctx.fillRect(px + 10, py + 2, 12, 11);
+  ctx.fillStyle = skinDark;
+  ctx.fillRect(px + 10, py + 2, 3, 11);
+  ctx.fillStyle = skinLight;
+  ctx.fillRect(px + 18, py + 2, 3, 5);
+
+  // face: brows, eyes, nose, mouth
+  ctx.fillStyle = hairDark;
+  ctx.fillRect(px + 12, py + 5, 2, 1);
+  ctx.fillRect(px + 18, py + 5, 2, 1);
   ctx.fillStyle = '#201818';
   ctx.fillRect(px + 12, py + 6, 2, 2);
   ctx.fillRect(px + 18, py + 6, 2, 2);
+  ctx.fillStyle = skinDark;
+  ctx.fillRect(px + 15, py + 8, 2, 2);
+  ctx.fillStyle = '#5a3428';
+  ctx.fillRect(px + 13, py + 11, 6, 1);
+
   if (k.name === 'SK1') {
     // black hat with a white Anthill ant on the front
     ctx.fillStyle = '#15131a';                     // hat crown
@@ -3189,8 +3237,13 @@ function drawKeeper(k) {
     ctx.fillRect(px + 7, py + 3, 22, 3);
     drawAnt(px + 15, py + 1, 1.4);
   } else {
-    ctx.fillStyle = '#201818';
-    ctx.fillRect(px + 10, py, 12, 3);
+    // outlined, shaded hair
+    ctx.fillStyle = outline;
+    ctx.fillRect(px + 8, py - 2, 16, 6);
+    ctx.fillStyle = hair;
+    ctx.fillRect(px + 9, py - 1, 14, 5);
+    ctx.fillStyle = hairDark;
+    ctx.fillRect(px + 9, py - 1, 14, 2);
   }
 }
 
