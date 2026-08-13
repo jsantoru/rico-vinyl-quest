@@ -73,6 +73,7 @@ ctx.imageSmoothingEnabled = false;
        pops a small stacked menu open above it on tap — keeps the resting
        footprint identical to just E + MUTE + one more button. */
     #btnE { right: 14px; bottom: 14px; width: 62px; height: 62px; border-radius: 50%; font-size: 16px; }
+    #btnX { right: 14px; bottom: 84px; width: 40px; height: 40px; border-radius: 50%; font-size: 16px; }
     #btnExtras { right: 86px; bottom: 64px; width: 40px; height: 40px; border-radius: 50%; font-size: 16px; }
     #btnM { right: 86px; bottom: 14px; width: 40px; height: 40px; border-radius: 50%; font-size: 9px; }
     #extrasPanel {
@@ -217,11 +218,13 @@ const JUNK = [
 // ---------------------------------------------------------------- input
 const keys = {};
 let interactPressed = false;
+let buyPressed = false;
 window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k) || k === ' ') e.preventDefault();
   if (!keys[k]) {
     if (k === 'e' || k === 'enter' || k === 'z' || k === ' ') interactPressed = true;
+    if (k === 'x') buyPressed = true;
     if (k === 'b') toggleSkate();
     if (k === 'm') music.toggleMute();
     if (k === 'c') toggleCoffee();
@@ -541,6 +544,7 @@ const player = {
   map: 'town', x: 19.5 * TILE, y: 12.5 * TILE,
   dir: 'down', moving: false, skating: false, animT: 0,
   holdingCoffee: false, holdingTea: false,
+  tempItem: null, tempItemTimer: 0,
 };
 const collected = new Set();
 let state = 'splash'; // splash | title | play | dialog | record | win
@@ -753,6 +757,16 @@ function movePlayer(dt) {
 }
 
 // ---------------------------------------------------------------- interact
+// Vendor carts are cosmetic sprites (drawn in drawTownDecorations), not part
+// of the tile grid, so they're detected by standing near a point in front of
+// the counter rather than by facing a specific tile.
+const VENDOR_CARTS = [
+  // coffee cart just outside Pure Pop Records
+  { id: 'coldbrew', map: 'town', label: 'BUY A COLD BREW', x: 27 * TILE + 5 + 28, y: 18 * TILE + 4 + 40, radius: 42 },
+  // ice cream van tucked in town's lower-right corner
+  { id: 'icecream', map: 'town', label: 'BUY ICE CREAM', x: 35.2 * TILE + 46, y: 21.4 * TILE + 63, radius: 46 },
+];
+
 function facingTile() {
   const d = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[player.dir];
   const fx = player.x + d[0] * 24, fy = player.y + d[1] * 22;
@@ -762,17 +776,21 @@ function facingTile() {
 function facingTarget() {
   const map = maps[player.map];
   const [tx, ty] = facingTile();
-  if (tx < 0 || ty < 0 || tx >= map.w || ty >= map.h) return null;
-  const ch = map.grid[ty][tx];
-  if (ch === 'C' || ch === 'c') return { type: 'crate', tx, ty, data: map.crates[key(tx, ty)] };
-  if (ch === 'K') return { type: 'keeper', data: map.keeper };
-  if (ch === 'T' && map.keeper && Math.abs(tx - map.keeper.x) <= 2 && ty === 2)
-    return { type: 'keeper', data: map.keeper };
-  if (ch === 'J') return { type: 'jukebox' };
-  if (map.npcs) {
-    const np = map.npcs.find(n => n.tx === tx && n.ty === ty);
-    if (np) return { type: 'npc', data: np };
+  if (tx >= 0 && ty >= 0 && tx < map.w && ty < map.h) {
+    const ch = map.grid[ty][tx];
+    if (ch === 'C' || ch === 'c') return { type: 'crate', tx, ty, data: map.crates[key(tx, ty)] };
+    if (ch === 'K') return { type: 'keeper', data: map.keeper };
+    if (ch === 'T' && map.keeper && Math.abs(tx - map.keeper.x) <= 2 && ty === 2)
+      return { type: 'keeper', data: map.keeper };
+    if (ch === 'J') return { type: 'jukebox' };
+    if (map.npcs) {
+      const np = map.npcs.find(n => n.tx === tx && n.ty === ty);
+      if (np) return { type: 'npc', data: np };
+    }
   }
+  const cart = VENDOR_CARTS.find(c => c.map === player.map &&
+    Math.hypot(player.x - c.x, player.y - c.y) < c.radius);
+  if (cart) return { type: 'cart', data: cart };
   return null;
 }
 
@@ -808,6 +826,23 @@ function doInteract() {
     const n = target.data;
     dialog = { name: n.name, lines: n.lines, i: 0 };
     state = 'dialog';
+  }
+}
+
+// Buying from a vendor cart pops the item into Rico's hand for a few
+// seconds, just like the other held items (cold brew / iced tea).
+function doBuy() {
+  if (state !== 'play') return;
+  const target = facingTarget();
+  if (!target || target.type !== 'cart') return;
+  if (target.data.id === 'icecream') {
+    player.tempItem = 'iceCream';
+    player.tempItemTimer = 6;
+    toast = { text: 'Ice Cream!', t: 1.2 };
+  } else if (target.data.id === 'coldbrew') {
+    player.tempItem = 'coldBrew';
+    player.tempItemTimer = 6;
+    toast = { text: 'Cold Brew!', t: 1.2 };
   }
 }
 
@@ -1123,6 +1158,11 @@ function createTouchControls() {
   bindTap(eBtn, () => { interactPressed = true; music.start(); });
   wrap.appendChild(eBtn);
 
+  const xBtn = document.createElement('div');
+  xBtn.id = 'btnX'; xBtn.className = 'tc-btn'; xBtn.textContent = 'X';
+  bindTap(xBtn, () => { buyPressed = true; music.start(); });
+  wrap.appendChild(xBtn);
+
   const mBtn = document.createElement('div');
   mBtn.id = 'btnM'; mBtn.className = 'tc-btn'; mBtn.textContent = 'MUTE';
   bindTap(mBtn, () => { music.toggleMute(); music.start(); });
@@ -1186,6 +1226,11 @@ function update(dt) {
   } else if (state === 'play') {
     movePlayer(dt);
     if (interactPressed) doInteract();
+    if (buyPressed) doBuy();
+    if (player.tempItemTimer > 0) {
+      player.tempItemTimer -= dt;
+      if (player.tempItemTimer <= 0) { player.tempItemTimer = 0; player.tempItem = null; }
+    }
   } else if (state === 'dialog') {
     if (interactPressed) {
       dialog.i++;
@@ -1204,6 +1249,7 @@ function update(dt) {
     if (interactPressed) state = 'play';
   }
   interactPressed = false;
+  buyPressed = false;
 }
 
 // ---------------------------------------------------------------- render
@@ -3580,14 +3626,20 @@ function drawPlayer(time) {
   }
 
   const spriteTopY = footY - SPR_H - (player.skating ? 4 : 0) + bob;
-  if (player.holdingCoffee) drawPlayerColdBrew(spriteTopY);
-  if (player.holdingTea) drawPlayerIcedTea(spriteTopY);
+  if (player.tempItem === 'coldBrew') {
+    drawPlayerColdBrew(spriteTopY);
+  } else if (player.tempItem === 'iceCream') {
+    drawPlayerIceCream(spriteTopY);
+  } else {
+    if (player.holdingCoffee) drawPlayerColdBrew(spriteTopY);
+    if (player.holdingTea) drawPlayerIcedTea(spriteTopY);
+  }
 }
 
 // A cold brew coffee, iced and dark, in a to-go cup with a straw — held at
 // Rico's side.
 function drawPlayerColdBrew(spriteTopY) {
-  const hx = player.x + 13, hy = spriteTopY + SPR_H * 0.5;
+  const hx = player.x + (player.dir === 'left' ? -13 : 13), hy = spriteTopY + SPR_H * 0.5;
   ctx.fillStyle = 'rgba(0,0,0,0.2)';
   ctx.fillRect(hx - 5, hy + 13, 10, 2);
   ctx.fillStyle = '#efe9dc';
@@ -3608,7 +3660,7 @@ function drawPlayerColdBrew(spriteTopY) {
 
 // A yellow can of iced yerba mate tea, held at Rico's side.
 function drawPlayerIcedTea(spriteTopY) {
-  const hx = player.x + 13, hy = spriteTopY + SPR_H * 0.5;
+  const hx = player.x + (player.dir === 'left' ? -13 : 13), hy = spriteTopY + SPR_H * 0.5;
   ctx.fillStyle = 'rgba(0,0,0,0.2)';
   ctx.fillRect(hx - 5, hy + 14, 10, 2);
   ctx.fillStyle = '#e8c020';
@@ -3620,6 +3672,38 @@ function drawPlayerIcedTea(spriteTopY) {
   ctx.fillRect(hx - 3, hy + 5, 6, 5);
   ctx.fillStyle = 'rgba(255,255,255,0.4)';
   ctx.fillRect(hx - 3, hy + 2, 1, 8);
+}
+
+// A scoop of ice cream in a waffle cone, held at Rico's side — bought from
+// the ice cream van.
+function drawPlayerIceCream(spriteTopY) {
+  const hx = player.x + (player.dir === 'left' ? -13 : 13), hy = spriteTopY + SPR_H * 0.5;
+  ctx.fillStyle = '#d8a24a';
+  ctx.beginPath();
+  ctx.moveTo(hx - 4, hy + 2);
+  ctx.lineTo(hx + 4, hy + 2);
+  ctx.lineTo(hx, hy + 14);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#a87830';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(hx - 4, hy + 5); ctx.lineTo(hx + 4, hy + 5);
+  ctx.moveTo(hx - 3, hy + 8); ctx.lineTo(hx + 3, hy + 8);
+  ctx.moveTo(hx - 2, hy + 11); ctx.lineTo(hx + 2, hy + 11);
+  ctx.stroke();
+  ctx.fillStyle = '#f7c9d8';
+  ctx.beginPath();
+  ctx.arc(hx, hy - 2, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.beginPath();
+  ctx.arc(hx - 2, hy - 4, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#c02840';
+  ctx.beginPath();
+  ctx.arc(hx, hy - 8, 2, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 // ---------------------------------------------------------------- UI
@@ -3647,6 +3731,7 @@ function drawHUD() {
     if (target) {
       const label = target.type === 'crate' ? '[E] DIG CRATE'
                   : (target.type === 'keeper' || target.type === 'npc') ? '[E] TALK'
+                  : target.type === 'cart' ? `[X] ${target.data.label}`
                   : '[E] LOOK';
       pill(label, VIEW_W / 2, VIEW_H - 34);
     }
@@ -4076,8 +4161,8 @@ function drawTitle(time) {
   ctx.fillStyle = '#e0b040';
   ctx.font = 'bold 44px monospace';
   ctx.fillText("RICO'S VINYL QUEST", VIEW_W / 2, 130);
-  ctx.fillStyle = '#f4ecd8';
-  ctx.font = '15px monospace';
+  ctx.fillStyle = '#8fc9bc';
+  ctx.font = 'italic 14px monospace';
   const story = [
     'Your sampler is empty. Your beat is due.',
     'Five legendary records are hiding somewhere in this town \u2014',
@@ -4094,6 +4179,7 @@ function drawTitle(time) {
     'C ....................... cold brew coffee on & off',
     'Y ......................... iced yerba mate on & off',
     'M, OR ON-SCREEN "MUTE" ....................... mute',
+    'X, OR ON-SCREEN "X" ................... buy from carts',
   ];
   controls.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, 320 + i * 20));
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
