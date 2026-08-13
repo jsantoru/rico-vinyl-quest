@@ -1411,8 +1411,19 @@ function drawBuildings(map) {
     const isNectars = b.name === 'Nectars';
     const isJuniors = b.name === "Junior's";
 
+    // wall: outline, base fill, side shading bands, and a darker foundation
+    // strip along the bottom — same layered look as the keeper sprites.
+    const wallDark = shadeColor(b.wall, -30);
+    const wallLight = shadeColor(b.wall, 18);
+    ctx.fillStyle = '#1c140f';
+    ctx.fillRect(px - 1, py - 1, w + 2, h + 2);
     ctx.fillStyle = b.wall;
     ctx.fillRect(px, py, w, h);
+    ctx.fillStyle = wallLight;
+    ctx.fillRect(px, py, 5, h);
+    ctx.fillStyle = wallDark;
+    ctx.fillRect(px + w - 5, py, 5, h);
+    ctx.fillRect(px, py + h - 8, w, 8);
 
     if (isGreenDoorStudio) {
       for (let row = 0; row < 4; row++) {
@@ -1436,19 +1447,36 @@ function drawBuildings(map) {
       ctx.fillRect(px + w - 10, py + 48, 5, 18);
     }
 
+    const roofDark = shadeColor(b.roof, -35);
+    const roofLight = shadeColor(b.roof, 25);
+    ctx.fillStyle = '#1c140f';
+    ctx.fillRect(px - 1, py - 1, w + 2, TILE + 10);
     ctx.fillStyle = b.roof;
     ctx.fillRect(px, py, w, TILE + 8);
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillStyle = roofLight;
+    ctx.fillRect(px, py, w, 4);
+    ctx.fillStyle = roofDark;
+    ctx.fillRect(px, py + TILE + 2, w, 6);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.fillRect(px, py + TILE + 8, w, 3);
 
-    ctx.fillStyle = '#ffe9a0';
     for (let i = 0; i < b.w; i++) {
       if (b.x + i === b.doorX) continue;
       if (i === 0 || i === b.w - 1) continue;
-      ctx.fillRect(px + i * TILE + 8, py + h - TILE - 14, 16, 18);
-      ctx.fillStyle = 'rgba(0,0,0,0.2)';
-      ctx.fillRect(px + i * TILE + 8, py + h - TILE - 6, 16, 2);
-      ctx.fillStyle = '#ffe9a0';
+      const wx = px + i * TILE + 8, wy = py + h - TILE - 14;
+      ctx.fillStyle = '#3a2a1c';                          // frame
+      ctx.fillRect(wx - 2, wy - 2, 20, 22);
+      ctx.fillStyle = '#ffe9a0';                           // glass base
+      ctx.fillRect(wx, wy, 16, 18);
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';                  // lower pane in shadow
+      ctx.fillRect(wx, wy + 9, 16, 9);
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';             // glint, upper-left
+      ctx.fillRect(wx + 1, wy + 1, 5, 5);
+      ctx.fillStyle = '#3a2a1c';                           // muntin cross
+      ctx.fillRect(wx + 7, wy, 2, 18);
+      ctx.fillRect(wx, wy + 8, 16, 2);
+      ctx.fillStyle = '#2a1c12';                           // sill
+      ctx.fillRect(wx - 3, wy + 19, 22, 3);
     }
 
     if (isGreenDoorStudio) {
@@ -1462,9 +1490,15 @@ function drawBuildings(map) {
       const garageDoorW = TILE + 22;   // a little wider so it reads as a proper garage door
       const garageDoorH = TILE - 2;
       
-      // Garage door panels
+      // Garage door panels: outline, base fill, top highlight, bottom shadow
+      ctx.fillStyle = '#1c140f';
+      ctx.fillRect(garageDoorX - 2, garageDoorY - 2, garageDoorW + 4, garageDoorH + 2);
       ctx.fillStyle = '#3a3a3e';
       ctx.fillRect(garageDoorX, garageDoorY, garageDoorW, garageDoorH);
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.fillRect(garageDoorX, garageDoorY, garageDoorW, 5);
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
+      ctx.fillRect(garageDoorX, garageDoorY + garageDoorH - 6, garageDoorW, 6);
       
       // Panel lines (horizontal + vertical ribs)
       ctx.strokeStyle = '#2a2a2e';
@@ -1527,9 +1561,19 @@ function drawBuildings(map) {
       // "3rd Thursdays" hip-hop night flyer taped in a window near the entrance
       drawThursPoster(dx - TILE - 4, py + h - TILE - 18);
     } else {
-      // Standard door for other buildings
+      // Standard door for other buildings: outline, frame, shaded panels, handle
+      const doorXi = dx + 4, doorY = py + h - TILE + 2, doorW = TILE - 8, doorH = TILE - 2;
+      ctx.fillStyle = '#1c140f';
+      ctx.fillRect(doorXi - 2, doorY - 3, doorW + 4, doorH + 3);
       ctx.fillStyle = '#3a2414';
-      ctx.fillRect(dx + 4, py + h - TILE + 2, TILE - 8, TILE - 2);
+      ctx.fillRect(doorXi, doorY, doorW, doorH);
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';                  // shadowed half
+      ctx.fillRect(doorXi, doorY, doorW / 2, doorH);
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';            // lit half
+      ctx.fillRect(doorXi + doorW / 2, doorY, doorW / 2 - 1, doorH);
+      ctx.fillStyle = '#241811';                           // recessed panels
+      ctx.fillRect(doorXi + 3, doorY + 4, doorW - 6, doorH * 0.4);
+      ctx.fillRect(doorXi + 3, doorY + doorH * 0.5, doorW - 6, doorH * 0.4);
       ctx.fillStyle = '#e0c060';
       ctx.fillRect(dx + TILE - 12, py + h - 16, 3, 3);
     }
@@ -1545,9 +1589,14 @@ function drawBuildings(map) {
 
     // Draw building name sign (skip for Nectar's - uses neon sign instead)
     if (!isNectars) {
-      ctx.fillStyle = '#f4ecd8';
       const sw = Math.min(w - 10, b.name.length * 9 + 14);
-      ctx.fillRect(px + (w - sw) / 2, py + 6, sw, 20);
+      const sx = px + (w - sw) / 2, sy = py + 6;
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fillRect(sx + 2, sy + 2, sw, 20);
+      ctx.fillStyle = '#1c140f';
+      ctx.fillRect(sx - 1, sy - 1, sw + 2, 22);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.fillRect(sx, sy, sw, 20);
       ctx.fillStyle = '#2a2020';
       ctx.font = 'bold 12px monospace';
       ctx.textAlign = 'center';
@@ -3146,6 +3195,20 @@ function drawDeliSeatingArea() {
 // ---------------------------------------------------------------- keeper
 const KEEPER_HAIR = { DEE: '#5a2e1c', ROSIE: '#c8c0b0', ZEKE: '#241a12', JADE: '#141014', TONY: '#2a2018' };
 
+// Optional per-keeper artwork. Drop a PNG at assets/keepers/<name>.png (any
+// size — it's scaled to KEEPER_SPR_H, feet anchored at the same floor line
+// the procedural sprite uses) and it's picked up automatically. Until a file
+// exists (or while it's still loading), drawKeeper falls back to the shaded
+// procedural sprite below, so nothing ever renders blank.
+const KEEPER_NAMES = ['SK1', 'DEE', 'ROSIE', 'ZEKE', 'JADE', 'TONY'];
+const KEEPER_SPR_H = 64;
+const keeperImgs = {};
+KEEPER_NAMES.forEach((name) => {
+  const img = new Image();
+  img.src = `assets/keepers/${name.toLowerCase()}.png`;
+  keeperImgs[name] = img;
+});
+
 function drawAnt(cx, cy, s) {
   // A white ant silhouette (the Anthill Collective mark), drawn on SK1's hat.
   // Side profile: head + antennae at the front-right, thorax, big abdomen at the rear.
@@ -3174,6 +3237,19 @@ function drawAnt(cx, cy, s) {
 
 function drawKeeper(k) {
   const px = k.x * TILE, py = k.y * TILE;
+
+  // ground shadow (shared by both the image and procedural paths)
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(px + 8, py + 26, 16, 4);
+
+  const img = keeperImgs[k.name];
+  if (img && img.complete && img.naturalWidth) {
+    const kh = KEEPER_SPR_H;
+    const kw = Math.round(kh * img.naturalWidth / img.naturalHeight);
+    ctx.drawImage(img, Math.round(px + 16 - kw / 2), Math.round(py + 30 - kh), kw, kh);
+    return;
+  }
+
   const outline = '#1c140f';
   const shirtDark = shadeColor(k.shirt, -45);
   const shirtLight = shadeColor(k.shirt, 35);
@@ -3181,10 +3257,6 @@ function drawKeeper(k) {
   const skinLight = shadeColor(k.skin, 22);
   const hair = KEEPER_HAIR[k.name] || '#241a14';
   const hairDark = shadeColor(hair, -35);
-
-  // ground shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.fillRect(px + 8, py + 26, 16, 4);
 
   // torso: outline, base shirt, shadowed side, highlighted side
   ctx.fillStyle = outline;
