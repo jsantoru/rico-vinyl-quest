@@ -68,10 +68,33 @@ ctx.imageSmoothingEnabled = false;
     #dpadDown  { left: 56px; bottom: 14px; width: 46px; height: 46px; font-size: 15px; }
     #dpadLeft  { left: 4px;  bottom: 40px; width: 46px; height: 46px; font-size: 15px; }
     #dpadRight { left: 108px; bottom: 40px; width: 46px; height: 46px; font-size: 15px; }
-    /* action cluster, tucked into the bottom-right corner */
+    /* action cluster, tucked into the bottom-right corner. "Extras" sits
+       where a fourth always-visible button would've gone, and instead
+       pops a small stacked menu open above it on tap — keeps the resting
+       footprint identical to just E + MUTE + one more button. */
     #btnE { right: 14px; bottom: 14px; width: 62px; height: 62px; border-radius: 50%; font-size: 16px; }
-    #btnB { right: 86px; bottom: 64px; width: 40px; height: 40px; border-radius: 50%; font-size: 9px; }
+    #btnExtras { right: 86px; bottom: 64px; width: 40px; height: 40px; border-radius: 50%; font-size: 16px; }
     #btnM { right: 86px; bottom: 14px; width: 40px; height: 40px; border-radius: 50%; font-size: 9px; }
+    #extrasPanel {
+      position: absolute;
+      right: 86px; bottom: 112px;
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      pointer-events: none;
+    }
+    #extrasPanel.open { display: flex; pointer-events: auto; }
+    #extrasPanel .tc-btn {
+      position: static;
+      width: 58px; height: 30px;
+      border-radius: 8px;
+      font-size: 9px;
+    }
+    #extrasPanel .tc-btn.tc-on {
+      background: rgba(224,176,64,0.4);
+      border-color: rgba(224,176,64,0.9);
+      color: #f4ecd8;
+    }
   `;
   document.head.appendChild(style);
 
@@ -201,6 +224,9 @@ window.addEventListener('keydown', (e) => {
     if (k === 'e' || k === 'enter' || k === 'z' || k === ' ') interactPressed = true;
     if (k === 'b') toggleSkate();
     if (k === 'm') music.toggleMute();
+    if (k === 'c') toggleCoffee();
+    if (k === 'y') toggleTea();
+    if (k === 'h') toggleHeadphones();
   }
   keys[k] = true;
   music.start(); // audio needs a user gesture
@@ -515,6 +541,7 @@ const maps = { town, ...shops, swamp };
 const player = {
   map: 'town', x: 19.5 * TILE, y: 12.5 * TILE,
   dir: 'down', moving: false, skating: false, animT: 0,
+  holdingCoffee: false, holdingTea: false, wearingHeadphones: false,
 };
 const collected = new Set();
 let state = 'splash'; // splash | title | play | dialog | record | win
@@ -527,6 +554,28 @@ function toggleSkate() {
   if (state !== 'play' || !maps[player.map].outside) return;
   player.skating = !player.skating;
   toast = { text: player.skating ? 'Skateboard: ON' : 'Skateboard: OFF', t: 1.2 };
+}
+
+// Cold brew and iced tea share the same hand, so picking one up puts the
+// other down — just like Rico only has two hands to work with.
+function toggleCoffee() {
+  if (state !== 'play') return;
+  player.holdingCoffee = !player.holdingCoffee;
+  if (player.holdingCoffee) player.holdingTea = false;
+  toast = { text: player.holdingCoffee ? 'Cold Brew: ON' : 'Cold Brew: OFF', t: 1.2 };
+}
+
+function toggleTea() {
+  if (state !== 'play') return;
+  player.holdingTea = !player.holdingTea;
+  if (player.holdingTea) player.holdingCoffee = false;
+  toast = { text: player.holdingTea ? 'Yerba Mate: ON' : 'Yerba Mate: OFF', t: 1.2 };
+}
+
+function toggleHeadphones() {
+  if (state !== 'play') return;
+  player.wearingHeadphones = !player.wearingHeadphones;
+  toast = { text: player.wearingHeadphones ? 'Headphones: ON' : 'Headphones: OFF', t: 1.2 };
 }
 
 // ---------------------------------------------------------------- audio
@@ -1080,15 +1129,39 @@ function createTouchControls() {
   bindTap(eBtn, () => { interactPressed = true; music.start(); });
   wrap.appendChild(eBtn);
 
-  const bBtn = document.createElement('div');
-  bBtn.id = 'btnB'; bBtn.className = 'tc-btn'; bBtn.textContent = 'SK8';
-  bindTap(bBtn, () => { toggleSkate(); music.start(); });
-  wrap.appendChild(bBtn);
-
   const mBtn = document.createElement('div');
   mBtn.id = 'btnM'; mBtn.className = 'tc-btn'; mBtn.textContent = 'MUTE';
   bindTap(mBtn, () => { music.toggleMute(); music.start(); });
   wrap.appendChild(mBtn);
+
+  // "Extras" — a small popup menu (skateboard, cold brew, iced tea,
+  // headphones) so the resting button cluster stays minimal instead of
+  // growing a permanent button for every toggle.
+  const extrasPanel = document.createElement('div');
+  extrasPanel.id = 'extrasPanel';
+  const extras = [
+    ['SK8',   () => toggleSkate(),      () => player.skating],
+    ['BREW',  () => toggleCoffee(),     () => player.holdingCoffee],
+    ['MATE',  () => toggleTea(),        () => player.holdingTea],
+    ['FONES', () => toggleHeadphones(), () => player.wearingHeadphones],
+  ];
+  extras.forEach(([label, action, isOn]) => {
+    const btn = document.createElement('div');
+    btn.className = 'tc-btn';
+    btn.textContent = label;
+    bindTap(btn, () => {
+      action();
+      music.start();
+      btn.classList.toggle('tc-on', isOn());
+    });
+    extrasPanel.appendChild(btn);
+  });
+  wrap.appendChild(extrasPanel);
+
+  const extrasBtn = document.createElement('div');
+  extrasBtn.id = 'btnExtras'; extrasBtn.className = 'tc-btn'; extrasBtn.textContent = '☰';
+  bindTap(extrasBtn, () => { extrasPanel.classList.toggle('open'); music.start(); });
+  wrap.appendChild(extrasBtn);
 
   document.body.appendChild(wrap);
 }
@@ -1282,13 +1355,13 @@ function drawTiles(map, time, camX = 0, camY = 0) {
       }
       switch (ch) {
         case 'r': {
-          ctx.fillStyle = '#312f36';
+          // simplified, lighter road surface — flat color with a single
+          // soft edge shade instead of layered insets/speckle, so the
+          // street grid stays calm and doesn't compete with the map
+          ctx.fillStyle = '#9a98a0';
           ctx.fillRect(px, py, TILE, TILE);
-          ctx.fillStyle = '#44424a';
-          ctx.fillRect(px + 2, py + 1, TILE - 4, TILE - 4);
-          ctx.fillStyle = '#54525c';
-          ctx.fillRect(px + 2, py + 1, TILE - 4, 3);
-          if (h % 6 === 0) { ctx.fillStyle = '#605e68'; ctx.fillRect(px + (h % 18), py + ((h >> 3) % 22) + 4, 4, 3); }
+          ctx.fillStyle = 'rgba(0,0,0,0.06)';
+          ctx.fillRect(px, py + TILE - 2, TILE, 2);
           break;
         }
         case '#': drawTree(px, py, map); break;
@@ -1658,28 +1731,28 @@ function drawBuildings(map) {
     if (isThrift) drawThursPoster(px + 6, py + 40);
 
     // Draw building name sign (skip for Nectar's - uses neon sign instead).
-    // Bigger, bolder lettering with a heavier backing plate and a text
-    // outline so the name pops against every wall color.
+    // High-contrast dark plate + bright bold lettering, auto-sized to the
+    // name so it always fits cleanly and never overlaps or crowds.
     if (!isNectars) {
-      const sw = Math.min(w + 14, b.name.length * 12 + 20);
-      const sh = 26;
-      const sx = px + (w - sw) / 2, sy = py + 2;
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      const maxTextW = w + 26;
+      let fsize = 17;
+      ctx.font = 'bold ' + fsize + 'px monospace';
+      while (fsize > 11 && ctx.measureText(b.name).width > maxTextW) {
+        fsize--;
+        ctx.font = 'bold ' + fsize + 'px monospace';
+      }
+      const textW = ctx.measureText(b.name).width;
+      const sw = textW + 22, sh = fsize + 15;
+      const sx = px + (w - sw) / 2, sy = py + 3;
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
       ctx.fillRect(sx + 2, sy + 3, sw, sh);
-      ctx.fillStyle = '#1c140f';
-      ctx.fillRect(sx - 2, sy - 2, sw + 4, sh + 4);
-      ctx.fillStyle = '#f4ecd8';
+      ctx.fillStyle = '#120e0a';
       ctx.fillRect(sx, sy, sw, sh);
+      ctx.fillStyle = b.roof || '#e0b040';
+      ctx.fillRect(sx, sy + sh - 3, sw, 3);
       ctx.textAlign = 'center';
-      ctx.font = 'bold 16px monospace';
-      const tcx = px + w / 2, tcy = sy + sh / 2 + 6;
-      // heavy dark outline first so the name reads clearly at a glance,
-      // then a bright fill on top for extra pop
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = '#1c140f';
-      ctx.strokeText(b.name, tcx, tcy);
-      ctx.fillStyle = '#2a2020';
-      ctx.fillText(b.name, tcx, tcy);
+      ctx.fillStyle = '#f9f2e0';
+      ctx.fillText(b.name, px + w / 2, sy + sh / 2 + fsize * 0.36);
     }
   }
 }
@@ -1994,6 +2067,7 @@ function drawTownDecorations(time) {
   drawYardSign(25 * TILE - 10, 20 * TILE);
   drawFountainArea(time);
   drawCenterStretch();
+  drawIceCreamVan();
 }
 
 // ----------------------------------------------------------------------
@@ -2587,6 +2661,91 @@ function drawCoffeeCart() {
   ctx.fillStyle = '#e9d5ad';
   ctx.fillRect(x + 39, y + 20, 6, 1);
   ctx.fillRect(x + 39, y + 23, 5, 1);
+}
+
+// A little hippie-creamery ice cream van, tucked into the map's lower-right
+// corner. Purely cosmetic (like the coffee cart / deli scene), not a
+// building — the player can't walk into it or enter it.
+function drawIceCreamVan() {
+  const x = 35.2 * TILE, y = 21.4 * TILE;
+  const w = 92, h = 48;
+
+  // ground shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath();
+  ctx.ellipse(x + w / 2, y + h + 4, w / 2 + 2, 6, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // wheels
+  ctx.fillStyle = '#1c1a20';
+  ctx.beginPath(); ctx.arc(x + 18, y + h - 2, 8, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + w - 18, y + h - 2, 8, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#54525c';
+  ctx.beginPath(); ctx.arc(x + 18, y + h - 2, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + w - 18, y + h - 2, 3, 0, Math.PI * 2); ctx.fill();
+
+  // van body — cream base with a mint-green roof band
+  ctx.fillStyle = '#f4ecd8';
+  ctx.fillRect(x, y + 14, w, h - 22);
+  ctx.fillStyle = '#5fa38a';
+  ctx.fillRect(x, y, w, 16);
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  ctx.fillRect(x, y + 14, w, 3);
+
+  // gentle cow-spot pattern on the lower panel, callback to Vermont dairy
+  // country rather than any specific brand's trade dress
+  ctx.fillStyle = 'rgba(40,34,30,0.55)';
+  const spotRng = coverRng('icecreamvan');
+  for (let i = 0; i < 6; i++) {
+    const sx2 = x + 6 + spotRng() * (w - 12), sy2 = y + 20 + spotRng() * (h - 30);
+    ctx.beginPath();
+    ctx.ellipse(sx2, sy2, 5 + spotRng() * 4, 3 + spotRng() * 3, spotRng() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // serving window with an awning
+  const winX = x + w - 34, winY = y + 16, winW = 26, winH = 14;
+  ctx.fillStyle = '#dff0ea';
+  ctx.fillRect(winX, winY, winW, winH);
+  ctx.strokeStyle = '#3a2e20';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(winX, winY, winW, winH);
+  ctx.fillStyle = '#d8604a';
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath();
+    ctx.moveTo(winX + i * (winW / 4), winY - 1);
+    ctx.lineTo(winX + (i + 0.5) * (winW / 4), winY - 8);
+    ctx.lineTo(winX + (i + 1) * (winW / 4), winY - 1);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // windshield up front
+  ctx.fillStyle = '#cfe6f2';
+  ctx.fillRect(x + 4, y + 17, 16, 11);
+  ctx.strokeStyle = '#3a2e20';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(x + 4, y + 17, 16, 11);
+
+  // soft-serve cone sign mounted on the roof
+  const cx = x + w * 0.42, cy = y - 8;
+  ctx.fillStyle = '#e8c078';
+  ctx.beginPath();
+  ctx.moveTo(cx - 5, cy + 2); ctx.lineTo(cx + 5, cy + 2); ctx.lineTo(cx, cy + 12);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#f4ecd8';
+  ctx.beginPath();
+  ctx.arc(cx, cy - 3, 6, Math.PI, 0); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx - 3, cy - 6, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 3, cy - 6, 4, 0, Math.PI * 2); ctx.fill();
+
+  // hand-painted name banner along the body
+  ctx.fillStyle = '#3a2e20';
+  ctx.font = 'bold 8px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('UDDERLY GOOD', x + w * 0.36, y + h - 8);
+  ctx.font = '6px monospace';
+  ctx.fillText('CREAMERY', x + w * 0.36, y + h - 1);
 }
 
 function drawAnthillBillboard() {
@@ -3426,6 +3585,72 @@ function drawPlayer(time) {
     ctx.fillStyle = '#d0a060';
     ctx.fillRect(player.x - 8, footY - 40, 16, 40);
   }
+
+  const spriteTopY = footY - SPR_H - (player.skating ? 4 : 0) + bob;
+  if (player.wearingHeadphones) drawPlayerHeadphones(spriteTopY);
+  if (player.holdingCoffee) drawPlayerColdBrew(spriteTopY);
+  if (player.holdingTea) drawPlayerIcedTea(spriteTopY);
+}
+
+// White over-ear headphones sitting on top of Rico's head — a band arcing
+// over the crown plus a rounded cup on each side.
+function drawPlayerHeadphones(spriteTopY) {
+  const hx = player.x, hy = spriteTopY + 9;
+  ctx.strokeStyle = '#f4f4f4';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(hx, hy + 5, 11, Math.PI * 1.08, Math.PI * 1.92);
+  ctx.stroke();
+  for (const side of [-1, 1]) {
+    const ex = hx + side * 11;
+    ctx.fillStyle = '#f4f4f4';
+    ctx.beginPath();
+    ctx.ellipse(ex, hy + 8, 4, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#c4c4c4';
+    ctx.beginPath();
+    ctx.ellipse(ex, hy + 8, 2.2, 3.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// A cold brew coffee, iced and dark, in a to-go cup with a straw — held at
+// Rico's side.
+function drawPlayerColdBrew(spriteTopY) {
+  const hx = player.x + 13, hy = spriteTopY + SPR_H * 0.5;
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(hx - 5, hy + 13, 10, 2);
+  ctx.fillStyle = '#efe9dc';
+  ctx.fillRect(hx - 4, hy, 8, 13);
+  ctx.fillStyle = '#3a2617';
+  ctx.fillRect(hx - 3, hy + 3, 6, 9);
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.fillRect(hx - 3, hy + 4, 1, 6);
+  ctx.fillStyle = '#cfcac0';
+  ctx.fillRect(hx - 5, hy - 2, 10, 3);
+  ctx.strokeStyle = '#f4ecd8';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(hx + 1, hy - 2);
+  ctx.lineTo(hx + 3, hy - 9);
+  ctx.stroke();
+}
+
+// A yellow can of iced yerba mate tea, held at Rico's side.
+function drawPlayerIcedTea(spriteTopY) {
+  const hx = player.x + 13, hy = spriteTopY + SPR_H * 0.5;
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(hx - 5, hy + 14, 10, 2);
+  ctx.fillStyle = '#e8c020';
+  ctx.fillRect(hx - 4, hy, 8, 14);
+  ctx.fillStyle = '#c8a010';
+  ctx.fillRect(hx - 4, hy, 8, 2);
+  ctx.fillRect(hx - 4, hy + 12, 8, 2);
+  ctx.fillStyle = '#3a6a2a';
+  ctx.fillRect(hx - 3, hy + 5, 6, 5);
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.fillRect(hx - 3, hy + 2, 1, 8);
 }
 
 // ---------------------------------------------------------------- UI
@@ -3740,6 +3965,12 @@ function drawAlbumArt(x, y, s, r) {
     }
   }
 
+  // subtle shadow along the bottom edge, like light catching the inside
+  // lip of the sleeve — drawn before the wear pass and the frame stroke
+  // so it never breaks the border that boxes the whole cover in
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.fillRect(x, y + s - 22, s, 22);
+
   drawCoverWear(x, y, s, rng);
   ctx.restore();
   ctx.strokeStyle = 'rgba(0,0,0,0.5)';
@@ -3760,8 +3991,6 @@ function drawRecordCard() {
 
   const sx = x + 36, sy = y + 60, ss = 150;
   drawAlbumArt(sx, sy, ss, r);
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.fillRect(sx, sy + ss - 26, ss, 26);
   ctx.fillStyle = '#0c0a10';
   ctx.beginPath();
   ctx.arc(sx + ss + 40, sy + ss / 2, 70, 0, Math.PI * 2);
@@ -3892,13 +4121,16 @@ function drawTitle(time) {
   const controls = [
     'ARROWS / WASD, OR THE ON-SCREEN D-PAD .... move',
     'E, OR THE ON-SCREEN E BUTTON ... talk / dig crates',
-    'B, OR ON-SCREEN "SKATE" ...... skateboard on & off',
+    'B, OR ON-SCREEN "SK8" ........ skateboard on & off',
+    'C ....................... cold brew coffee on & off',
+    'Y ......................... iced yerba mate on & off',
+    'H .............................. headphones on & off',
     'M, OR ON-SCREEN "MUTE" ....................... mute',
   ];
-  controls.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, 330 + i * 22));
+  controls.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, 320 + i * 20));
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
   ctx.font = 'bold 18px monospace';
-  ctx.fillText('- PRESS E TO START -', VIEW_W / 2, 480);
+  ctx.fillText('- PRESS E TO START -', VIEW_W / 2, 500);
 }
 
 function drawWin() {
