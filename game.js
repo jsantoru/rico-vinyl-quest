@@ -620,7 +620,16 @@ const music = {
 
   pump() {
     const stepDur = 60 / this.BPM / 4;
-    while (this.nextTime < this.ctx.currentTime + 0.15) {
+    // If something stalled the main thread for a long stretch (tab backgrounded,
+    // a very long GC pause, etc.), don't dump a burst of overdue notes all at
+    // once — just resync a beat ahead and carry on from there.
+    if (this.nextTime < this.ctx.currentTime - 0.5) {
+      this.nextTime = this.ctx.currentTime + 0.05;
+    }
+    // Scheduled well ahead of real time (not just ~1 frame) so a slow
+    // render frame in the busy outdoor map can't cause the scheduler to
+    // fall behind and produce audible stutter/catch-up bursts.
+    while (this.nextTime < this.ctx.currentTime + 0.4) {
       this.schedule(this.step, this.nextTime, stepDur);
       this.step = (this.step + 1) % 32;
       this.nextTime += stepDur;
