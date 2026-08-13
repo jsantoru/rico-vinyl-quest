@@ -292,15 +292,17 @@ function makeOverworld() {
   // lead-in to a larger lake that will live on the map above this one.
   // ------------------------------------------------------------------
   // open the water at the very top so it continues into the map above
-  for (let x = 15; x <= 27; x++) { g[0][x] = '~'; g[1][x] = '~'; g[2][x] = '~'; }
-  // lake body with an irregular southern shore (kept clear of Hey Bud on col 28)
-  const lakeBottom = { 17:3, 18:4, 19:5, 20:6, 21:7, 22:7, 23:7, 24:6, 25:6, 26:5, 27:4 };
+  for (let x = 17; x <= 23; x++) { g[0][x] = '~'; g[1][x] = '~'; g[2][x] = '~'; }
+  // a small inlet that only funnels here - it's about to open up into the
+  // bigger lake on the map above, so it stays narrow and shallow.
+  const lakeBottom = { 17:3, 18:4, 19:4, 20:4, 21:4, 22:4, 23:3 };
   for (const xs in lakeBottom) {
     const x = +xs, b = lakeBottom[xs];
     for (let y = 3; y <= b; y++) g[y][x] = '~';
   }
-  // wooden docks reaching out from the shore into the lake
-  for (const [dx, top, bottom] of [[20, 4, 7], [25, 4, 7]]) {
+  // wooden docks reaching out from the shore into the lake (kept clear of the
+  // vertical road columns 19-20)
+  for (const [dx, top, bottom] of [[18, 3, 5], [22, 3, 5]]) {
     for (let y = top; y <= bottom; y++) g[y][dx] = 'b';
   }
 
@@ -1702,6 +1704,7 @@ function drawTownDecorations(time) {
   drawYardSign(25 * TILE - 10, 20 * TILE);
   drawFountainArea(time);
   drawLakeFringe(time);
+  drawSailboat(time);
   drawVillage(time);
 }
 
@@ -1709,8 +1712,8 @@ function drawTownDecorations(time) {
 // lake. The planks themselves are the 'b' boardwalk tiles in the grid.
 function drawLakeFringe(time) {
   const docks = [
-    { x: 20, y: 4, boat: true },
-    { x: 25, y: 4, boat: false },
+    { x: 18, y: 3, boat: true },
+    { x: 22, y: 3, boat: false },
   ];
   for (const d of docks) {
     const px = d.x * TILE, py = d.y * TILE;
@@ -1741,6 +1744,54 @@ function drawLakeFringe(time) {
       ctx.stroke();
     }
   }
+}
+
+// A little sailboat bobbing in the open water at the mouth of the lake.
+function drawSailboat(time) {
+  const bob = Math.sin(time * 2.0);
+  const bx = 20 * TILE + 26;             // near the mouth of the lake
+  const by = 1 * TILE + 8 + bob * 3;     // gentle up/down bob
+
+  // wake ripples around the hull
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(bx - 8, by + 16, 6, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(bx + 2, by + 16, 10, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.beginPath(); ctx.moveTo(bx - 4, by + 13); ctx.lineTo(bx + 38, by + 13); ctx.stroke();
+
+  // wooden hull
+  ctx.fillStyle = '#6b4424';
+  ctx.beginPath();
+  ctx.moveTo(bx, by); ctx.lineTo(bx + 34, by);
+  ctx.lineTo(bx + 30, by + 11); ctx.lineTo(bx + 4, by + 11);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#8a5230';
+  ctx.fillRect(bx + 3, by + 2, 26, 2);
+
+  // mast
+  ctx.strokeStyle = '#5a3a20';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(bx + 15, by); ctx.lineTo(bx + 15, by - 27); ctx.stroke();
+
+  // white mainsail
+  ctx.fillStyle = '#f4f1e6';
+  ctx.beginPath();
+  ctx.moveTo(bx + 16, by - 25); ctx.lineTo(bx + 34, by - 1); ctx.lineTo(bx + 16, by - 1);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(180,170,150,0.6)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(bx + 16, by - 25); ctx.lineTo(bx + 16, by - 1); ctx.stroke();
+
+  // small jib sail at the bow
+  ctx.fillStyle = '#e9e6d3';
+  ctx.beginPath();
+  ctx.moveTo(bx + 14, by - 1); ctx.lineTo(bx + 14, by - 22); ctx.lineTo(bx + 1, by - 1);
+  ctx.closePath(); ctx.fill();
+
+  // tiny flag on the mast
+  ctx.fillStyle = '#d84030';
+  ctx.fillRect(bx + 16, by - 30, 8, 3);
 }
 
 // The village nook: a white church with a red roof/steeple, and a row of
@@ -2344,13 +2395,15 @@ function drawCoffeeCart() {
 }
 
 function drawAnthillBillboard() {
-  const x = 14 * TILE;
-  const y = 4 * TILE;
+  // Stands on the grass bank at the lake's west shoreline (rows 1-2, x10-14.7),
+  // so the whole board rests on land with the water just to its east.
+  const x = 10 * TILE;
+  const y = 1 * TILE;
   const w = 150, h = 54;
 
   ctx.fillStyle = '#553c2b';
   ctx.fillRect(x + 15, y + h, 7, 38);
-  ctx.fillRect(x + w - 22, y + h, 7, 38);
+  ctx.fillRect(x + 120, y + h, 7, 38);
 
   ctx.fillStyle = '#29242a';
   ctx.fillRect(x - 4, y - 4, w + 8, h + 8);
@@ -3242,56 +3295,4 @@ function drawTitle(time) {
   const story = [
     'Your sampler is empty. Your beat is due.',
     'Five legendary records are hiding somewhere in this town \u2014',
-    'in shop crates, diner backrooms, and flea market stalls.',
-    'Dig them ALL up and the whole town hears your beat come alive.',
-  ];
-  story.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, 190 + i * 26));
-  ctx.fillStyle = '#9a90a8';
-  ctx.font = '13px monospace';
-  const controls = [
-    'ARROWS / WASD, OR THE ON-SCREEN D-PAD .... move',
-    'E, OR THE ON-SCREEN E BUTTON ... talk / dig crates',
-    'B, OR ON-SCREEN "SKATE" ...... skateboard on & off',
-    'M, OR ON-SCREEN "MUTE" ....................... mute',
-  ];
-  controls.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, 330 + i * 22));
-  ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
-  ctx.font = 'bold 18px monospace';
-  ctx.fillText('- PRESS E TO START -', VIEW_W / 2, 480);
-}
-
-function drawWin() {
-  ctx.fillStyle = 'rgba(8,6,12,0.88)';
-  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#e0b040';
-  ctx.font = 'bold 40px monospace';
-  ctx.fillText('BEAT COMPLETE!', VIEW_W / 2, 120);
-  ctx.fillStyle = '#f4ecd8';
-  ctx.font = '15px monospace';
-  ctx.fillText('All five samples on the pads. The whole town is bumping your track.', VIEW_W / 2, 165);
-  worldPadOrder().forEach((id, i) => {
-    const r = worldRecords()[id];
-    const x = VIEW_W / 2 - 230 + i * 92, y = 210;
-    ctx.fillStyle = r.color;
-    ctx.fillRect(x, y, 76, 76);
-    ctx.fillStyle = '#181418';
-    ctx.font = 'bold 13px monospace';
-    ctx.fillText(r.pad, x + 38, y + 44);
-    ctx.fillStyle = '#c8c0d8';
-    ctx.font = '10px monospace';
-    ctx.fillText(r.sample, x + 38, y + 96);
-  });
-  ctx.fillStyle = '#9a90a8';
-  ctx.font = '13px monospace';
-  ctx.fillText('Rico’s next beat tape: certified classic.', VIEW_W / 2, 360);
-  ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
-  ctx.font = 'bold 15px monospace';
-  ctx.fillText('- PRESS E TO KEEP CRUISING -', VIEW_W / 2, 420);
-}
-
-requestAnimationFrame(frame);
-
-// debug/test handle
-window.__rico = { player, maps, collected, getState: () => state };
-})();
+    'in shop crates, diner backrooms, and 
