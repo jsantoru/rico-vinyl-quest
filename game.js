@@ -41,27 +41,37 @@ ctx.imageSmoothingEnabled = false;
     @media (pointer: coarse) {
       #touchControls { display: block; }
     }
+    /* Minimal touch layout: every control is pulled into the true screen
+       corners and kept small + low-opacity at rest so it stays out of the
+       way of the map. Buttons brighten on touch for clear feedback. */
     #touchControls .tc-btn {
       position: absolute;
       pointer-events: auto;
       display: flex; align-items: center; justify-content: center;
-      background: rgba(244,236,216,0.15);
-      border: 2px solid rgba(244,236,216,0.55);
-      border-radius: 12px;
-      color: #f4ecd8;
-      font: bold 13px monospace;
+      background: rgba(244,236,216,0.08);
+      border: 1.5px solid rgba(244,236,216,0.35);
+      border-radius: 10px;
+      color: rgba(244,236,216,0.85);
+      font: bold 12px monospace;
       -webkit-user-select: none; user-select: none;
       -webkit-touch-callout: none;
       touch-action: none;
+      transition: background 0.1s, border-color 0.1s;
     }
-    #touchControls .tc-btn:active { background: rgba(244,236,216,0.35); }
-    #dpadUp    { left: 68px;  bottom: 156px; width: 56px; height: 56px; font-size: 18px; }
-    #dpadDown  { left: 68px;  bottom: 88px;  width: 56px; height: 56px; font-size: 18px; }
-    #dpadLeft  { left: 18px;  bottom: 122px; width: 56px; height: 56px; font-size: 18px; }
-    #dpadRight { left: 118px; bottom: 122px; width: 56px; height: 56px; font-size: 18px; }
-    #btnE { right: 22px;  bottom: 116px; width: 78px; height: 78px; border-radius: 50%; font-size: 20px; }
-    #btnB { right: 114px; bottom: 148px; width: 54px; height: 54px; border-radius: 50%; }
-    #btnM { right: 114px; bottom: 78px;  width: 54px; height: 54px; border-radius: 50%; }
+    #touchControls .tc-btn:active {
+      background: rgba(244,236,216,0.32);
+      border-color: rgba(244,236,216,0.7);
+      color: #f4ecd8;
+    }
+    /* compact d-pad, tucked into the bottom-left corner */
+    #dpadUp    { left: 56px; bottom: 66px; width: 46px; height: 46px; font-size: 15px; }
+    #dpadDown  { left: 56px; bottom: 14px; width: 46px; height: 46px; font-size: 15px; }
+    #dpadLeft  { left: 4px;  bottom: 40px; width: 46px; height: 46px; font-size: 15px; }
+    #dpadRight { left: 108px; bottom: 40px; width: 46px; height: 46px; font-size: 15px; }
+    /* action cluster, tucked into the bottom-right corner */
+    #btnE { right: 14px; bottom: 14px; width: 62px; height: 62px; border-radius: 50%; font-size: 16px; }
+    #btnB { right: 86px; bottom: 64px; width: 40px; height: 40px; border-radius: 50%; font-size: 9px; }
+    #btnM { right: 86px; bottom: 14px; width: 40px; height: 40px; border-radius: 50%; font-size: 9px; }
   `;
   document.head.appendChild(style);
 
@@ -299,15 +309,16 @@ function makeOverworld() {
     // ambient life lanes for this map (which road rows each spawns on)
     ambient: { bikeRows: [9, 10], walkerRow: 12, dogRow: 23 },
   };
-  // Talkable townsfolk: Krishna (guitarist by the deli garbage can) and
-  // Willie (the painter out front of Green Door Studio).
+  // Talkable townsfolk: Gary (the old hippy guitarist by the deli garbage
+  // can) and Willie (the painter out front of Green Door Studio).
   map.npcs = [
-    { id: 'krishna', tx: 5, ty: 18, name: 'KRISHNA',
+    { id: 'gary', tx: 5, ty: 19, name: 'GARY',
       lines: [
-        'Hey there — I\'m Krishna. Music, yoga, and good energy, that\'s my whole wavelength. What\'s bringing you this way?',
-        'Me, Rico and Tha Truth roll together as Solo Lexicon — we play shows all over Vermont. Real soulful crew.',
-        'This corner by the trash can has the best acoustics in town. Junk never judged a good tune yet.',
-        'Feeling heavy? Sit, breathe, play a chord. The drop\'s always worth waiting for.'
+        'Hey there, friend, name is Gary. Been playing guitar by this can since before you were born. Good vibes only.',
+        'You ever really listen to "Terrapin Station"? Like really sit with it? Man, 1977, Cornell, no wait, the Barton Hall run, I mean the studio cut, well actually...',
+        'That one bootleg with the thirty-minute "Dark Star" — okay so it is technically two "Dark Star"s stitched together, but hear me out —',
+        'Oh, and do not get me started on Phish. Trey is a genius. That "Tweezer" into "Piper" at the Deer Creek show? I was THERE, man, I was—',
+        'Anyway... peace! I am out!'
       ] },
     { id: 'willie', tx: 5, ty: 8, name: 'WILLIE',
       lines: [
@@ -1070,7 +1081,7 @@ function createTouchControls() {
   wrap.appendChild(eBtn);
 
   const bBtn = document.createElement('div');
-  bBtn.id = 'btnB'; bBtn.className = 'tc-btn'; bBtn.textContent = 'SKATE';
+  bBtn.id = 'btnB'; bBtn.className = 'tc-btn'; bBtn.textContent = 'SK8';
   bindTap(bBtn, () => { toggleSkate(); music.start(); });
   wrap.appendChild(bBtn);
 
@@ -1646,20 +1657,29 @@ function drawBuildings(map) {
     // "3rd Thursdays" flyer on the outside wall of Pure Pop Records
     if (isThrift) drawThursPoster(px + 6, py + 40);
 
-    // Draw building name sign (skip for Nectar's - uses neon sign instead)
+    // Draw building name sign (skip for Nectar's - uses neon sign instead).
+    // Bigger, bolder lettering with a heavier backing plate and a text
+    // outline so the name pops against every wall color.
     if (!isNectars) {
-      const sw = Math.min(w - 10, b.name.length * 9 + 14);
-      const sx = px + (w - sw) / 2, sy = py + 6;
-      ctx.fillStyle = 'rgba(0,0,0,0.3)';
-      ctx.fillRect(sx + 2, sy + 2, sw, 20);
+      const sw = Math.min(w + 14, b.name.length * 12 + 20);
+      const sh = 26;
+      const sx = px + (w - sw) / 2, sy = py + 2;
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(sx + 2, sy + 3, sw, sh);
       ctx.fillStyle = '#1c140f';
-      ctx.fillRect(sx - 1, sy - 1, sw + 2, 22);
+      ctx.fillRect(sx - 2, sy - 2, sw + 4, sh + 4);
       ctx.fillStyle = '#f4ecd8';
-      ctx.fillRect(sx, sy, sw, 20);
-      ctx.fillStyle = '#2a2020';
-      ctx.font = 'bold 12px monospace';
+      ctx.fillRect(sx, sy, sw, sh);
       ctx.textAlign = 'center';
-      ctx.fillText(b.name, px + w / 2, py + 20);
+      ctx.font = 'bold 16px monospace';
+      const tcx = px + w / 2, tcy = sy + sh / 2 + 6;
+      // heavy dark outline first so the name reads clearly at a glance,
+      // then a bright fill on top for extra pop
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#1c140f';
+      ctx.strokeText(b.name, tcx, tcy);
+      ctx.fillStyle = '#2a2020';
+      ctx.fillText(b.name, tcx, tcy);
     }
   }
 }
@@ -3489,6 +3509,244 @@ function wrapText(text, x, y, maxW, lh) {
   ctx.fillText(line, x, y);
 }
 
+// ---------------------------------------------------------------- album cover art
+// Small deterministic PRNG so each cover's "grain"/speckle pattern is
+// stable frame to frame instead of shimmering.
+function coverRng(seedStr) {
+  let h = 0;
+  for (let i = 0; i < seedStr.length; i++) h = (h * 31 + seedStr.charCodeAt(i)) | 0;
+  let a = (h >>> 0) || 1;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// A hand-drawn, worn-sleeve look laid over every cover: a faint vignette,
+// a scattering of paper grain specks, and a soft ring-wear circle — the
+// little imperfections that make old vinyl jackets feel nostalgic.
+function drawCoverWear(x, y, s, rng) {
+  const grd = ctx.createRadialGradient(x + s / 2, y + s / 2, s * 0.2, x + s / 2, y + s / 2, s * 0.72);
+  grd.addColorStop(0, 'rgba(0,0,0,0)');
+  grd.addColorStop(1, 'rgba(0,0,0,0.35)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(x, y, s, s);
+  ctx.fillStyle = 'rgba(20,16,10,0.5)';
+  ctx.beginPath();
+  ctx.arc(x + s * 0.66, y + s * 0.4, s * 0.24, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(244,236,216,0.5)';
+  for (let i = 0; i < 26; i++) {
+    const gx = x + rng() * s, gy = y + rng() * s;
+    ctx.fillRect(gx, gy, 1, 1);
+  }
+}
+
+function drawAlbumArt(x, y, s, r) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, s, s);
+  ctx.clip();
+  const rng = coverRng(r.title);
+  const cx = x + s / 2, cy = y + s / 2;
+
+  switch (r.title) {
+    case 'Elm Street Funk': {
+      // dusty 70s sunset over a row of brick stoops, one bare elm in front
+      const g = ctx.createLinearGradient(x, y, x, y + s);
+      g.addColorStop(0, '#7a3a2a'); g.addColorStop(0.55, '#e0a030'); g.addColorStop(1, '#3a2418');
+      ctx.fillStyle = g; ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#c4791f';
+      ctx.beginPath(); ctx.arc(cx, y + s * 0.42, s * 0.16, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#241a14';
+      ctx.fillRect(x, y + s * 0.72, s, s * 0.28);
+      for (let i = 0; i < 4; i++) ctx.fillRect(x + i * (s / 4) + 4, y + s * 0.6, s / 4 - 8, s * 0.12);
+      ctx.strokeStyle = '#1c1410'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(x + s * 0.22, y + s * 0.72); ctx.lineTo(x + s * 0.3, y + s * 0.4); ctx.stroke();
+      for (const [dx, dy] of [[-14, 10], [10, 6], [-6, -8], [12, -4]]) {
+        ctx.beginPath(); ctx.moveTo(x + s * 0.3, y + s * 0.4);
+        ctx.lineTo(x + s * 0.3 + dx, y + s * 0.4 + dy); ctx.stroke();
+      }
+      break;
+    }
+    case 'Cherry Cola Bounce': {
+      // diner checkerboard + a bouncing soda bottle, all polka-dot bubbles
+      ctx.fillStyle = '#f4ecd8'; ctx.fillRect(x, y, s, s);
+      const cell = s / 8;
+      ctx.fillStyle = '#d04830';
+      for (let ry = 0; ry < 8; ry++) for (let rx = 0; rx < 8; rx++)
+        if ((rx + ry) % 2 === 0) ctx.fillRect(x + rx * cell, y + ry * cell, cell, cell);
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      for (let i = 0; i < 14; i++) {
+        const bx = x + rng() * s, by = y + rng() * s, br = 3 + rng() * 5;
+        ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = '#7a2018';
+      ctx.beginPath();
+      ctx.moveTo(cx - 12, cy + 34); ctx.lineTo(cx - 14, cy - 4); ctx.lineTo(cx - 7, cy - 20);
+      ctx.lineTo(cx - 7, cy - 34); ctx.lineTo(cx + 7, cy - 34); ctx.lineTo(cx + 7, cy - 20);
+      ctx.lineTo(cx + 14, cy - 4); ctx.lineTo(cx + 12, cy + 34); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#f4ecd8'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('COLA', cx, cy + 8);
+      break;
+    }
+    case 'Midnight Stab': {
+      // smoky jazz-club spotlight with a horn silhouette
+      const g = ctx.createLinearGradient(x, y, x, y + s);
+      g.addColorStop(0, '#1a1024'); g.addColorStop(1, '#3a1830');
+      ctx.fillStyle = g; ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = 'rgba(196,64,112,0.35)';
+      ctx.beginPath();
+      ctx.moveTo(cx, y - 10); ctx.lineTo(x + s * 0.16, y + s); ctx.lineTo(x + s * 0.84, y + s);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      for (let i = 0; i < 18; i++) {
+        const sxr = x + rng() * s, syr = y + rng() * s * 0.5;
+        ctx.beginPath(); ctx.arc(sxr, syr, 0.8, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.strokeStyle = '#f4ecd8'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx - 22, cy + 26); ctx.quadraticCurveTo(cx - 22, cy - 10, cx + 6, cy - 14);
+      ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx + 16, cy - 8, 14, 0, Math.PI * 2); ctx.stroke();
+      break;
+    }
+    case 'Galactic Hallelujah': {
+      // starfield with a radiant halo behind a robed choir silhouette
+      ctx.fillStyle = '#0c1030'; ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#f4ecd8';
+      for (let i = 0; i < 40; i++) {
+        const sxr = x + rng() * s, syr = y + rng() * s;
+        ctx.fillRect(sxr, syr, rng() > 0.85 ? 2 : 1, rng() > 0.85 ? 2 : 1);
+      }
+      const g = ctx.createRadialGradient(cx, cy - 6, 4, cx, cy - 6, s * 0.4);
+      g.addColorStop(0, 'rgba(72,112,208,0.9)'); g.addColorStop(1, 'rgba(72,112,208,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy - 6, s * 0.4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#1a1030';
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - 30); ctx.quadraticCurveTo(cx + 26, cy - 6, cx + 22, cy + 34);
+      ctx.lineTo(cx - 22, cy + 34); ctx.quadraticCurveTo(cx - 26, cy - 6, cx, cy - 30);
+      ctx.closePath(); ctx.fill();
+      break;
+    }
+    case 'White Label': {
+      // a plain, worn-white promo sleeve with just a hand-drawn star
+      ctx.fillStyle = '#efe9dc'; ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = 'rgba(0,0,0,0.05)';
+      for (let i = 0; i < 30; i++) ctx.fillRect(x + rng() * s, y + rng() * s, 1, 1);
+      ctx.strokeStyle = '#c8a020'; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+      ctx.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const ang = -Math.PI / 2 + i * (Math.PI * 4 / 5);
+        const px2 = cx + Math.cos(ang) * 34, py2 = cy + Math.sin(ang) * 34;
+        i === 0 ? ctx.moveTo(px2, py2) : ctx.lineTo(px2, py2);
+      }
+      ctx.closePath(); ctx.stroke();
+      break;
+    }
+    case 'Strum Low': {
+      // moonlit bayou water with cattail silhouettes
+      const g = ctx.createLinearGradient(x, y, x, y + s);
+      g.addColorStop(0, '#0e2a24'); g.addColorStop(1, '#12463a');
+      ctx.fillStyle = g; ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = '#e8dfa0';
+      ctx.beginPath(); ctx.arc(x + s * 0.72, y + s * 0.28, s * 0.11, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(232,223,160,0.4)'; ctx.lineWidth = 2;
+      for (const ry of [0.62, 0.72, 0.82]) {
+        ctx.beginPath(); ctx.moveTo(x + 6, y + s * ry); ctx.lineTo(x + s - 6, y + s * ry); ctx.stroke();
+      }
+      ctx.strokeStyle = '#0a1a16'; ctx.lineWidth = 3;
+      for (const cxo of [0.2, 0.32, 0.44]) {
+        ctx.beginPath(); ctx.moveTo(x + s * cxo, y + s * 0.9); ctx.lineTo(x + s * cxo, y + s * 0.5); ctx.stroke();
+        ctx.fillStyle = '#0a1a16';
+        ctx.fillRect(x + s * cxo - 3, y + s * 0.44, 6, 12);
+      }
+      break;
+    }
+    case 'Frog Chorus Stab': {
+      // sunburst over lily pads
+      ctx.fillStyle = '#dfe8a0'; ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = 'rgba(143,154,63,0.5)';
+      for (let i = 0; i < 12; i++) {
+        const ang = (i / 12) * Math.PI * 2;
+        ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang);
+        ctx.fillRect(-4, -s * 0.6, 8, s * 0.6);
+        ctx.restore();
+      }
+      ctx.fillStyle = '#4f6a2a';
+      for (const [dx, dy, r2] of [[-30, 26, 22], [26, 20, 26], [2, -26, 18]]) {
+        ctx.beginPath(); ctx.ellipse(cx + dx, cy + dy, r2, r2 * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = '#2e5f1f';
+      ctx.beginPath(); ctx.ellipse(cx, cy + 6, 16, 11, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#e8f0c0';
+      ctx.beginPath(); ctx.arc(cx - 6, cy - 2, 3, 0, Math.PI * 2); ctx.arc(cx + 6, cy - 2, 3, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case 'Moss Hallelujah': {
+      // foggy cypress silhouettes, banded like an old screen print
+      const bands = ['#204a3a', '#2a5f48', '#356f54', '#4a8a68'];
+      bands.forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(x, y + (s / 4) * i, s, s / 4 + 1); });
+      ctx.fillStyle = 'rgba(230,240,225,0.18)';
+      ctx.fillRect(x, y + s * 0.5, s, s * 0.14);
+      ctx.fillStyle = '#12261e';
+      for (const [dx, w2, h2] of [[-40, 20, 70], [-4, 26, 90], [36, 18, 60]]) {
+        ctx.beginPath();
+        ctx.moveTo(cx + dx, y + s);
+        ctx.lineTo(cx + dx - w2 / 2, y + s - h2 * 0.4);
+        ctx.lineTo(cx + dx, y + s - h2);
+        ctx.lineTo(cx + dx + w2 / 2, y + s - h2 * 0.4);
+        ctx.closePath(); ctx.fill();
+      }
+      break;
+    }
+    case 'Mud Kick': {
+      // hollow-log drum with a muddy splatter ring
+      ctx.fillStyle = '#5a4a28'; ctx.fillRect(x, y, s, s);
+      ctx.fillStyle = 'rgba(30,24,14,0.5)';
+      for (let i = 0; i < 16; i++) {
+        const ang = rng() * Math.PI * 2, dist = rng() * s * 0.5;
+        ctx.beginPath(); ctx.arc(cx + Math.cos(ang) * dist, cy + Math.sin(ang) * dist, 2 + rng() * 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = '#8fbf3f';
+      ctx.beginPath(); ctx.ellipse(cx, cy, 42, 42, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#5a4a28'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(cx, cy, 28, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, cy, 14, 0, Math.PI * 2); ctx.stroke();
+      break;
+    }
+    case 'Honeysuckle Lead': {
+      // climbing vine-and-flower frame around a warm glow
+      ctx.fillStyle = '#3a2e14'; ctx.fillRect(x, y, s, s);
+      const g = ctx.createRadialGradient(cx, cy, 4, cx, cy, s * 0.5);
+      g.addColorStop(0, 'rgba(216,192,96,0.8)'); g.addColorStop(1, 'rgba(216,192,96,0)');
+      ctx.fillStyle = g; ctx.fillRect(x, y, s, s);
+      ctx.strokeStyle = '#6f8a3a'; ctx.lineWidth = 3; ctx.beginPath();
+      ctx.moveTo(x + 8, y + s); ctx.bezierCurveTo(x + 30, y + s * 0.6, x + 4, y + s * 0.3, x + 24, y + 8);
+      ctx.stroke();
+      ctx.fillStyle = '#e8c860';
+      for (let i = 0; i < 6; i++) {
+        const t = i / 5;
+        const px2 = x + 8 + t * 16, py2 = y + s - t * (s - 8);
+        ctx.beginPath(); ctx.arc(px2, py2, 4, 0, Math.PI * 2); ctx.fill();
+      }
+      break;
+    }
+    default: {
+      ctx.fillStyle = r.color; ctx.fillRect(x, y, s, s);
+    }
+  }
+
+  drawCoverWear(x, y, s, rng);
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 1, y + 1, s - 2, s - 2);
+}
+
 function drawRecordCard() {
   const r = worldRecords()[shownRecord];
   ctx.fillStyle = 'rgba(6,4,10,0.85)';
@@ -3501,8 +3759,7 @@ function drawRecordCard() {
   ctx.strokeRect(x + 3, y + 3, w - 6, h - 6);
 
   const sx = x + 36, sy = y + 60, ss = 150;
-  ctx.fillStyle = r.color;
-  ctx.fillRect(sx, sy, ss, ss);
+  drawAlbumArt(sx, sy, ss, r);
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.fillRect(sx, sy + ss - 26, ss, 26);
   ctx.fillStyle = '#0c0a10';
