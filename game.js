@@ -371,15 +371,26 @@ function makeOverworld() {
   const trees = [[3,20],[5,22],[7,19],[13,21],[15,23],[3,23],[10,23],[16,19],[36,20],[34,23],[9,12],[14,13],[25,12],[36,12],[2,12],[37,7],[2,7],[24,23],[13,6],[26,6]];
   for (const [tx, ty] of trees) if (g[ty][tx] === '.') g[ty][tx] = '#';
 
-  // Vermont Green FC soccer stadium — a big solid outdoor structure with no
-  // door; the player just walks around it like a landmark, never inside it.
-  // Only the top 3/4 of the stadium bowl lives on this map (drawStadium()
-  // draws it clipped to this footprint); the bottom 1/4 is meant to continue
-  // into the map area planned for directly south of here, to be connected
-  // once that map exists.
-  const STADIUM_X = 17, STADIUM_Y = 17, STADIUM_W = 7, STADIUM_H = 8;
+  // Vermont Green FC soccer stadium — a big solid outdoor structure. It has
+  // no proper door, but a one-tile gate through the outer wall on the west
+  // and east sides lets the player duck onto the pitch and wander around if
+  // they want. Only the top 3/4 of the stadium bowl lives on this map
+  // (drawStadium() draws it clipped to this footprint); the bottom 1/4 is
+  // meant to continue into the map area planned for directly south of here,
+  // to be connected once that map exists.
+  const STADIUM_X = 17, STADIUM_Y = 19, STADIUM_W = 6, STADIUM_H = 7;
   for (let yy = STADIUM_Y; yy < STADIUM_Y + STADIUM_H; yy++)
     for (let xx = STADIUM_X; xx < STADIUM_X + STADIUM_W; xx++) g[yy][xx] = 'w';
+  // Walkable pitch in the lower/inner part of the bowl (matches the grass
+  // area drawStadium() paints), plus a single-tile gate through the west and
+  // east walls at the same row so there's a way in from outside.
+  const PITCH_X0 = STADIUM_X + 1, PITCH_X1 = STADIUM_X + STADIUM_W - 2;
+  const PITCH_Y0 = STADIUM_Y + 2, PITCH_Y1 = STADIUM_Y + STADIUM_H - 2;
+  for (let yy = PITCH_Y0; yy <= PITCH_Y1; yy++)
+    for (let xx = PITCH_X0; xx <= PITCH_X1; xx++) g[yy][xx] = '.';
+  const STADIUM_GATE_Y = STADIUM_Y + 3;
+  g[STADIUM_GATE_Y][STADIUM_X] = '.';                    // west gate
+  g[STADIUM_GATE_Y][STADIUM_X + STADIUM_W - 1] = '.';     // east gate
 
   // flea market corner: stalls (fences) + crates, one holds the white label
   // NOTE: skip the tile directly above the Pure Pop Records door so the fence
@@ -392,7 +403,7 @@ function makeOverworld() {
     id: 'town', world: 'town', w: W, h: H, grid: g, outside: true, buildings,
     doors: {}, crates: {}, npcs: [], riverTiles,
     // ambient life lanes for this map (which road rows each spawns on)
-    // dogRow moved off 23 -> 6: the new stadium footprint (rows 17-24) now
+    // dogRow moved off 23 -> 6: the stadium footprint (rows 19-25) now
     // sits on top of the old dog lane.
     ambient: { bikeRows: [9, 10], walkerRow: 12, dogRow: 6 },
   };
@@ -608,7 +619,10 @@ const maps = { town, ...shops, swamp };
 
 // ---------------------------------------------------------------- state
 const player = {
-  map: 'town', x: 19.5 * TILE, y: 12.5 * TILE,
+  // Spawns dead-center in the crossroads (the horizontal road at rows 9-10
+  // meets the vertical road at columns 19-20), clear of every building,
+  // the river, and the stadium footprint.
+  map: 'town', x: 20 * TILE, y: 10 * TILE,
   dir: 'down', moving: false, skating: false, animT: 0,
   holdingCoffee: false, holdingTea: false,
   tempItem: null, tempItemTimer: 0,
@@ -2200,7 +2214,7 @@ function drawTownDecorations(time) {
   drawYardSign(25 * TILE - 10, 20 * TILE);
   drawFountainArea(time);
   drawCenterStretch();
-  drawStadium();
+  drawStadium(time);
   drawIceCreamVan();
   drawNewsstands();
 }
@@ -2375,21 +2389,26 @@ function drawFloodlight(x, y) {
   for (let i = 0; i < 4; i++) ctx.fillRect(x + 1 + i * 5, y + 3, 3, 3);
 }
 
-// Vermont Green FC soccer stadium — a big decorative outdoor landmark, not
-// an enterable building (no door, never added to the `buildings` list so it
-// never gets the automatic door/sign treatment other shops get).
+// Vermont Green FC soccer stadium — a decorative outdoor landmark. It's not
+// a "building" (no door, never added to the `buildings` list so it never
+// gets the automatic door/sign treatment other shops get), but a one-tile
+// gate cut through the wall on each side (matching the '.' gaps carved into
+// STADIUM_GATE_Y in makeOverworld()) lets the player walk in and wander the
+// pitch if they want.
 //
 // Only the top 3/4 of the stadium bowl is drawn here: the shape is built at
 // its full height, then clipped to the map's solid footprint so the bottom
 // 1/4 is cut off flush with the bottom of the footprint. That's deliberate —
 // the remaining 1/4 is meant to reappear in the map area planned for
 // directly south of this one, once it's built and the two are connected.
-function drawStadium() {
-  const TX = 17, TY = 17, TW = 7, TH = 8; // must match STADIUM_* in makeOverworld()
+function drawStadium(time) {
+  const TX = 17, TY = 19, TW = 6, TH = 7; // must match STADIUM_* in makeOverworld()
   const px = TX * TILE, py = TY * TILE;
   const w = TW * TILE, hVis = TH * TILE;
   const hFull = hVis / 0.75; // full stadium height if it weren't cut off
   const cx = px + w / 2;
+  // must match STADIUM_GATE_Y in makeOverworld(): row offset within the bowl
+  const gateLocalY = 3 * TILE;
 
   const GREEN_DK = '#0f3323';
   const GREEN_MD = '#1c4a30';
@@ -2397,6 +2416,7 @@ function drawStadium() {
   const GOLD     = '#e0b030';
   const PITCH    = '#2d8a3e';
   const PITCH_LN = 'rgba(255,255,255,0.85)';
+  const TUNNEL   = '#090c08';
 
   ctx.save();
   // Clip to (slightly beyond) the stadium's solid footprint — this is what
@@ -2455,7 +2475,67 @@ function drawStadium() {
   ctx.arc(cx, midY, 18, 0, Math.PI * 2);
   ctx.stroke();
 
+  // a little match in progress: a handful of tiny players (gold kits vs
+  // cream kits) and a ball, drifting slightly so it reads as a live game
+  // rather than dots painted on the grass
+  drawStadiumMatch(fx, fy, fw, fh, time || 0);
+
+  // gate openings — small tunnels cut through the outer wall and inner
+  // stand ring on the west and east sides, lined up with the walkable '.'
+  // tiles carved at STADIUM_GATE_Y in makeOverworld() so the art matches
+  // where the player can actually walk through.
+  const gy = py + gateLocalY, gh = TILE;
+  ctx.fillStyle = TUNNEL;
+  ctx.fillRect(px - 8, gy, 22, gh);              // west tunnel through outer wall + stand ring
+  ctx.fillRect(px + w - 14, gy, 22, gh);         // east tunnel through outer wall + stand ring
+  ctx.fillStyle = PITCH;
+  ctx.fillRect(px + 14, gy, fx - (px + 14), gh);         // west tunnel opens onto the grass
+  ctx.fillRect(fx + fw, gy, (px + w - 14) - (fx + fw), gh); // east tunnel opens onto the grass
+
   ctx.restore();
+}
+
+// Tiny stylized match happening on the pitch: a few players per side plus a
+// ball, gently bobbing/drifting via `time` so it reads as a game in motion
+// rather than static dots. Kept small and simple since the stadium itself
+// is a background landmark, not a zoomed-in scene.
+function drawStadiumMatch(fx, fy, fw, fh, time) {
+  const HOME = '#e0b030';   // Vermont Green gold kits
+  const AWAY = '#f4ecd8';   // cream/white away kits
+  const bob = (seed, amp) => Math.sin(time * 1.6 + seed) * amp;
+
+  function player(nx, ny, color, seed) {
+    const x = fx + fw * nx + bob(seed, 2.2);
+    const y = fy + fh * ny + bob(seed + 10, 1.4);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 3, 3, 1.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, 2.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // three-a-side, loosely spread across the visible part of the pitch
+  player(0.22, 0.28, HOME, 0.2);
+  player(0.50, 0.20, HOME, 1.7);
+  player(0.72, 0.34, HOME, 3.1);
+  player(0.30, 0.42, AWAY, 4.4);
+  player(0.62, 0.46, AWAY, 5.8);
+  player(0.44, 0.50, AWAY, 7.0);
+
+  // the ball, drifting in a small loop near the center of the action
+  const bx = fx + fw * 0.47 + Math.sin(time * 1.1) * 6;
+  const by = fy + fh * 0.38 + Math.cos(time * 0.9) * 3;
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath();
+  ctx.ellipse(bx, by + 2, 2, 1, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#f4ecd8';
+  ctx.beginPath();
+  ctx.arc(bx, by, 1.8, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function drawStand(px, py, c) {
