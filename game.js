@@ -64,10 +64,10 @@ ctx.imageSmoothingEnabled = false;
       color: #f4ecd8;
     }
     /* compact d-pad, tucked into the bottom-left corner */
-    #dpadUp    { left: 56px; bottom: 66px; width: 46px; height: 46px; font-size: 15px; }
-    #dpadDown  { left: 56px; bottom: 14px; width: 46px; height: 46px; font-size: 15px; }
-    #dpadLeft  { left: 4px;  bottom: 40px; width: 46px; height: 46px; font-size: 15px; }
-    #dpadRight { left: 108px; bottom: 40px; width: 46px; height: 46px; font-size: 15px; }
+    #dpadUp    { left: 72px; bottom: 82px; width: 58px; height: 58px; font-size: 19px; }
+    #dpadDown  { left: 72px; bottom: 14px; width: 58px; height: 58px; font-size: 19px; }
+    #dpadLeft  { left: 4px;  bottom: 48px; width: 58px; height: 58px; font-size: 19px; }
+    #dpadRight { left: 140px; bottom: 48px; width: 58px; height: 58px; font-size: 19px; }
     /* action cluster, tucked into the bottom-right corner. "Extras" sits
        where a fourth always-visible button would've gone, and instead
        pops a small stacked menu open above it on tap — keeps the resting
