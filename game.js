@@ -371,6 +371,16 @@ function makeOverworld() {
   const trees = [[3,20],[5,22],[7,19],[13,21],[15,23],[3,23],[10,23],[16,19],[36,20],[34,23],[9,12],[14,13],[25,12],[36,12],[2,12],[37,7],[2,7],[24,23],[13,6],[26,6]];
   for (const [tx, ty] of trees) if (g[ty][tx] === '.') g[ty][tx] = '#';
 
+  // Vermont Green FC soccer stadium — a big solid outdoor structure with no
+  // door; the player just walks around it like a landmark, never inside it.
+  // Only the top 3/4 of the stadium bowl lives on this map (drawStadium()
+  // draws it clipped to this footprint); the bottom 1/4 is meant to continue
+  // into the map area planned for directly south of here, to be connected
+  // once that map exists.
+  const STADIUM_X = 17, STADIUM_Y = 17, STADIUM_W = 7, STADIUM_H = 8;
+  for (let yy = STADIUM_Y; yy < STADIUM_Y + STADIUM_H; yy++)
+    for (let xx = STADIUM_X; xx < STADIUM_X + STADIUM_W; xx++) g[yy][xx] = 'w';
+
   // flea market corner: stalls (fences) + crates, one holds the white label
   // NOTE: skip the tile directly above the Pure Pop Records door so the fence
   // doesn't block access to it.
@@ -382,7 +392,9 @@ function makeOverworld() {
     id: 'town', world: 'town', w: W, h: H, grid: g, outside: true, buildings,
     doors: {}, crates: {}, npcs: [], riverTiles,
     // ambient life lanes for this map (which road rows each spawns on)
-    ambient: { bikeRows: [9, 10], walkerRow: 12, dogRow: 23 },
+    // dogRow moved off 23 -> 6: the new stadium footprint (rows 17-24) now
+    // sits on top of the old dog lane.
+    ambient: { bikeRows: [9, 10], walkerRow: 12, dogRow: 6 },
   };
   // Talkable townsfolk: Gary (the old hippy guitarist by the deli garbage
   // can) and Willie (the painter out front of Green Door Studio).
@@ -2188,6 +2200,7 @@ function drawTownDecorations(time) {
   drawYardSign(25 * TILE - 10, 20 * TILE);
   drawFountainArea(time);
   drawCenterStretch();
+  drawStadium();
   drawIceCreamVan();
   drawNewsstands();
 }
@@ -2331,6 +2344,118 @@ function drawChurch() {
   // stone steps
   ctx.fillStyle = '#d9d2c2';
   ctx.fillRect(cx - 16, py + h - 4, 32, 6);
+}
+
+// Simple rounded-rect path helper (canvas has no built-in one we can rely on
+// consistently, so build it from lines + corner arcs). Starts a fresh path;
+// caller fills/strokes it.
+function roundRectPath(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+// A small stadium floodlight tower: pole + lamp head, gold-tinted bulbs.
+function drawFloodlight(x, y) {
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(x + 5, y + 34, 10, 4);
+  ctx.fillStyle = '#3a3a3e';
+  ctx.fillRect(x + 7, y + 12, 5, 26);
+  ctx.fillStyle = '#1c1c1f';
+  ctx.fillRect(x - 2, y, 22, 12);
+  ctx.fillStyle = '#e0b030';
+  for (let i = 0; i < 4; i++) ctx.fillRect(x + 1 + i * 5, y + 3, 3, 3);
+}
+
+// Vermont Green FC soccer stadium — a big decorative outdoor landmark, not
+// an enterable building (no door, never added to the `buildings` list so it
+// never gets the automatic door/sign treatment other shops get).
+//
+// Only the top 3/4 of the stadium bowl is drawn here: the shape is built at
+// its full height, then clipped to the map's solid footprint so the bottom
+// 1/4 is cut off flush with the bottom of the footprint. That's deliberate —
+// the remaining 1/4 is meant to reappear in the map area planned for
+// directly south of this one, once it's built and the two are connected.
+function drawStadium() {
+  const TX = 17, TY = 17, TW = 7, TH = 8; // must match STADIUM_* in makeOverworld()
+  const px = TX * TILE, py = TY * TILE;
+  const w = TW * TILE, hVis = TH * TILE;
+  const hFull = hVis / 0.75; // full stadium height if it weren't cut off
+  const cx = px + w / 2;
+
+  const GREEN_DK = '#0f3323';
+  const GREEN_MD = '#1c4a30';
+  const GREEN_LT = '#2c6b45';
+  const GOLD     = '#e0b030';
+  const PITCH    = '#2d8a3e';
+  const PITCH_LN = 'rgba(255,255,255,0.85)';
+
+  ctx.save();
+  // Clip to (slightly beyond) the stadium's solid footprint — this is what
+  // actually produces the "cut off at 3/4 height" look, since the shape
+  // below is drawn at full height and simply never gets to render.
+  ctx.beginPath();
+  ctx.rect(px - 24, py - 56, w + 48, hVis + 56);
+  ctx.clip();
+
+  // floodlight towers, top two corners (the only two that read at this scale)
+  drawFloodlight(px - 6, py - 34);
+  drawFloodlight(px + w - 16, py - 34);
+
+  // outer wall / facade, rounded corners, full height (bottom gets clipped)
+  ctx.fillStyle = GREEN_DK;
+  roundRectPath(px - 8, py, w + 16, hFull, 16);
+  ctx.fill();
+
+  // facade band across the top with the team name
+  ctx.fillStyle = GREEN_MD;
+  ctx.fillRect(px - 8, py, w + 16, 42);
+  ctx.fillStyle = GOLD;
+  ctx.fillRect(px - 8, py + 42, w + 16, 4);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = GOLD;
+  ctx.font = 'bold 13px monospace';
+  ctx.fillText('VERMONT GREEN', cx, py + 20);
+  ctx.font = 'bold 10px monospace';
+  ctx.fillText('\u2605\u2605 CHAMPIONS', cx, py + 34);
+
+  // inner stand ring, lighter green, with a faint row of seat-dot texture
+  ctx.fillStyle = GREEN_LT;
+  ctx.fillRect(px + 14, py + 52, w - 28, hFull - 60);
+  ctx.fillStyle = 'rgba(0,0,0,0.14)';
+  for (let ty = py + 60; ty < py + hVis - 6; ty += 8) {
+    for (let tx = px + 20; tx < px + w - 16; tx += 7) ctx.fillRect(tx, ty, 3, 3);
+  }
+
+  // pitch (soccer field) at the center, with basic line markings
+  const fx = px + 34, fy = py + 76, fw = w - 68, fh = hFull - 108;
+  ctx.fillStyle = PITCH;
+  ctx.fillRect(fx, fy, fw, fh);
+  ctx.strokeStyle = PITCH_LN;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(fx, fy, fw, fh);
+  // goal box at the visible (north) end of the pitch
+  ctx.strokeRect(fx + fw * 0.28, fy, fw * 0.44, 22);
+  // halfway line + center circle, roughly at the pitch's midpoint
+  const midY = fy + fh * 0.42;
+  ctx.beginPath();
+  ctx.moveTo(fx, midY);
+  ctx.lineTo(fx + fw, midY);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, midY, 18, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.restore();
 }
 
 function drawStand(px, py, c) {
