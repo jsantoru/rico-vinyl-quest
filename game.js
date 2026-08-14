@@ -216,6 +216,52 @@ const JUNK = [
   'A bagpipe Christmas album. Some things can’t be sampled.',
 ];
 
+// Fake front-page stories for the town's newspaper stands. Onion/Daily Show
+// style Vermont satire — one random headline+body pops up each time a stand
+// is read. Keep these silly and harmless, no real people, just generic
+// Vermont flavor.
+const VERMONT_NEWS_PAPER = 'THE GREEN MOUNTAIN BUGLE';
+const VERMONT_NEWS = [
+  { headline: 'LOCAL MAN PROUD TO ANNOUNCE HIS DRIVEWAY IS "MOSTLY" MUD SEASON-FREE',
+    body: 'Area resident stood at the end of his driveway for forty-five minutes Tuesday, insisting to no one in particular that this year\'s mud was "definitely less soupy" than last year\'s. Sources say his boots disagreed.' },
+  { headline: 'STATE MOOSE POPULATION DEMANDS RIGHT OF WAY, GETS IT',
+    body: 'A single moose brought the highway to a standstill for the third time this month, chewing thoughtfully at a guardrail while a dozen Subarus idled in respectful silence.' },
+  { headline: 'GENERAL STORE OWNER SIGHTS FIRST TOURIST OF LEAF SEASON, RINGS CEREMONIAL BELL',
+    body: 'Locals report the annual ritual came a full nine days early this year, with the tourist reportedly asking whether the "fall colors are still on."' },
+  { headline: 'ARTISANAL CHEESE FEUD ENTERS SECOND GENERATION',
+    body: 'Two neighboring farms remain locked in a decades-long dispute over whose raw-milk cheddar is "the sharp one," with no resolution expected before Town Meeting Day.' },
+  { headline: 'COVERED BRIDGE VOTED "MOST PHOTOGENIC STRUCTURE" FOR 47TH STRAIGHT YEAR',
+    body: 'The wooden bridge could not be reached for comment but was, as always, extremely picturesque.' },
+  { headline: 'MAPLE SYRUP FUTURES MARKET ROCKED BY EARLY THAW',
+    body: 'Sugarmakers across the state report "cautious optimism," which local linguists confirm is Vermont for panic.' },
+  { headline: 'TOWN MEETING DAY VOTE ON NEW STOP SIGN ENTERS FOURTH HOUR OF DEBATE',
+    body: 'Residents remain divided on the sign\'s "overall vibe," with several speakers noting it "doesn\'t really fit the character of the intersection."' },
+  { headline: 'LOCAL BREWERY RELEASES SEASONAL ALE BREWED WITH "WHATEVER WAS GROWING BEHIND THE BARN"',
+    body: 'Early reviews describe the beer as "hazy," "extremely hazy," and "is that a spruce tip?"' },
+  { headline: 'PORCH SEASON OFFICIALLY DECLARED OPEN BY UNANIMOUS NEIGHBORHOOD WAVE',
+    body: 'Residents confirm the traditional slow-motion driveway wave has returned, with peak wave season expected through Labor Day.' },
+  { headline: 'AREA HIKER ACHIEVES FULL EYE CONTACT WITH FELLOW HIKER, NODS ONCE',
+    body: 'Witnesses called it "the most emotion exchanged on that trail all week."' },
+  { headline: 'WOODSTOVE INSTALLED IN JUNE "JUST TO BE SAFE," OWNER EXPLAINS',
+    body: 'Neighbors say the move is "reasonable" and "frankly overdue," citing last week\'s brief 61-degree evening.' },
+  { headline: 'STATE LEGISLATURE DEBATES OFFICIAL FLANNEL OF VERMONT',
+    body: 'Lawmakers remain gridlocked between "classic red-and-black" and "the green one my uncle has," with a vote expected sometime after mud season.' },
+  { headline: 'FARMERS MARKET ZUCCHINI SURPLUS REACHES CRISIS LEVELS',
+    body: 'Residents report finding unmarked zucchini on their porches, in their mailboxes, and, in one case, in their car.' },
+  { headline: 'LOCAL DOG ACHIEVES MINOR CELEBRITY STATUS FOR SITTING NEAR GENERAL STORE',
+    body: 'The dog, reached for comment, declined to elaborate on its process but did accept a piece of jerky.' },
+  { headline: 'SKI TOWN PARKING LOT ACHIEVES SENTIENCE, STILL WORSE THAN LAST YEAR',
+    body: 'Visitors describe circling for "geologic amounts of time" before abandoning their cars in what locals call "creative interpretations of a parking space."' },
+  { headline: 'COMMUNITY GARDEN COMMITTEE SPLITS OVER PROPER DEFINITION OF "HEIRLOOM"',
+    body: 'Tensions remain high after a member brought store-bought tomatoes to the potluck and called them "rustic."' },
+  { headline: 'BLACK FLY SEASON ARRIVES RIGHT ON SCHEDULE, RUINS EVERYTHING SLIGHTLY',
+    body: 'Outdoor gathering organizers report a sharp increase in "casual arm flailing" across all town events this week.' },
+  { headline: 'LOCAL FIDDLER SPOTTED PRACTICING ON PORCH, NEIGHBORHOOD DECLARES IT "PRETTY GOOD, ACTUALLY"',
+    body: 'A brief pause in traffic was reported as several cars slowed to listen, then remembered they were on a dirt road with no other cars.' },
+  { headline: 'BUGLE ANNOUNCES IT IS, ONCE AGAIN, OUT OF ACTUAL NEWS',
+    body: 'Editors confirm today\'s front page was filled entirely with vibes, one weather observation, and a strong opinion about zucchini.' },
+];
+
 // ---------------------------------------------------------------- input
 const keys = {};
 let interactPressed = false;
@@ -360,6 +406,14 @@ function makeOverworld() {
   map.crates[key(26, 20)] = { junkSeed: 3 };
   map.crates[key(28, 21)] = { record: 'white' };
   map.crates[key(30, 20)] = { junkSeed: 6 };
+  // Newspaper stands: three spots picked in open grass, well clear of
+  // buildings, the river/roads, trees, and every other interactable (NPCs,
+  // crates, vendor carts) so their prompt box never overlaps another one.
+  map.newsstands = [
+    { id: 'news1', tx: 11, ty: 2 },
+    { id: 'news2', tx: 33, ty: 12 },
+    { id: 'news3', tx: 30, ty: 24 },
+  ];
   return { map, doors: { groove, wax, diner, nectars, thrift, juniors } };
 }
 
@@ -797,6 +851,10 @@ function facingTarget() {
       const np = map.npcs.find(n => n.tx === tx && n.ty === ty);
       if (np) return { type: 'npc', data: np };
     }
+    if (map.newsstands) {
+      const ns = map.newsstands.find(n => n.tx === tx && n.ty === ty);
+      if (ns) return { type: 'newspaper', data: ns };
+    }
   }
   const cart = VENDOR_CARTS.find(c => c.map === player.map &&
     Math.hypot(player.x - c.x, player.y - c.y) < c.radius);
@@ -835,6 +893,10 @@ function doInteract() {
   } else if (target.type === 'npc') {
     const n = target.data;
     dialog = { name: n.name, lines: n.lines, i: 0 };
+    state = 'dialog';
+  } else if (target.type === 'newspaper') {
+    const story = VERMONT_NEWS[Math.floor(Math.random() * VERMONT_NEWS.length)];
+    dialog = { name: VERMONT_NEWS_PAPER, lines: [story.headline, story.body], i: 0 };
     state = 'dialog';
   }
 }
@@ -2127,6 +2189,58 @@ function drawTownDecorations(time) {
   drawFountainArea(time);
   drawCenterStretch();
   drawIceCreamVan();
+  drawNewsstands();
+}
+
+// Little curbside newspaper boxes scattered around town. Purely a sprite;
+// the interact logic lives in facingTarget()/doInteract() keyed off
+// map.newsstands, matched by tile coordinate exactly like the NPCs are.
+function drawNewsstand(px, py) {
+  const W = 26, H = 30;
+  // ground shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.fillRect(px + 1, py + H - 5, W - 2, 5);
+  // metal box body
+  ctx.fillStyle = '#2c5a8a';
+  ctx.fillRect(px, py + 10, W, H - 10);
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.fillRect(px, py + H - 12, W, 3);
+  // front window showing the paper stack
+  ctx.fillStyle = '#dcd6c4';
+  ctx.fillRect(px + 3, py + 15, W - 6, 10);
+  ctx.strokeStyle = '#16324e';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(px + 3.5, py + 15.5, W - 7, 9);
+  ctx.fillStyle = '#9a9284';
+  ctx.fillRect(px + 4, py + 17, W - 8, 1.5);
+  ctx.fillRect(px + 4, py + 20, W - 8, 1.5);
+  // coin slot
+  ctx.fillStyle = '#16324e';
+  ctx.fillRect(px + W / 2 - 4, py + 27, 8, 2);
+  // slanted headline sign on top
+  ctx.fillStyle = '#e8e2cf';
+  ctx.beginPath();
+  ctx.moveTo(px - 2, py + 10);
+  ctx.lineTo(px + W + 2, py + 10);
+  ctx.lineTo(px + W - 3, py);
+  ctx.lineTo(px + 3, py);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#16324e';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = '#16324e';
+  ctx.font = 'bold 6px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('NEWS', px + W / 2, py + 7);
+}
+
+function drawNewsstands() {
+  const map = maps[player.map];
+  if (!map || !map.newsstands) return;
+  for (const ns of map.newsstands) {
+    drawNewsstand(ns.tx * TILE + 3, ns.ty * TILE);
+  }
 }
 
 // ----------------------------------------------------------------------
@@ -3751,6 +3865,7 @@ function drawHUD() {
     if (target) {
       const label = target.type === 'crate' ? '[E] DIG CRATE'
                   : (target.type === 'keeper' || target.type === 'npc') ? '[E] TALK'
+                  : target.type === 'newspaper' ? '[E] READ'
                   : target.type === 'cart' ? `[X] ${target.data.label}`
                   : '[E] LOOK';
       pill(label, VIEW_W / 2, VIEW_H - 34);
@@ -4194,7 +4309,7 @@ function drawTitle(time) {
   ctx.font = '13px monospace';
   const controls = [
     'ARROWS / WASD, OR THE ON-SCREEN D-PAD .... move',
-    'E, OR THE ON-SCREEN E BUTTON ... talk / dig crates',
+    'E, OR THE ON-SCREEN E BUTTON ... talk / dig crates / read',
     'B, OR ON-SCREEN "SK8" ........ skateboard on & off',
     'C ....................... cold brew coffee on & off',
     'Y ......................... iced yerba mate on & off',
