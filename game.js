@@ -293,15 +293,6 @@ window.addEventListener('keydown', (e) => {
     if (k === 'y') toggleTea();
     if (k === 'arrowleft') selectMove = -1;
     if (k === 'arrowright') selectMove = 1;
-    // direct character hotkeys, only live on the select screen: W = Santos,
-    // A = Rico (hoodie), X = Rico (red hat). 'x' still also sets buyPressed
-    // above for in-game buying — harmless since buyPressed is only read
-    // while state === 'play'.
-    if (state === 'select') {
-      if (k === 'w') { selectIndex = 0; chooseCharacter('santos'); }
-      if (k === 'a') { selectIndex = 1; chooseCharacter('ricoAlt'); }
-      if (k === 'x') { selectIndex = 2; chooseCharacter('rico'); }
-    }
   }
   keys[k] = true;
   music.start(); // audio needs a user gesture
@@ -336,9 +327,9 @@ const DIR_ROW = { up: 0, down: 1, left: 2, right: 3 };
 // Every entry shares the same 129x225, 3-col x 4-row sheet layout as ricoImg,
 // so drawPlayer() just swaps which image it draws from.
 const CHARACTERS = {
-  rico:    { id: 'rico',    img: ricoImg,     label: 'RICO',   hotkey: 'X' },
-  ricoAlt: { id: 'ricoAlt', img: ricoAltImg,  label: 'RICO',   hotkey: 'A' },
-  santos:  { id: 'santos',  img: santosImg,   label: 'SANTOS', hotkey: 'W' },
+  rico:    { id: 'rico',    img: ricoImg,     label: 'RICO' },
+  ricoAlt: { id: 'ricoAlt', img: ricoAltImg,  label: 'RICO' },
+  santos:  { id: 'santos',  img: santosImg,   label: 'SANTOS' },
 };
 let selectedCharacter = 'rico';
 
@@ -1338,7 +1329,18 @@ function createTouchControls() {
   dpad.forEach(([id, k, label]) => {
     const btn = document.createElement('div');
     btn.id = id; btn.className = 'tc-btn'; btn.textContent = label;
-    bindHold(btn, () => { keys[k] = true; music.start(); }, () => { keys[k] = false; });
+    bindHold(btn, () => {
+      keys[k] = true;
+      // On the character-select screen the d-pad's left/right taps need to
+      // drive selectMove directly, the same way the keydown listener does
+      // for a physical keyboard — held/synthetic key state alone never
+      // reaches update()'s selectMove check.
+      if (state === 'select') {
+        if (k === 'arrowleft') selectMove = -1;
+        if (k === 'arrowright') selectMove = 1;
+      }
+      music.start();
+    }, () => { keys[k] = false; });
     wrap.appendChild(btn);
   });
 
@@ -4704,22 +4706,50 @@ function drawTitle(time) {
   ctx.fillText('- PRESS E TO START -', VIEW_W / 2, 500);
 }
 
-// Portrait centers and the label-box vertical center, as fractions of the
-// character_select art's own width/height — measured against the source
-// image so the labels land inside the blank boxes under each portrait
-// regardless of how the art gets scaled to fit the view.
+// Portrait centers, as fractions of the character_select art's own
+// width/height — measured against the source image so labels land inside
+// the blank boxes under each portrait regardless of how the art gets
+// scaled to fit the view.
 const SELECT_LABEL_POS = [
   { xFrac: 0.1888, yFrac: 0.8398 }, // Santos (green, left)
-  { xFrac: 0.5013, yFrac: 0.8398 }, // Rico, hoodie (blue, middle)
-  { xFrac: 0.8138, yFrac: 0.8398 }, // Rico (red, right)
+  { xFrac: 0.5013, yFrac: 0.8398 }, // Rico, hoodie/Yankees cap (blue, middle)
+  { xFrac: 0.8138, yFrac: 0.8398 }, // Rico, red hat (red, right)
 ];
-// The hotkey line drawn just under each name label. Order matches
-// SELECT_ORDER (Santos, Rico-hoodie, Rico-red-hat).
-const SELECT_HOTKEY_TEXT = [
-  'Press [W] or tap to select',
-  'Press [A] or tap to select.',
-  'Press [X] or tap to select.',
+// Name + smaller qualifier drawn in the title box under each portrait.
+// Order matches SELECT_ORDER (Santos, Rico-Yankees, Rico-red-hat).
+const SELECT_TITLES = [
+  { main: 'SANTOS', sub: null },
+  { main: 'RICO', sub: '(YANKS)' },
+  { main: 'RICO', sub: '(Hiero)' },
 ];
+
+// Draws text with a chunky dark outline behind a gold gradient fill, the
+// same recipe classic Zelda-style logos use to get that engraved, "carved
+// from treasure" look out of an ordinary serif font.
+function drawRetroTitle(text, cx, cy, size) {
+  ctx.font = `bold ${size}px Georgia, 'Times New Roman', serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.lineJoin = 'round';
+  ctx.miterLimit = 2;
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.9)';
+  ctx.shadowBlur = 2;
+  ctx.shadowOffsetX = 2;
+  ctx.shadowOffsetY = 2;
+  ctx.lineWidth = Math.max(2, size * 0.16);
+  ctx.strokeStyle = '#241206';
+  ctx.strokeText(text, cx, cy);
+  ctx.restore();
+
+  const grad = ctx.createLinearGradient(0, cy - size * 0.8, 0, cy + size * 0.15);
+  grad.addColorStop(0, '#fff6d6');
+  grad.addColorStop(0.5, '#f0c33e');
+  grad.addColorStop(1, '#b3760f');
+  ctx.fillStyle = grad;
+  ctx.fillText(text, cx, cy);
+}
 
 function drawCharacterSelect(time) {
   // background: reuse the same drifting sky as the title screen so the two
@@ -4756,18 +4786,17 @@ function drawCharacterSelect(time) {
     ctx.lineWidth = 4;
     ctx.strokeRect(hx + 3, originY + 3, hw - 6, dh - 6);
 
-    // labels in the blank boxes under each portrait — name, then which key
-    // (or a tap) picks that character
-    ctx.textAlign = 'center';
+    // retro Zelda-style name titles in the blank boxes under each portrait
     SELECT_ORDER.forEach((id, i) => {
       const pos = SELECT_LABEL_POS[i];
+      const title = SELECT_TITLES[i];
       const lx = originX + pos.xFrac * dw, ly = originY + pos.yFrac * dh;
-      ctx.fillStyle = '#f4ecd8';
-      ctx.font = 'bold 15px monospace';
-      ctx.fillText(CHARACTERS[id].label, lx, ly);
-      ctx.fillStyle = '#c8c0d8';
-      ctx.font = '11px monospace';
-      ctx.fillText(SELECT_HOTKEY_TEXT[i], lx, ly + 18);
+      if (title.sub) {
+        drawRetroTitle(title.main, lx, ly - 5, 16);
+        drawRetroTitle(title.sub, lx, ly + 12, 11);
+      } else {
+        drawRetroTitle(title.main, lx, ly + 5, 17);
+      }
     });
   } else {
     // fallback: simple colored panels until the art loads. Map taps across
@@ -4786,12 +4815,14 @@ function drawCharacterSelect(time) {
       const x = startX + i * (panelW + gap);
       ctx.fillStyle = i === selectIndex ? '#e0b040' : colors[i];
       ctx.fillRect(x, y, panelW, panelH);
-      ctx.fillStyle = '#f4ecd8';
-      ctx.font = 'bold 16px monospace';
-      ctx.fillText(CHARACTERS[id].label, x + panelW / 2, y + panelH - 40);
-      ctx.fillStyle = '#f4ecd8';
-      ctx.font = '12px monospace';
-      ctx.fillText(SELECT_HOTKEY_TEXT[i], x + panelW / 2, y + panelH - 18);
+      const title = SELECT_TITLES[i];
+      const lx = x + panelW / 2, ly = y + panelH - 34;
+      if (title.sub) {
+        drawRetroTitle(title.main, lx, ly - 5, 20);
+        drawRetroTitle(title.sub, lx, ly + 14, 13);
+      } else {
+        drawRetroTitle(title.main, lx, ly + 6, 22);
+      }
     });
   }
 
