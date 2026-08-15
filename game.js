@@ -1297,7 +1297,10 @@ function createJoystick(wrap) {
   wrap.appendChild(zone);
 
   let activeId = null;
-  let originX = 0, originY = 0;
+  // The base's center is fixed once laid out (only recalculated on resize /
+  // orientation change) and never moves in response to a touch \u2014 only the
+  // knob inside it tracks your finger.
+  let centerX = 0, centerY = 0;
 
   // Use visualViewport when available -- it reflects the area actually
   // visible on screen (excludes browser toolbars / on-screen keyboard),
@@ -1321,63 +1324,63 @@ function createJoystick(wrap) {
     };
   }
 
-  function restingPos() {
+  function fixedPos() {
     const { h } = viewportSize();
     // fixed offset from the bottom-left, then clamped so tiny screens or
     // safe-area insets never push it (partially) off screen
     return clampCenter(112, h - 128);
   }
-  function placeBase(x, y) {
-    base.style.left = x + 'px';
-    base.style.top = y + 'px';
+  function layoutBase() {
+    const p = fixedPos();
+    centerX = p.x; centerY = p.y;
+    base.style.left = centerX + 'px';
+    base.style.top = centerY + 'px';
   }
-  function showResting() {
-    const p = restingPos();
-    placeBase(p.x, p.y);
-    base.classList.remove('joy-active');
-    base.classList.add('joy-resting');
-    knob.style.transform = 'translate(0px, 0px)';
-  }
-  showResting();
-  window.addEventListener('resize', () => { if (activeId === null) showResting(); });
-  window.addEventListener('orientationchange', () => { if (activeId === null) showResting(); });
+  layoutBase();
+  window.addEventListener('resize', () => { if (activeId === null) layoutBase(); });
+  window.addEventListener('orientationchange', () => { if (activeId === null) layoutBase(); });
   if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', () => { if (activeId === null) showResting(); });
+    window.visualViewport.addEventListener('resize', () => { if (activeId === null) layoutBase(); });
   }
 
   function setVector(dx, dy) { joyDX = dx; joyDY = dy; }
 
-  zone.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    if (activeId !== null) return;
-    activeId = e.pointerId;
-    zone.setPointerCapture(activeId);
-    const c = clampCenter(e.clientX, e.clientY);
-    originX = c.x; originY = c.y;
-    placeBase(originX, originY);
-    base.classList.remove('joy-resting');
-    base.classList.add('joy-active');
-    knob.style.transform = 'translate(0px, 0px)';
-    music.start();
-  });
-
-  zone.addEventListener('pointermove', (e) => {
-    if (e.pointerId !== activeId) return;
-    e.preventDefault();
-    const vx = e.clientX - originX, vy = e.clientY - originY;
+  // Moves only the knob, relative to the base's fixed center \u2014 the base
+  // itself never repositions.
+  function updateKnob(px, py) {
+    const vx = px - centerX, vy = py - centerY;
     const dist = Math.hypot(vx, vy);
     const angle = Math.atan2(vy, vx);
     const clamped = Math.min(dist, KNOB_RADIUS);
     knob.style.transform = `translate(${Math.cos(angle) * clamped}px, ${Math.sin(angle) * clamped}px)`;
     if (dist < DEADZONE) { setVector(0, 0); return; }
     setVector(Math.cos(angle), Math.sin(angle));
+  }
+
+  zone.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    if (activeId !== null) return;
+    activeId = e.pointerId;
+    zone.setPointerCapture(activeId);
+    base.classList.remove('joy-resting');
+    base.classList.add('joy-active');
+    updateKnob(e.clientX, e.clientY);
+    music.start();
+  });
+
+  zone.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== activeId) return;
+    e.preventDefault();
+    updateKnob(e.clientX, e.clientY);
   });
 
   function end(e) {
     if (e.pointerId !== activeId) return;
     activeId = null;
     setVector(0, 0);
-    showResting();
+    knob.style.transform = 'translate(0px, 0px)';
+    base.classList.remove('joy-active');
+    base.classList.add('joy-resting');
   }
   zone.addEventListener('pointerup', end);
   zone.addEventListener('pointercancel', end);
@@ -1388,6 +1391,23 @@ function createTouchControls() {
   const wrap = document.createElement('div');
   wrap.id = 'touchControls';
   wrap.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // Explicitly pin the container's height in px to the actually-visible
+  // viewport. This is belt-and-suspenders alongside the 100svh CSS rule:
+  // some mobile browsers (older Safari/Chrome builds especially) don't
+  // support svh units, and fall back to 100vh, which on-screen-toolbar
+  // quirks can size against the viewport with toolbars hidden -- leaving
+  // bottom-anchored controls positioned below the visible screen, worst in
+  // portrait. Recomputing this in JS on every resize/orientation change
+  // sidesteps CSS unit support entirely.
+  function syncHeight() {
+    const h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    wrap.style.height = h + 'px';
+  }
+  syncHeight();
+  window.addEventListener('resize', syncHeight);
+  window.addEventListener('orientationchange', syncHeight);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', syncHeight);
 
   createJoystick(wrap);
 
