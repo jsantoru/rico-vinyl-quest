@@ -2724,65 +2724,133 @@ function drawCobblePath(tx, ty, w, h) {
 function drawChurch() {
   // Moved to the top-center of the map, at the head of Main Street (the
   // vertical road), so the road now leads straight up to the church steps.
+  // Styled after a New England red-brick meetinghouse: brick facade, a
+  // tall white tiered steeple (louvered belfry + open colonnade + lantern),
+  // a weathered green conical spire with weathervane, a tower clock, an
+  // arched window, and a white pedimented entrance porch.
   const px = 18 * TILE, py = 3 * TILE;
   const w = 3 * TILE, h = 3 * TILE;
   const cx = px + w / 2;
+
+  const BRICK = '#a8442c', BRICK_DK = '#8a3620';
+  const WHITE = '#f4efe3', WHITE_DK = '#d3c9b8';
+  const SPIRE = '#55836c', SPIRE_DK = '#3f6353';
+  const GLASS = '#37456a';
 
   // ground shadow
   ctx.fillStyle = 'rgba(0,0,0,0.18)';
   ctx.fillRect(px - 4, py + h - 8, w + 8, 12);
 
-  // white body
-  ctx.fillStyle = '#f4efe3';
-  ctx.fillRect(px, py + 28, w, h - 28);
+  // brick body
+  ctx.fillStyle = BRICK;
+  ctx.fillRect(px, py + 13, w, h - 13);
   ctx.fillStyle = 'rgba(0,0,0,0.12)';
   ctx.fillRect(px, py + h - 8, w, 8);
+  // subtle brick coursing
+  ctx.fillStyle = BRICK_DK;
+  for (let ly = py + 20; ly < py + h - 6; ly += 8) ctx.fillRect(px, ly, w, 1);
+  // white corner pilasters
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(px, py + 13, 5, h - 13);
+  ctx.fillRect(px + w - 5, py + 13, 5, h - 13);
 
-  // slate gable roof
-  ctx.fillStyle = '#3c3e45';
+  // white cornice band under the tower
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(px, py + 8, w, 6);
+  ctx.fillStyle = WHITE_DK;
+  ctx.fillRect(px, py + 13, w, 2);
+
+  // === steeple ===
+  // louvered belfry tier (widest, sits on the cornice)
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(cx - 12, py - 6, 24, 14);
+  ctx.fillStyle = BRICK_DK;
+  ctx.fillRect(cx - 8, py - 3, 3, 9);
+  ctx.fillRect(cx - 1, py - 3, 3, 9);
+  ctx.fillRect(cx + 6, py - 3, 3, 9);
+  // ledge
+  ctx.fillStyle = WHITE_DK;
+  ctx.fillRect(cx - 13, py - 8, 26, 3);
+
+  // open colonnade tier (narrower, columns visible)
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(cx - 9, py - 20, 18, 12);
+  ctx.fillStyle = '#8a97a8';
+  ctx.fillRect(cx - 7, py - 18, 2, 9);
+  ctx.fillRect(cx - 1, py - 18, 2, 9);
+  ctx.fillRect(cx + 5, py - 18, 2, 9);
+  // ledge
+  ctx.fillStyle = WHITE_DK;
+  ctx.fillRect(cx - 10, py - 22, 20, 3);
+
+  // small octagonal lantern drum
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(cx - 6, py - 31, 12, 10);
+  ctx.fillStyle = GLASS;
+  ctx.fillRect(cx - 2, py - 28, 4, 6);
+
+  // conical spire (weathered green)
+  ctx.fillStyle = SPIRE;
   ctx.beginPath();
-  ctx.moveTo(px - 6, py + 36);
-  ctx.lineTo(cx, py + 6);
-  ctx.lineTo(px + w + 6, py + 36);
+  ctx.moveTo(cx, py - 48);
+  ctx.lineTo(cx - 8, py - 31);
+  ctx.lineTo(cx + 8, py - 31);
   ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = '#52555f';
-  ctx.fillRect(px - 2, py + 32, w + 4, 5);
+  ctx.fillStyle = SPIRE_DK;
+  ctx.beginPath();
+  ctx.moveTo(cx, py - 48);
+  ctx.lineTo(cx, py - 31);
+  ctx.lineTo(cx + 8, py - 31);
+  ctx.closePath();
+  ctx.fill();
 
-  // bell tower / steeple
-  ctx.fillStyle = '#4a4d56';
-  ctx.fillRect(cx - 7, py - 12, 14, 16);
-  ctx.fillStyle = '#f4efe3';
-  ctx.fillRect(cx - 5, py - 6, 10, 16);
-  ctx.fillStyle = '#3c3e45';
-  ctx.fillRect(cx - 7, py - 17, 14, 7);
-  // cross
-  ctx.fillStyle = '#e8e4d6';
-  ctx.fillRect(cx - 1, py - 27, 3, 12);
-  ctx.fillRect(cx - 4, py - 22, 9, 3);
+  // finial + weathervane
+  ctx.strokeStyle = '#2a2420';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx, py - 48); ctx.lineTo(cx, py - 55); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx - 3, py - 53); ctx.lineTo(cx + 4, py - 53); ctx.stroke();
 
-  // arched blue windows
-  ctx.fillStyle = '#8aa0c4';
-  ctx.fillRect(px + 16, py + 52, 17, 20);
-  ctx.fillRect(px + w - 33, py + 52, 17, 20);
-  ctx.beginPath(); ctx.arc(px + 24, py + 52, 8, Math.PI, 0); ctx.fill();
-  ctx.beginPath(); ctx.arc(px + w - 24, py + 52, 8, Math.PI, 0); ctx.fill();
-  ctx.fillStyle = '#dcecf6';
-  ctx.fillRect(px + 16, py + 50, 17, 5);
-  ctx.fillRect(px + w - 33, py + 50, 17, 5);
+  // tower clock
+  ctx.fillStyle = WHITE;
+  ctx.beginPath(); ctx.arc(cx, py + 30, 11, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#2a2420';
+  ctx.beginPath(); ctx.arc(cx, py + 30, 8, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = WHITE;
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(cx, py + 30); ctx.lineTo(cx, py + 25); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx, py + 30); ctx.lineTo(cx + 5, py + 32); ctx.stroke();
 
-  // rounded wooden door
-  ctx.fillStyle = '#6b4a28';
-  ctx.fillRect(cx - 20, py + 62, 40, 30);
-  ctx.beginPath(); ctx.arc(cx, py + 62, 20, Math.PI, 0); ctx.fill();
-  ctx.fillStyle = '#8a6238';
-  ctx.fillRect(cx - 20, py + 62, 40, 7);
+  // arched window below the clock
+  ctx.fillStyle = WHITE;
+  ctx.fillRect(cx - 10, py + 46, 20, 18);
+  ctx.beginPath(); ctx.arc(cx, py + 46, 10, Math.PI, 0); ctx.fill();
+  ctx.fillStyle = GLASS;
+  ctx.fillRect(cx - 7, py + 50, 14, 13);
+  ctx.beginPath(); ctx.arc(cx, py + 50, 7, Math.PI, 0); ctx.fill();
+
+  // entrance porch: pediment + columns + arched door
+  ctx.fillStyle = WHITE;
+  ctx.beginPath();
+  ctx.moveTo(cx - 22, py + 74);
+  ctx.lineTo(cx, py + 64);
+  ctx.lineTo(cx + 22, py + 74);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillRect(cx - 22, py + 74, 44, 4);
+  ctx.fillStyle = WHITE_DK;
+  ctx.fillRect(cx - 18, py + 78, 4, h - 84);
+  ctx.fillRect(cx + 14, py + 78, 4, h - 84);
+
+  ctx.fillStyle = '#5a3d22';
+  ctx.fillRect(cx - 11, py + 80, 22, h - 86);
+  ctx.beginPath(); ctx.arc(cx, py + 80, 11, Math.PI, 0); ctx.fill();
   ctx.fillStyle = '#e0b460';
-  ctx.fillRect(cx - 4, py + h - 16, 3, 3);
+  ctx.fillRect(cx + 5, py + h - 20, 2, 3);
 
   // stone steps
   ctx.fillStyle = '#d9d2c2';
-  ctx.fillRect(cx - 16, py + h - 4, 32, 6);
+  ctx.fillRect(cx - 26, py + h - 4, 52, 6);
 }
 
 // Simple rounded-rect path helper (canvas has no built-in one we can rely on
@@ -3476,32 +3544,62 @@ function drawIceCreamVan() {
   ctx.ellipse(x + w / 2, y + h + 4, w / 2 + 2, 6, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // wheels
+  // wheels — green-painted hubs to match the body
   ctx.fillStyle = '#1c1a20';
   ctx.beginPath(); ctx.arc(x + 18, y + h - 2, 8, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc(x + w - 18, y + h - 2, 8, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#54525c';
+  ctx.fillStyle = '#4a8a3a';
   ctx.beginPath(); ctx.arc(x + 18, y + h - 2, 3, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc(x + w - 18, y + h - 2, 3, 0, Math.PI * 2); ctx.fill();
 
-  // van body — cream base with a mint-green roof band
-  ctx.fillStyle = '#f4ecd8';
+  // van body — grass-green lower panel under a sky-blue upper band, split
+  // by a rolling horizon line (a nod to a classic Vermont dairy-farm van
+  // paint job, not any one brand's exact trade dress)
+  ctx.fillStyle = '#5cae5a';
   ctx.fillRect(x, y + 14, w, h - 22);
-  ctx.fillStyle = '#5fa38a';
-  ctx.fillRect(x, y, w, 16);
-  ctx.fillStyle = 'rgba(0,0,0,0.15)';
-  ctx.fillRect(x, y + 14, w, 3);
-
-  // gentle cow-spot pattern on the lower panel, callback to Vermont dairy
-  // country rather than any specific brand's trade dress
-  ctx.fillStyle = 'rgba(40,34,30,0.55)';
-  const spotRng = coverRng('icecreamvan');
-  for (let i = 0; i < 6; i++) {
-    const sx2 = x + 6 + spotRng() * (w - 12), sy2 = y + 20 + spotRng() * (h - 30);
-    ctx.beginPath();
-    ctx.ellipse(sx2, sy2, 5 + spotRng() * 4, 3 + spotRng() * 3, spotRng() * Math.PI, 0, Math.PI * 2);
-    ctx.fill();
+  ctx.fillStyle = '#8ec6e6';
+  ctx.fillRect(x, y, w, 20);
+  ctx.fillStyle = '#5cae5a';
+  ctx.beginPath();
+  ctx.moveTo(x, y + 20);
+  for (let i = 0; i <= w; i += 8) {
+    ctx.lineTo(x + i, y + 20 - 3 * Math.sin(i / 14));
   }
+  ctx.lineTo(x + w, y + 26);
+  ctx.lineTo(x, y + 26);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.12)';
+  ctx.fillRect(x, y + h - 22, w, 3);
+
+  // standing black-and-white cows across the green panel, callback to
+  // Vermont dairy country rather than any specific brand's trade dress
+  function drawCow(cxp, cyp, s) {
+    // legs
+    ctx.fillStyle = '#f4ecd8';
+    ctx.fillRect(cxp - 7 * s, cyp + 2 * s, 2 * s, 6 * s);
+    ctx.fillRect(cxp + 5 * s, cyp + 2 * s, 2 * s, 6 * s);
+    // body
+    ctx.beginPath();
+    ctx.ellipse(cxp, cyp, 9 * s, 5 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // head + ears + snout
+    ctx.beginPath();
+    ctx.ellipse(cxp + 10 * s, cyp - 2 * s, 4 * s, 3.6 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#211c18';
+    ctx.beginPath(); ctx.ellipse(cxp + 8 * s, cyp - 5 * s, 1.6 * s, 1.4 * s, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cxp + 12.5 * s, cyp - 5 * s, 1.6 * s, 1.4 * s, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#f4ecd8';
+    ctx.beginPath(); ctx.ellipse(cxp + 13 * s, cyp - 1 * s, 2 * s, 1.6 * s, 0, 0, Math.PI * 2); ctx.fill();
+    // black patches on the body
+    ctx.fillStyle = '#211c18';
+    ctx.beginPath(); ctx.ellipse(cxp - 4 * s, cyp - 1 * s, 3 * s, 2.4 * s, 0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cxp + 3 * s, cyp + 1 * s, 2.4 * s, 1.8 * s, -0.3, 0, Math.PI * 2); ctx.fill();
+  }
+  drawCow(x + w * 0.14, y + h - 15, 1.05);
+  drawCow(x + w * 0.34, y + h - 15, 1.1);
+  drawCow(x + w * 0.53, y + h - 15, 1.0);
 
   // serving window with an awning
   const winX = x + w - 34, winY = y + 16, winW = 26, winH = 14;
@@ -3527,25 +3625,17 @@ function drawIceCreamVan() {
   ctx.lineWidth = 1.5;
   ctx.strokeRect(x + 4, y + 17, 16, 11);
 
-  // soft-serve cone sign mounted on the roof
-  const cx = x + w * 0.42, cy = y - 8;
-  ctx.fillStyle = '#e8c078';
-  ctx.beginPath();
-  ctx.moveTo(cx - 5, cy + 2); ctx.lineTo(cx + 5, cy + 2); ctx.lineTo(cx, cy + 12);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#f4ecd8';
-  ctx.beginPath();
-  ctx.arc(cx, cy - 3, 6, Math.PI, 0); ctx.fill();
-  ctx.beginPath(); ctx.arc(cx - 3, cy - 6, 4, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(cx + 3, cy - 6, 4, 0, Math.PI * 2); ctx.fill();
+  // roof vent stack
+  ctx.fillStyle = '#b8bcc0';
+  ctx.fillRect(x + w * 0.42 - 5, y - 9, 10, 9);
+  ctx.fillStyle = '#8e9296';
+  ctx.fillRect(x + w * 0.42 - 6, y - 10, 12, 3);
 
-  // hand-painted name banner along the body
-  ctx.fillStyle = '#3a2e20';
-  ctx.font = 'bold 8px monospace';
+  // hand-painted name banner along the body — kept to generic wording
+  ctx.fillStyle = '#211c18';
+  ctx.font = 'bold 9px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('UDDERLY GOOD', x + w * 0.36, y + h - 8);
-  ctx.font = '6px monospace';
-  ctx.fillText('CREAMERY', x + w * 0.36, y + h - 1);
+  ctx.fillText('ICE CREAM', x + w * 0.5, y + 10);
 }
 
 // Smaller now, and moved off the riverbank to the open ground between Green
