@@ -76,49 +76,13 @@ ctx.imageSmoothingEnabled = false;
       border-color: rgba(244,236,216,0.7);
       color: #f4ecd8;
     }
-    /* floating analog joystick, bottom-left -- appears where you touch down,
-       drags smoothly with your thumb, and eases back out on release. */
-    #joyZone {
-      position: absolute;
-      left: 0; bottom: 0;
-      width: 220px; height: 240px;
-      pointer-events: auto;
-      touch-action: none;
-    }
-    #joyBase {
-      position: absolute;
-      width: 116px; height: 116px;
-      margin-left: -58px; margin-top: -58px;
-      border-radius: 50%;
-      background: rgba(244,236,216,0.05);
-      border: 1.5px solid rgba(244,236,216,0.22);
-      opacity: 0;
-      transform: scale(0.85);
-      transition: opacity 0.16s ease, transform 0.16s ease, background 0.1s, border-color 0.1s;
-    }
-    #joyBase.joy-resting { opacity: 0.4; transform: scale(1); }
-    #joyBase.joy-active {
-      opacity: 1;
-      transform: scale(1);
-      background: rgba(244,236,216,0.09);
-      border-color: rgba(244,236,216,0.55);
-    }
-    #joyKnob {
-      position: absolute;
-      left: 50%; top: 50%;
-      width: 54px; height: 54px;
-      margin-left: -27px; margin-top: -27px;
-      border-radius: 50%;
-      background: rgba(244,236,216,0.2);
-      border: 1.5px solid rgba(244,236,216,0.5);
-      transform: translate(0px, 0px);
-      transition: transform 0.06s ease-out, background 0.1s, border-color 0.1s;
-    }
-    #joyBase.joy-active #joyKnob {
-      background: rgba(244,236,216,0.38);
-      border-color: rgba(244,236,216,0.85);
-      transition: transform 0s, background 0.1s, border-color 0.1s;
-    }
+    /* d-pad, tucked into the bottom-left corner. Sized and spaced for
+       comfortable one-thumb reach (bigger targets + more edge clearance
+       than a first pass), laid out in a classic plus shape. */
+    #dpadUp    { left: 78px;  bottom: 96px; width: 66px; height: 66px; font-size: 22px; }
+    #dpadDown  { left: 78px;  bottom: 12px; width: 66px; height: 66px; font-size: 22px; }
+    #dpadLeft  { left: 8px;   bottom: 54px; width: 66px; height: 66px; font-size: 22px; }
+    #dpadRight { left: 148px; bottom: 54px; width: 66px; height: 66px; font-size: 22px; }
     /* action cluster, tucked into the bottom-right corner. "Extras" sits
        where a fourth always-visible button would've gone, and instead
        pops a small stacked menu open above it on tap — keeps the resting
@@ -327,17 +291,24 @@ window.addEventListener('keydown', (e) => {
     if (k === 'm') music.toggleMute();
     if (k === 'c') toggleCoffee();
     if (k === 'y') toggleTea();
+    if (k === 'arrowleft') selectMove = -1;
+    if (k === 'arrowright') selectMove = 1;
+    // direct character hotkeys, only live on the select screen: W = Santos,
+    // A = Rico (hoodie), X = Rico (red hat). 'x' still also sets buyPressed
+    // above for in-game buying — harmless since buyPressed is only read
+    // while state === 'play'.
+    if (state === 'select') {
+      if (k === 'w') { selectIndex = 0; chooseCharacter('santos'); }
+      if (k === 'a') { selectIndex = 1; chooseCharacter('ricoAlt'); }
+      if (k === 'x') { selectIndex = 2; chooseCharacter('rico'); }
+    }
   }
   keys[k] = true;
   music.start(); // audio needs a user gesture
 });
 window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
 
-// analog joystick vector (set by the touch joystick below); [0,0] when idle
-let joyDX = 0, joyDY = 0;
-
 function axis() {
-  if (joyDX !== 0 || joyDY !== 0) return [joyDX, joyDY];
   let dx = 0, dy = 0;
   if (keys['arrowleft'] || keys['a']) dx -= 1;
   if (keys['arrowright'] || keys['d']) dx += 1;
@@ -349,8 +320,38 @@ function axis() {
 // ---------------------------------------------------------------- sprite / splash images
 const ricoImg = new Image();
 ricoImg.src = 'assets/rico.png';
+// Rico, but dressed for a walk — Yankees cap + grey hoodie. Same 3x4 sheet
+// layout as ricoImg so it can be swapped in without touching drawPlayer's
+// row/col math.
+const ricoAltImg = new Image();
+ricoAltImg.src = 'assets/rico_alt.png';
+// Santos — Rico's longtime best friend. NOFX shirt, glasses, same sheet
+// layout as the other two.
+const santosImg = new Image();
+santosImg.src = 'assets/santos.png';
 const SHEET_CW = 129, SHEET_CH = 225;
 const DIR_ROW = { up: 0, down: 1, left: 2, right: 3 };
+
+// ---------------------------------------------------------------- playable characters
+// Every entry shares the same 129x225, 3-col x 4-row sheet layout as ricoImg,
+// so drawPlayer() just swaps which image it draws from.
+const CHARACTERS = {
+  rico:    { id: 'rico',    img: ricoImg,     label: 'RICO',   hotkey: 'X' },
+  ricoAlt: { id: 'ricoAlt', img: ricoAltImg,  label: 'RICO',   hotkey: 'A' },
+  santos:  { id: 'santos',  img: santosImg,   label: 'SANTOS', hotkey: 'W' },
+};
+let selectedCharacter = 'rico';
+
+const characterSelectImg = new Image();
+characterSelectImg.src = 'assets/character_select.png';
+// Left-to-right order the character-select portraits appear in the art
+// (green/NOFX = Santos, blue/cap = Rico in his hoodie, red/shades = classic
+// Rico) — used both for keyboard left/right navigation and for mapping a
+// tap's x-position to a character.
+const SELECT_ORDER = ['santos', 'ricoAlt', 'rico'];
+let selectIndex = 2; // highlighted portrait for keyboard/E users; defaults to classic Rico
+let selectMove = 0;  // edge-triggered -1/0/1 from arrow keys, consumed in update()
+let selectLayout = null; // { originX, originY, scale } of the drawn select-screen art, set each frame it's drawn
 
 const splashImg = new Image();
 splashImg.src = 'assets/splash.png';
@@ -669,11 +670,19 @@ const player = {
   tempItem: null, tempItemTimer: 0,
 };
 const collected = new Set();
-let state = 'splash'; // splash | title | play | dialog | record | win
+let state = 'splash'; // splash | title | select | play | dialog | record | win
 let dialog = null;   // { name, lines, i }
 let shownRecord = null;
 const completedWorlds = new Set(); // worlds whose 5 records have all been found
 let toast = null;    // { text, t }
+
+// Locks in a playable character and boots straight into the game with them.
+function chooseCharacter(id) {
+  if (!CHARACTERS[id]) return;
+  selectedCharacter = id;
+  state = 'play';
+  music.setMenuBreak(false);
+}
 
 function toggleSkate() {
   if (state !== 'play' || !maps[player.map].outside) return;
@@ -1274,118 +1283,9 @@ function bindTap(el, onTap) {
   el.addEventListener('pointerdown', (e) => { e.preventDefault(); onTap(); });
 }
 
-// Floating analog joystick: the base recenters under your thumb the moment
-// you touch down inside its zone (like Roblox's mobile d-pad), the knob
-// tracks your finger and is clamped to a max radius, and everything eases
-// back to a faint resting circle on release. Outputs a normalized [dx, dy]
-// direction into joyDX / joyDY, which axis() prefers over the keyboard state.
-function createJoystick(wrap) {
-  const KNOB_RADIUS = 42;   // max px the knob can travel from center
-  const DEADZONE = 10;      // px of travel before it registers as movement
-  const BASE_RADIUS = 58;   // half of #joyBase's width/height (116px)
-  const EDGE_PAD = 12;      // min gap kept between the base circle and any screen edge
-
-  const zone = document.createElement('div');
-  zone.id = 'joyZone';
-
-  const base = document.createElement('div');
-  base.id = 'joyBase';
-  const knob = document.createElement('div');
-  knob.id = 'joyKnob';
-  base.appendChild(knob);
-  zone.appendChild(base);
-  wrap.appendChild(zone);
-
-  let activeId = null;
-  // The base's center is fixed once laid out (only recalculated on resize /
-  // orientation change) and never moves in response to a touch \u2014 only the
-  // knob inside it tracks your finger.
-  let centerX = 0, centerY = 0;
-
-  // Use visualViewport when available -- it reflects the area actually
-  // visible on screen (excludes browser toolbars / on-screen keyboard),
-  // which plain window.innerWidth/Height can get wrong on mobile.
-  function viewportSize() {
-    const vv = window.visualViewport;
-    return vv ? { w: vv.width, h: vv.height } : { w: window.innerWidth, h: window.innerHeight };
-  }
-
-  // Clamp a candidate center point so the full base circle (plus a small
-  // margin) always stays within the visible viewport, no matter what
-  // triggered the placement -- resting position, a resize, or a touch near
-  // the very edge of the screen.
-  function clampCenter(x, y) {
-    const { w, h } = viewportSize();
-    const minX = BASE_RADIUS + EDGE_PAD, maxX = w - BASE_RADIUS - EDGE_PAD;
-    const minY = BASE_RADIUS + EDGE_PAD, maxY = h - BASE_RADIUS - EDGE_PAD;
-    return {
-      x: Math.min(Math.max(x, minX), Math.max(minX, maxX)),
-      y: Math.min(Math.max(y, minY), Math.max(minY, maxY)),
-    };
-  }
-
-  function fixedPos() {
-    const { h } = viewportSize();
-    // fixed offset from the bottom-left, then clamped so tiny screens or
-    // safe-area insets never push it (partially) off screen
-    return clampCenter(112, h - 128);
-  }
-  function layoutBase() {
-    const p = fixedPos();
-    centerX = p.x; centerY = p.y;
-    base.style.left = centerX + 'px';
-    base.style.top = centerY + 'px';
-  }
-  layoutBase();
-  window.addEventListener('resize', () => { if (activeId === null) layoutBase(); });
-  window.addEventListener('orientationchange', () => { if (activeId === null) layoutBase(); });
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', () => { if (activeId === null) layoutBase(); });
-  }
-
-  function setVector(dx, dy) { joyDX = dx; joyDY = dy; }
-
-  // Moves only the knob, relative to the base's fixed center \u2014 the base
-  // itself never repositions.
-  function updateKnob(px, py) {
-    const vx = px - centerX, vy = py - centerY;
-    const dist = Math.hypot(vx, vy);
-    const angle = Math.atan2(vy, vx);
-    const clamped = Math.min(dist, KNOB_RADIUS);
-    knob.style.transform = `translate(${Math.cos(angle) * clamped}px, ${Math.sin(angle) * clamped}px)`;
-    if (dist < DEADZONE) { setVector(0, 0); return; }
-    setVector(Math.cos(angle), Math.sin(angle));
-  }
-
-  zone.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    if (activeId !== null) return;
-    activeId = e.pointerId;
-    zone.setPointerCapture(activeId);
-    base.classList.remove('joy-resting');
-    base.classList.add('joy-active');
-    updateKnob(e.clientX, e.clientY);
-    music.start();
-  });
-
-  zone.addEventListener('pointermove', (e) => {
-    if (e.pointerId !== activeId) return;
-    e.preventDefault();
-    updateKnob(e.clientX, e.clientY);
-  });
-
-  function end(e) {
-    if (e.pointerId !== activeId) return;
-    activeId = null;
-    setVector(0, 0);
-    knob.style.transform = 'translate(0px, 0px)';
-    base.classList.remove('joy-active');
-    base.classList.add('joy-resting');
-  }
-  zone.addEventListener('pointerup', end);
-  zone.addEventListener('pointercancel', end);
-  zone.addEventListener('pointerleave', (e) => { if (e.pointerId === activeId) end(e); });
-}
+// Floating analog joystick removed in favor of discrete d-pad buttons (see
+// createTouchControls) \u2014 four separate elements proved more reliable for
+// touch input than a single drag-tracked zone.
 
 function createTouchControls() {
   const wrap = document.createElement('div');
@@ -1409,7 +1309,18 @@ function createTouchControls() {
   window.addEventListener('orientationchange', syncHeight);
   if (window.visualViewport) window.visualViewport.addEventListener('resize', syncHeight);
 
-  createJoystick(wrap);
+  const dpad = [
+    ['dpadUp', 'arrowup', '▲'],
+    ['dpadDown', 'arrowdown', '▼'],
+    ['dpadLeft', 'arrowleft', '◀'],
+    ['dpadRight', 'arrowright', '▶'],
+  ];
+  dpad.forEach(([id, k, label]) => {
+    const btn = document.createElement('div');
+    btn.id = id; btn.className = 'tc-btn'; btn.textContent = label;
+    bindHold(btn, () => { keys[k] = true; music.start(); }, () => { keys[k] = false; });
+    wrap.appendChild(btn);
+  });
 
   const eBtn = document.createElement('div');
   eBtn.id = 'btnE'; eBtn.className = 'tc-btn'; eBtn.textContent = 'E';
@@ -1468,10 +1379,34 @@ function createTouchControls() {
 }
 createTouchControls();
 
-canvas.addEventListener('pointerdown', () => {
+canvas.addEventListener('pointerdown', (e) => {
   music.start();
-  if (state !== 'play') interactPressed = true;
+  if (state === 'select') {
+    const rect = canvas.getBoundingClientRect();
+    const vx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const vy = (e.clientY - rect.top) * (canvas.height / rect.height);
+    handleCharacterTap(vx, vy);
+  } else if (state !== 'play') {
+    interactPressed = true;
+  }
 });
+
+// Maps a tap/click in view (960x600) coordinates to whichever character
+// portrait it landed on, using the layout drawCharacterSelect() recorded
+// the last time it drew the art. Ignores taps outside the art entirely.
+function handleCharacterTap(vx, vy) {
+  if (!selectLayout) return;
+  const { originX, originY, scale, imgW, imgH } = selectLayout;
+  const ix = (vx - originX) / scale, iy = (vy - originY) / scale;
+  if (ix < 0 || ix > imgW || iy < 0 || iy > imgH) return;
+  const frac = ix / imgW;
+  let idx;
+  if (frac < 0.345) idx = 0;
+  else if (frac < 0.658) idx = 1;
+  else idx = 2;
+  selectIndex = idx;
+  chooseCharacter(SELECT_ORDER[idx]);
+}
 
 // ---------------------------------------------------------------- update
 let last = performance.now();
@@ -1490,7 +1425,13 @@ function update(dt) {
   if (state === 'splash') {
     if (interactPressed) { state = 'title'; music.setMenuBreak(true); }
   } else if (state === 'title') {
-    if (interactPressed) { state = 'play'; music.setMenuBreak(false); }
+    if (interactPressed) { state = 'select'; music.setMenuBreak(true); }
+  } else if (state === 'select') {
+    if (selectMove) {
+      selectIndex = Math.max(0, Math.min(SELECT_ORDER.length - 1, selectIndex + selectMove));
+      selectMove = 0;
+    }
+    if (interactPressed) chooseCharacter(SELECT_ORDER[selectIndex]);
   } else if (state === 'play') {
     movePlayer(dt);
     if (interactPressed) doInteract();
@@ -1615,6 +1556,7 @@ function render(time) {
   if (state !== 'splash') drawHUD();
   if (state === 'splash') drawSplash();
   if (state === 'title') drawTitle(time);
+  if (state === 'select') drawCharacterSelect(time);
   if (state === 'dialog') drawDialog();
   if (state === 'record') drawRecordCard();
   if (state === 'win') drawWin();
@@ -4049,8 +3991,9 @@ function drawPlayer(time) {
     ctx.fillRect(player.x - 10, footY + 1 + bob, 5, 4);
     ctx.fillRect(player.x + 5, footY + 1 + bob, 5, 4);
   }
-  if (ricoImg.complete && ricoImg.naturalWidth) {
-    ctx.drawImage(ricoImg, col * SHEET_CW, row * SHEET_CH, SHEET_CW, SHEET_CH,
+  const charImg = CHARACTERS[selectedCharacter].img;
+  if (charImg.complete && charImg.naturalWidth) {
+    ctx.drawImage(charImg, col * SHEET_CW, row * SHEET_CH, SHEET_CW, SHEET_CH,
       Math.round(player.x - SPR_W / 2), Math.round(footY - SPR_H - (player.skating ? 4 : 0) + bob),
       SPR_W, SPR_H);
   } else {
@@ -4621,6 +4564,103 @@ function drawTitle(time) {
   ctx.fillText('- PRESS E TO START -', VIEW_W / 2, 500);
 }
 
+// Portrait centers and the label-box vertical center, as fractions of the
+// character_select art's own width/height — measured against the source
+// image so the labels land inside the blank boxes under each portrait
+// regardless of how the art gets scaled to fit the view.
+const SELECT_LABEL_POS = [
+  { xFrac: 0.1888, yFrac: 0.8398 }, // Santos (green, left)
+  { xFrac: 0.5013, yFrac: 0.8398 }, // Rico, hoodie (blue, middle)
+  { xFrac: 0.8138, yFrac: 0.8398 }, // Rico (red, right)
+];
+// The hotkey line drawn just under each name label. Order matches
+// SELECT_ORDER (Santos, Rico-hoodie, Rico-red-hat).
+const SELECT_HOTKEY_TEXT = [
+  'Press [W] or tap to select',
+  'Press [A] or tap to select.',
+  'Press [X] or tap to select.',
+];
+
+function drawCharacterSelect(time) {
+  // background: reuse the same drifting sky as the title screen so the two
+  // screens feel like one continuous flow
+  if (titleSkyImg.complete && titleSkyImg.naturalWidth) {
+    const tw = titleSkyImg.naturalWidth * (VIEW_H / titleSkyImg.naturalHeight);
+    const off = (time * 16) % tw;
+    ctx.fillStyle = '#9fd0ee';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    for (let x = -off; x < VIEW_W; x += tw) {
+      ctx.drawImage(titleSkyImg, x, 0, tw, VIEW_H);
+    }
+  } else {
+    ctx.fillStyle = 'rgba(8,6,12,0.93)';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  }
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+  if (characterSelectImg.complete && characterSelectImg.naturalWidth) {
+    const iw = characterSelectImg.naturalWidth, ih = characterSelectImg.naturalHeight;
+    const scale = Math.min(VIEW_W / iw, VIEW_H / ih);
+    const dw = iw * scale, dh = ih * scale;
+    const originX = (VIEW_W - dw) / 2, originY = (VIEW_H - dh) / 2;
+    selectLayout = { originX, originY, scale, imgW: iw, imgH: ih };
+    ctx.drawImage(characterSelectImg, originX, originY, dw, dh);
+
+    // highlight the keyboard-selected portrait with a pulsing box, so
+    // arrow-key/E users can see where they are without a mouse
+    const bounds = [[0, 0.345], [0.345, 0.658], [0.658, 1]];
+    const [x0f, x1f] = bounds[selectIndex];
+    const hx = originX + x0f * dw, hw = (x1f - x0f) * dw;
+    ctx.strokeStyle = Math.floor(time * 2.4) % 2 ? '#e0b040' : '#f4ecd8';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(hx + 3, originY + 3, hw - 6, dh - 6);
+
+    // labels in the blank boxes under each portrait — name, then which key
+    // (or a tap) picks that character
+    ctx.textAlign = 'center';
+    SELECT_ORDER.forEach((id, i) => {
+      const pos = SELECT_LABEL_POS[i];
+      const lx = originX + pos.xFrac * dw, ly = originY + pos.yFrac * dh;
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = 'bold 15px monospace';
+      ctx.fillText(CHARACTERS[id].label, lx, ly);
+      ctx.fillStyle = '#c8c0d8';
+      ctx.font = '11px monospace';
+      ctx.fillText(SELECT_HOTKEY_TEXT[i], lx, ly + 18);
+    });
+  } else {
+    // fallback: simple colored panels until the art loads. Map taps across
+    // the full view width using the same thirds the real art uses, so
+    // tapping works even before character_select.png has loaded in.
+    selectLayout = { originX: 0, originY: 0, scale: 1, imgW: VIEW_W, imgH: VIEW_H };
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#e0b040';
+    ctx.font = 'bold 30px monospace';
+    ctx.fillText('SELECT YOUR CHARACTER', VIEW_W / 2, 90);
+    const panelW = 260, panelH = 340, gap = 30;
+    const totalW = panelW * 3 + gap * 2;
+    const startX = (VIEW_W - totalW) / 2, y = 140;
+    const colors = ['#2c5a1e', '#123a5e', '#5e1414'];
+    SELECT_ORDER.forEach((id, i) => {
+      const x = startX + i * (panelW + gap);
+      ctx.fillStyle = i === selectIndex ? '#e0b040' : colors[i];
+      ctx.fillRect(x, y, panelW, panelH);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = 'bold 16px monospace';
+      ctx.fillText(CHARACTERS[id].label, x + panelW / 2, y + panelH - 40);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = '12px monospace';
+      ctx.fillText(SELECT_HOTKEY_TEXT[i], x + panelW / 2, y + panelH - 18);
+    });
+  }
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
+  ctx.font = 'bold 16px monospace';
+  ctx.fillText('- TAP A CHARACTER, OR USE \u25c0 \u25b6 AND E -', VIEW_W / 2, VIEW_H - 22);
+}
+
 function drawWin() {
   ctx.fillStyle = 'rgba(8,6,12,0.88)';
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
@@ -4654,5 +4694,5 @@ function drawWin() {
 requestAnimationFrame(frame);
 
 // debug/test handle
-window.__rico = { player, maps, collected, getState: () => state };
+window.__rico = { player, maps, collected, getState: () => state, getCharacter: () => selectedCharacter };
 })();
