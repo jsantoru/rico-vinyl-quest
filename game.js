@@ -35,7 +35,20 @@ ctx.imageSmoothingEnabled = false;
       touch-action: none;
     }
     #touchControls {
-      position: fixed; inset: 0; pointer-events: none;
+      position: fixed; top: 0; left: 0; right: 0;
+      /* iOS Safari sizes a plain 100vh fixed box against the viewport with
+         its toolbars hidden, so bottom-anchored children can end up parked
+         below the part of the screen you can actually see -- worst in
+         portrait, where the toolbar is a bigger share of the height. 100svh
+         (the SMALL viewport, i.e. toolbars visible) keeps bottom:0 inside
+         what's actually on screen. Older browsers fall back to 100vh. */
+      height: 100vh;
+      height: 100svh;
+      /* keep controls clear of notches / home-indicator safe areas */
+      padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+                env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+      box-sizing: border-box;
+      pointer-events: none;
       display: none; z-index: 10;
     }
     @media (pointer: coarse) {
@@ -63,7 +76,7 @@ ctx.imageSmoothingEnabled = false;
       border-color: rgba(244,236,216,0.7);
       color: #f4ecd8;
     }
-    /* floating analog joystick, bottom-left \u2014 appears where you touch down,
+    /* floating analog joystick, bottom-left -- appears where you touch down,
        drags smoothly with your thumb, and eases back out on release. */
     #joyZone {
       position: absolute;
@@ -1269,6 +1282,8 @@ function bindTap(el, onTap) {
 function createJoystick(wrap) {
   const KNOB_RADIUS = 42;   // max px the knob can travel from center
   const DEADZONE = 10;      // px of travel before it registers as movement
+  const BASE_RADIUS = 58;   // half of #joyBase's width/height (116px)
+  const EDGE_PAD = 12;      // min gap kept between the base circle and any screen edge
 
   const zone = document.createElement('div');
   zone.id = 'joyZone';
@@ -1284,9 +1299,33 @@ function createJoystick(wrap) {
   let activeId = null;
   let originX = 0, originY = 0;
 
+  // Use visualViewport when available -- it reflects the area actually
+  // visible on screen (excludes browser toolbars / on-screen keyboard),
+  // which plain window.innerWidth/Height can get wrong on mobile.
+  function viewportSize() {
+    const vv = window.visualViewport;
+    return vv ? { w: vv.width, h: vv.height } : { w: window.innerWidth, h: window.innerHeight };
+  }
+
+  // Clamp a candidate center point so the full base circle (plus a small
+  // margin) always stays within the visible viewport, no matter what
+  // triggered the placement -- resting position, a resize, or a touch near
+  // the very edge of the screen.
+  function clampCenter(x, y) {
+    const { w, h } = viewportSize();
+    const minX = BASE_RADIUS + EDGE_PAD, maxX = w - BASE_RADIUS - EDGE_PAD;
+    const minY = BASE_RADIUS + EDGE_PAD, maxY = h - BASE_RADIUS - EDGE_PAD;
+    return {
+      x: Math.min(Math.max(x, minX), Math.max(minX, maxX)),
+      y: Math.min(Math.max(y, minY), Math.max(minY, maxY)),
+    };
+  }
+
   function restingPos() {
-    const r = zone.getBoundingClientRect();
-    return { x: r.left + r.width * 0.46, y: r.top + r.height * 0.58 };
+    const { h } = viewportSize();
+    // fixed offset from the bottom-left, then clamped so tiny screens or
+    // safe-area insets never push it (partially) off screen
+    return clampCenter(112, h - 128);
   }
   function placeBase(x, y) {
     base.style.left = x + 'px';
@@ -1302,6 +1341,9 @@ function createJoystick(wrap) {
   showResting();
   window.addEventListener('resize', () => { if (activeId === null) showResting(); });
   window.addEventListener('orientationchange', () => { if (activeId === null) showResting(); });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => { if (activeId === null) showResting(); });
+  }
 
   function setVector(dx, dy) { joyDX = dx; joyDY = dy; }
 
@@ -1310,7 +1352,8 @@ function createJoystick(wrap) {
     if (activeId !== null) return;
     activeId = e.pointerId;
     zone.setPointerCapture(activeId);
-    originX = e.clientX; originY = e.clientY;
+    const c = clampCenter(e.clientX, e.clientY);
+    originX = c.x; originY = c.y;
     placeBase(originX, originY);
     base.classList.remove('joy-resting');
     base.classList.add('joy-active');
