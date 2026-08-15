@@ -383,15 +383,15 @@ function makeOverworld() {
   for (let y = 1; y < H-1; y++) { g[y][19] = 'r'; }
 
   // Placeholder portal doors on the west, east, north & south edges of the
-  // map, each two tiles wide. The west/east pair sits right on Main Street
-  // (rows 9-10); the north/south pair sits on the vertical cross-street
-  // (columns 19-20), so all four read as a natural continuation of a road.
-  // None lead anywhere yet — walking into one pops the "more lands coming"
-  // splash (see checkPortal()/drawPortalPopup()).
-  g[9][0] = 'P';  g[10][0] = 'P';
-  g[9][W - 1] = 'P';  g[10][W - 1] = 'P';
-  g[0][19] = 'P';  g[0][20] = 'P';
-  g[H - 1][19] = 'P';  g[H - 1][20] = 'P';
+  // map. The west/east pair sits right on Main Street (row 9); the
+  // north/south pair sits on the vertical cross-street (column 19), so all
+  // four read as a natural continuation of a road. None lead anywhere yet —
+  // walking into one pops the "more lands coming" splash (see
+  // checkPortal()/drawPortalPopup()).
+  g[9][0] = 'P';
+  g[9][W - 1] = 'P';
+  g[0][19] = 'P';
+  g[H - 1][19] = 'P';
 
   const buildings = [];
   function building(x, y, w, h, name, wall, roof, customDoorX) {
