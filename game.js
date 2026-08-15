@@ -406,7 +406,7 @@ function makeOverworld() {
   const groove = building(4, 3, 7, 4, 'Green Door Studio', '#76503a', '#4e3328', 9); // door moved to right
   const henrys = building(23, 3, 4, 4, "Henry's Diner", '#f2eee2', '#e8b830'); // white with yellow trim, classic diner, just west of Hey Bud
   const wax    = building(28, 3, 7, 4, 'Hey Bud', '#f2efe4', '#2f8fa8'); // white w/ teal-topped mural band, red door & kickplate
-  const diner  = building(4, 14, 5, 4, 'Kountry Kart Deli', '#c07a38', '#96591f'); // smaller - 5 tiles wide
+  const diner  = building(4, 14, 5, 4, 'Kountry Kart Deli', '#181614', '#a8281f'); // black storefront, red trim band — smaller, 5 tiles wide
   const nectars = building(9, 14, 4, 6, 'Nectars', '#2a2a3a', '#1a1a2a'); // taller building next to deli
   const thrift = building(28, 14, 5, 4, 'Pure Pop Records', '#3f8fbf', '#2a6a93'); // smaller to make room
   const juniors = building(33, 14, 4, 4, "Junior's", '#d84030', '#a83020'); // pizza shop
@@ -2548,65 +2548,157 @@ function drawHeyBudDecor(px, py, w, h) {
 
 // Kountry Kart Deli: replaces the standard punch-windows + door with one
 // continuous floor-to-ceiling glass storefront across the whole front wall,
-// door included, so the building reads as "all windows" up front.
+// door included — styled after the real shop's black-and-red storefront,
+// with hand-painted Vermont farm murals over the two side windows.
 function drawDeliDecor(px, py, w, h, doorPx) {
   ctx.save();
 
-  const top = py + 44;      // just below the roof/eave trim
+  const top = py + 40;       // just below the roof/eave trim
   const bottom = py + h - 4; // just above the foundation shading
-  const left = px + 6, right = px + w - 6;
-  const glassW = right - left, glassH = bottom - top;
+  const left = px + 4, right = px + w - 4;
+  const glassH = bottom - top;
 
-  // dark recess behind the glazing so the panes read as inset, not flush paint
-  ctx.fillStyle = '#1c2a30';
-  ctx.fillRect(left - 2, top - 2, glassW + 4, glassH + 4);
+  const BLACK = '#141210', RED = '#a8281f', RED_DK = '#7c1a14';
+  const CREAM = '#f4ecd8';
 
-  // cool blue-tinted glass fill
-  const grad = ctx.createLinearGradient(0, top, 0, bottom);
-  grad.addColorStop(0, 'rgba(214,236,244,0.65)');
-  grad.addColorStop(0.5, 'rgba(152,196,216,0.55)');
-  grad.addColorStop(1, 'rgba(110,150,175,0.6)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(left, top, glassW, glassH);
+  // black recess behind the glazing so the panes read as inset
+  ctx.fillStyle = BLACK;
+  ctx.fillRect(left - 2, top - 2, (right - left) + 4, glassH + 4);
 
-  // vertical mullions dividing the storefront into panes
-  ctx.fillStyle = '#233238';
-  const paneW = 26;
-  for (let x = left; x <= right; x += paneW) ctx.fillRect(x, top, 3, glassH);
-  // slim transom line near the top
-  ctx.fillRect(left, top + 14, glassW, 3);
-
-  // diagonal glare streak for a glassy highlight
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(left, top, glassW, glassH);
-  ctx.clip();
-  ctx.fillStyle = 'rgba(255,255,255,0.22)';
-  ctx.beginPath();
-  ctx.moveTo(left, top + glassH * 0.15);
-  ctx.lineTo(left + 16, top);
-  ctx.lineTo(left + 40, top);
-  ctx.lineTo(left + 12, top + glassH);
-  ctx.lineTo(left - 12, top + glassH);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-
-  // low kickplate/sill along the very bottom
-  ctx.fillStyle = '#3a4a4e';
-  ctx.fillRect(left, bottom - 6, glassW, 6);
-
-  // glass entry door set into the same glass band — a slightly darker pane
-  // with a vertical push handle, so the front still reads as one continuous
-  // window wall rather than glass-plus-a-separate-door
   const doorW = TILE - 10, doorL = doorPx + 5;
-  ctx.fillStyle = 'rgba(60,90,105,0.5)';
+  const leftX = left, leftW = doorL - 4 - left;
+  const rightX = doorL + doorW + 4, rightW = right - rightX;
+
+  // -- hand-painted farm mural over one side window: green rolling hills
+  // under a pale sky, a scatter of round hay bales
+  function drawHillMural(bx, bw, by, bh) {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(bx, by, bw, bh); ctx.clip();
+    ctx.fillStyle = '#bfe0ea';
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.fillStyle = '#3f8f4a';
+    ctx.beginPath();
+    ctx.moveTo(bx, by + bh);
+    ctx.lineTo(bx, by + bh * 0.6);
+    for (let i = 0; i <= bw; i += 6) {
+      ctx.lineTo(bx + i, by + bh * 0.55 - 5 * Math.sin(i / 9));
+    }
+    ctx.lineTo(bx + bw, by + bh);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#7a5a2c';
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.ellipse(bx + bw * (0.25 + i * 0.28), by + bh * 0.8, 3, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // -- hand-painted farm mural: red barn with a white roofline, on a
+  // green field
+  function drawBarnMural(bx, bw, by, bh) {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(bx, by, bw, bh); ctx.clip();
+    ctx.fillStyle = '#bfe0ea';
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.fillStyle = '#3f8f4a';
+    ctx.fillRect(bx, by + bh * 0.62, bw, bh * 0.4);
+    const bcx = bx + bw * 0.5;
+    ctx.fillStyle = RED;
+    ctx.fillRect(bcx - bw * 0.26, by + bh * 0.4, bw * 0.52, bh * 0.3);
+    ctx.beginPath();
+    ctx.moveTo(bcx - bw * 0.3, by + bh * 0.4);
+    ctx.lineTo(bcx, by + bh * 0.2);
+    ctx.lineTo(bcx + bw * 0.3, by + bh * 0.4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = CREAM;
+    ctx.fillRect(bcx - 2, by + bh * 0.42, 4, bh * 0.14);
+    ctx.restore();
+  }
+
+  const muralTop = top, muralH = 30;
+  drawHillMural(leftX, leftW, muralTop, muralH);
+  drawBarnMural(rightX, rightW, muralTop, muralH);
+
+  // -- text pane below the mural: cream panel with red hand-lettering,
+  // like the shop's painted window signage
+  const textTop = muralTop + muralH, textH = 26;
+  ctx.fillStyle = CREAM;
+  ctx.fillRect(leftX, textTop, leftW, textH);
+  ctx.fillRect(rightX, textTop, rightW, textH);
+
+  ctx.fillStyle = RED;
+  ctx.textAlign = 'center';
+  ctx.font = 'italic bold 8px Georgia, serif';
+  ctx.fillText('Kountry Kart', leftX + leftW / 2, textTop + 12);
+  ctx.font = 'italic bold 7px Georgia, serif';
+  ctx.fillText('Deli', leftX + leftW / 2, textTop + 21);
+
+  ctx.font = 'bold 5px monospace';
+  ctx.fillText('SUBS \u00b7 WRAPS', rightX + rightW / 2, textTop + 10);
+  ctx.fillText('GYROS \u00b7 SALADS', rightX + rightW / 2, textTop + 18);
+  ctx.font = '5px monospace';
+  ctx.fillText('BEVERAGES', rightX + rightW / 2, textTop + 25);
+
+  // -- lower glass: dim interior glow, cool blue-tinted glass over both
+  // side windows, running down to the kickplate
+  const interiorTop = textTop + textH, interiorH = bottom - 16 - interiorTop;
+  [[leftX, leftW], [rightX, rightW]].forEach(([bx, bw]) => {
+    const grad = ctx.createLinearGradient(0, interiorTop, 0, interiorTop + interiorH);
+    grad.addColorStop(0, 'rgba(214,236,244,0.5)');
+    grad.addColorStop(1, 'rgba(110,150,175,0.55)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(bx, interiorTop, bw, interiorH);
+  });
+
+  // -- red pillars framing each window bay and the door, echoing the
+  // real storefront's red-painted structural columns
+  ctx.fillStyle = RED;
+  [left - 2, leftX + leftW, doorL + doorW + 1, right - 1].forEach((cxp) => {
+    ctx.fillRect(cxp, top, 4, glassH);
+  });
+  ctx.fillStyle = RED_DK;
+  [left - 2, leftX + leftW, doorL + doorW + 1, right - 1].forEach((cxp) => {
+    ctx.fillRect(cxp, top, 4, 4);
+  });
+
+  // -- glass entry door: black frame, dark glass, small round push plate,
+  // "OPEN 24 HRS" placard above it
+  ctx.fillStyle = 'rgba(50,60,64,0.55)';
   ctx.fillRect(doorL, top, doorW, glassH);
-  ctx.strokeStyle = '#233238';
+  ctx.strokeStyle = BLACK;
   ctx.lineWidth = 2;
   ctx.strokeRect(doorL, top, doorW, glassH);
+  ctx.fillStyle = CREAM;
+  ctx.fillRect(doorL + 2, top + glassH * 0.32, doorW - 4, 9);
+  ctx.fillStyle = RED;
+  ctx.font = 'bold 5px monospace';
+  ctx.fillText('OPEN', doorL + doorW / 2, top + glassH * 0.32 + 7);
   ctx.fillStyle = '#cfd8da';
-  ctx.fillRect(doorL + doorW - 7, top + glassH * 0.4, 3, glassH * 0.28);
+  ctx.fillRect(doorL + doorW - 7, top + glassH * 0.6, 3, glassH * 0.24);
+
+  // -- black-and-white striped kickplate along the very bottom, matching
+  // the real storefront's painted base band
+  const kickTop = bottom - 16;
+  ctx.fillStyle = BLACK;
+  ctx.fillRect(left, kickTop, right - left, 16);
+  ctx.save();
+  ctx.beginPath(); ctx.rect(left, kickTop, right - left, 16); ctx.clip();
+  ctx.strokeStyle = CREAM;
+  ctx.lineWidth = 2;
+  for (let sx = left - 16; sx < right + 16; sx += 10) {
+    ctx.beginPath();
+    ctx.moveTo(sx, kickTop + 16);
+    ctx.lineTo(sx + 16, kickTop);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // small red call button near the door, low on the kickplate
+  ctx.fillStyle = RED;
+  ctx.beginPath(); ctx.arc(doorL + doorW + 8, kickTop + 8, 3, 0, Math.PI * 2); ctx.fill();
 
   ctx.restore();
 }
