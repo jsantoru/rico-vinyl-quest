@@ -361,6 +361,11 @@ titleMenuImg.src = 'assets/title_menu.png';
 const titleSkyImg = new Image();
 titleSkyImg.src = 'assets/title_sky.png';
 
+// "Closed for now" splash shown when the player walks into one of the
+// placeholder portal doors at the west/east edges of the map.
+const portalClosedImg = new Image();
+portalClosedImg.src = 'assets/closed_for_now.png';
+
 // ---------------------------------------------------------------- maps
 const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J']);
 
@@ -374,8 +379,15 @@ function makeOverworld() {
   for (let x = 0; x < W; x++) { g[0][x] = '#'; g[H-1][x] = '#'; }
   for (let y = 0; y < H; y++) { g[y][0] = '#'; g[y][W-1] = '#'; }
 
-  for (let x = 1; x < W-1; x++) { g[9][x] = 'r'; g[10][x] = 'r'; }
-  for (let y = 1; y < H-1; y++) { g[y][19] = 'r'; g[y][20] = 'r'; }
+  for (let x = 1; x < W-1; x++) { g[9][x] = 'r'; }
+  for (let y = 1; y < H-1; y++) { g[y][19] = 'r'; }
+
+  // Placeholder portal doors on the west & east edges of the map, sitting
+  // right on Main Street (row 9) so they read as a natural continuation of
+  // the road. They don't lead anywhere yet — walking into one pops the
+  // "more lands coming" splash (see checkPortal()/drawPortalPopup()).
+  g[9][0] = 'P';
+  g[9][W - 1] = 'P';
 
   const buildings = [];
   function building(x, y, w, h, name, wall, roof, customDoorX) {
@@ -401,7 +413,7 @@ function makeOverworld() {
   // park + winding river, avoiding the building footprints
   const riverTiles = [];
   for (let y = 1; y <= H - 2; y++) {
-    const onRoad = (y === 9 || y === 10);
+    const onRoad = (y === 9);
     const wobble = Math.sin(y / 4.2) * 1.8 + Math.sin(y / 1.7) * 0.6;
     const centerX = Math.round(14 + wobble);
     for (let dx = 0; dx < 2; dx++) {
@@ -453,7 +465,7 @@ function makeOverworld() {
     // ambient life lanes for this map (which road rows each spawns on)
     // dogRow moved off 23 -> 6: the new stadium footprint (rows 17-24) now
     // sits on top of the old dog lane.
-    ambient: { bikeRows: [9, 10], walkerRow: 12, dogRow: 6 },
+    ambient: { bikeRows: [9], walkerRow: 12, dogRow: 6 },
   };
   // Talkable townsfolk: Gary (the old hippy guitarist by the deli garbage
   // can) and Willie (the painter out front of Green Door Studio).
@@ -697,11 +709,25 @@ const player = {
   tempItem: null, tempItemTimer: 0,
 };
 const collected = new Set();
-let state = 'splash'; // splash | title | select | play | dialog | record | win
+let state = 'splash'; // splash | title | select | play | dialog | record | win | portal
 let dialog = null;   // { name, lines, i }
 let shownRecord = null;
+let activePortal = null; // { x, y } tile the player walked into to open the portal popup
 const completedWorlds = new Set(); // worlds whose 5 records have all been found
 let toast = null;    // { text, t }
+
+// Voice line played the instant a character is locked in at the select
+// screen — drop a short vocal clip at assets/lets_do_this.mp3 (or .ogg/.wav,
+// see loadSfx below) to hear it. Until that file exists the browser just
+// fails to load it silently; nothing breaks.
+const letsDoThisSfx = loadSfx('assets/lets_do_this');
+function loadSfx(basePath) {
+  const a = new Audio();
+  a.src = basePath + '.mp3';
+  a.preload = 'auto';
+  a.volume = 0.9;
+  return a;
+}
 
 // Locks in a playable character and boots straight into the game with them.
 function chooseCharacter(id) {
@@ -709,6 +735,10 @@ function chooseCharacter(id) {
   selectedCharacter = id;
   state = 'play';
   music.setMenuBreak(false);
+  if (!music.muted) {
+    letsDoThisSfx.currentTime = 0;
+    letsDoThisSfx.play().catch(() => {}); // ignore autoplay-blocked / missing-file errors
+  }
 }
 
 function toggleSkate() {
@@ -920,6 +950,20 @@ function movePlayer(dt) {
     player.x = tr.x * TILE;
     player.y = tr.y * TILE;
     if (!maps[tr.map].outside) player.skating = false;
+  }
+
+  checkPortal(map);
+}
+
+// Placeholder portal doors: walking onto a 'P' tile pops the "more lands
+// coming" splash instead of an actual map transition. Records which tile
+// was entered so closing the popup can nudge the player back off of it —
+// otherwise standing still on the tile would reopen the popup every frame.
+function checkPortal(map) {
+  const tx = Math.floor(player.x / TILE), ty = Math.floor(player.y / TILE);
+  if (map.grid[ty] && map.grid[ty][tx] === 'P') {
+    activePortal = { x: tx, y: ty };
+    state = 'portal';
   }
 }
 
@@ -1494,6 +1538,18 @@ function update(dt) {
     }
   } else if (state === 'win') {
     if (interactPressed) state = 'play';
+  } else if (state === 'portal') {
+    if (interactPressed) {
+      state = 'play';
+      if (activePortal) {
+        // step the player back off the portal tile onto the road tile just
+        // inside the map, so the popup doesn't instantly reopen
+        const pushDir = activePortal.x === 0 ? 1 : -1;
+        player.x = (activePortal.x + pushDir + 0.5) * TILE;
+        player.y = (activePortal.y + 0.5) * TILE;
+        activePortal = null;
+      }
+    }
   }
   interactPressed = false;
   buyPressed = false;
@@ -1600,6 +1656,7 @@ function render(time) {
   if (state === 'dialog') drawDialog();
   if (state === 'record') drawRecordCard();
   if (state === 'win') drawWin();
+  if (state === 'portal') drawPortalPopup();
   if (toast) drawToast();
 }
 
@@ -1654,6 +1711,7 @@ function drawTiles(map, time, camX = 0, camY = 0) {
           break;
         }
         case '#': drawTree(px, py, map); break;
+        case 'P': drawPortalDoor(px, py, tx, ty, time); break;
         case '~': {
           const p = map.palette;
           ctx.fillStyle = p ? p.water : '#3060b0';
@@ -1744,6 +1802,55 @@ function drawTiles(map, time, camX = 0, camY = 0) {
       }
     }
   }
+}
+
+// A shimmering, not-yet-open portal doorway. Purely a placeholder visual —
+// walking into it triggers drawPortalPopup() instead of an actual map
+// transition. Drawn taller than a single tile (it overlaps the row above)
+// so it reads as an archway rather than a floor tile.
+function drawPortalDoor(px, py, tx, ty, time) {
+  const t = time || 0;
+  const cx = px + TILE / 2, cy = py + TILE / 2;
+  const pulse = 0.5 + 0.5 * Math.sin(t * 2.4 + tx * 3 + ty);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(px - 6, py - TILE - 4, TILE + 12, TILE * 2 + 8);
+  ctx.clip();
+
+  // outer glow
+  const grd = ctx.createRadialGradient(cx, cy, 2, cx, cy, TILE * 0.95);
+  grd.addColorStop(0, `rgba(196,150,255,${0.55 + pulse * 0.25})`);
+  grd.addColorStop(0.55, 'rgba(108,60,190,0.5)');
+  grd.addColorStop(1, 'rgba(20,10,40,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(px - 6, py - TILE - 4, TILE + 12, TILE * 2 + 8);
+
+  // stone archway frame
+  ctx.fillStyle = '#241a30';
+  ctx.fillRect(px + 1, py - TILE + 4, TILE - 2, TILE * 2 - 4);
+  ctx.fillStyle = '#3a2a4a';
+  ctx.fillRect(px + 4, py - TILE + 7, TILE - 8, TILE * 2 - 10);
+
+  // swirling portal core
+  ctx.fillStyle = `rgba(30,10,50,0.9)`;
+  ctx.beginPath();
+  ctx.ellipse(cx, py + TILE - 12, 10, 16, 0, 0, Math.PI * 2);
+  ctx.fill();
+  for (let i = 0; i < 3; i++) {
+    const a = t * 1.6 + i * (Math.PI * 2 / 3);
+    ctx.fillStyle = i % 2 === 0 ? '#c8a0ff' : '#7a4fd0';
+    ctx.beginPath();
+    ctx.ellipse(cx + Math.cos(a) * 4, py + TILE - 12 + Math.sin(a) * 9, 3, 6, a, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // "?" marking it as not-yet-a-real-door
+  ctx.fillStyle = '#f4ecd8';
+  ctx.font = 'bold 14px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('?', cx, py - TILE + 22);
+  ctx.restore();
 }
 
 function drawTree(px, py, map) {
@@ -2026,7 +2133,36 @@ function drawBuildings(map) {
     // Draw building name sign (skip for Nectar's - uses neon sign instead).
     // High-contrast dark plate + bright bold lettering, auto-sized to the
     // name so it always fits cleanly and never overlaps or crowds.
-    if (!isNectars) {
+    if (isComedyClub) {
+      // The building is only 2 tiles wide, so a single-line plate for "VT
+      // COMEDY CLUB" would have to grow wide enough to creep into Junior's
+      // sign next door. Wrap onto two lines and grow the plate DOWN instead
+      // of sideways so it stays clear of the neighbors.
+      const lines = ['VT COMEDY', 'CLUB'];
+      const maxTextW = w + 26;
+      let fsize = 13;
+      ctx.font = 'bold ' + fsize + 'px monospace';
+      let lineW = Math.max(...lines.map((l) => ctx.measureText(l).width));
+      while (fsize > 9 && lineW > maxTextW) {
+        fsize--;
+        ctx.font = 'bold ' + fsize + 'px monospace';
+        lineW = Math.max(...lines.map((l) => ctx.measureText(l).width));
+      }
+      const lineH = fsize + 4;
+      const sw = lineW + 14, sh = lineH * lines.length + 8;
+      const sx = px + (w - sw) / 2, sy = py + 3;
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fillRect(sx + 2, sy + 3, sw, sh);
+      ctx.fillStyle = '#120e0a';
+      ctx.fillRect(sx, sy, sw, sh);
+      ctx.fillStyle = b.roof || '#e0b040';
+      ctx.fillRect(sx, sy + sh - 3, sw, 3);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#f9f2e0';
+      lines.forEach((line, i) => {
+        ctx.fillText(line, px + w / 2, sy + lineH * (i + 1) - 3);
+      });
+    } else if (!isNectars) {
       const maxTextW = w + 26;
       let fsize = 17;
       ctx.font = 'bold ' + fsize + 'px monospace';
@@ -2446,7 +2582,9 @@ function drawCobblePath(tx, ty, w, h) {
 }
 
 function drawChurch() {
-  const px = 21 * TILE, py = 11 * TILE;
+  // Moved to the top-center of the map, at the head of Main Street (the
+  // vertical road), so the road now leads straight up to the church steps.
+  const px = 18 * TILE, py = 3 * TILE;
   const w = 3 * TILE, h = 3 * TILE;
   const cx = px + w / 2;
 
@@ -2663,10 +2801,11 @@ function drawStand(px, py, c) {
 }
 
 function drawCenterStretch() {
-  // single middle strip of cobblestone leading away from the church door (south)
-  drawCobblePath(22, 14, 1, 4);
-  // the little white church
+  // the little white church, now at the top of Main Street
   drawChurch();
+  // cobblestone strip leading away from the church door (south), down to
+  // where it meets the main road at the crossroads
+  drawCobblePath(19, 6, 1, 3);
 
   // small row of food stands / shops running along the center road
   drawStand(21 * TILE, 4 * TILE + 6,   { top: '#d84030', top2: '#f4efe3', body: '#8a5a32', a: '#e06a38', b: '#c8d84a' });
@@ -3269,24 +3408,26 @@ function drawIceCreamVan() {
   ctx.fillText('CREAMERY', x + w * 0.36, y + h - 1);
 }
 
+// Smaller now, and moved off the riverbank to the open ground between Green
+// Door Studio's east wall and the river — still just west of the water.
 function drawAnthillBillboard() {
-  const x = 14 * TILE;
+  const x = 12 * TILE;
   const y = 4 * TILE;
-  const w = 150, h = 54;
+  const w = 80, h = 30;
 
   ctx.fillStyle = '#553c2b';
-  ctx.fillRect(x + 15, y + h, 7, 38);
-  ctx.fillRect(x + w - 22, y + h, 7, 38);
+  ctx.fillRect(x + 8, y + h, 4, 21);
+  ctx.fillRect(x + w - 12, y + h, 4, 21);
 
   ctx.fillStyle = '#29242a';
-  ctx.fillRect(x - 4, y - 4, w + 8, h + 8);
+  ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
 
   ctx.fillStyle = '#d6c35e';
   ctx.fillRect(x, y, w, h);
 
   // Graffiti mural artwork fills the board (cover-fit, cropped to the frame)
   if (anthillBillboardImg.complete && anthillBillboardImg.naturalWidth) {
-    const ix = x + 4, iy = y + 4, iw = w - 8, ih = h - 8;
+    const ix = x + 3, iy = y + 3, iw = w - 6, ih = h - 6;
     ctx.save();
     ctx.beginPath();
     ctx.rect(ix, iy, iw, ih);
@@ -3301,8 +3442,8 @@ function drawAnthillBillboard() {
   }
 
   ctx.strokeStyle = '#4b3928';
-  ctx.lineWidth = 3;
-  ctx.strokeRect(x + 4, y + 4, w - 8, h - 8);
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 3, y + 3, w - 6, h - 6);
 }
 
 function drawOldLotByHeyBud() {
@@ -3641,8 +3782,8 @@ function drawComedyClubDecor(px, py, w, h) {
   ctx.save();
 
   const cx = px + w / 2;
-  const cy = py + 66;
-  const r = 15;
+  const cy = py + 76;
+  const r = 13;
 
   // glow + chrome-style ring, echoing the round signs elsewhere in town
   ctx.fillStyle = 'rgba(224,176,64,0.18)';
@@ -4502,6 +4643,58 @@ function drawDialog() {
   ctx.fillStyle = '#9a90a8';
   ctx.textAlign = 'right';
   ctx.fillText('[E] ▶', VIEW_W - 44, y + h - 14);
+}
+
+// Splash popup shown when the player walks into one of the placeholder
+// portal doors. Mirrors the look of drawDialog()/drawSplash() so it feels
+// native to the game rather than a bolted-on alert box.
+function drawPortalPopup() {
+  ctx.fillStyle = 'rgba(8,6,12,0.6)';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+  if (portalClosedImg.complete && portalClosedImg.naturalWidth) {
+    const iw = portalClosedImg.naturalWidth, ih = portalClosedImg.naturalHeight;
+    const scale = Math.min((VIEW_W * 0.62) / iw, (VIEW_H * 0.58) / ih);
+    const dw = iw * scale, dh = ih * scale;
+    const dx = (VIEW_W - dw) / 2, dy = 38;
+    ctx.drawImage(portalClosedImg, dx, dy, dw, dh);
+  }
+
+  const boxW = VIEW_W - 120, boxH = 128, boxX = 60, boxY = VIEW_H - boxH - 28;
+  ctx.fillStyle = 'rgba(10,8,14,0.94)';
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+  ctx.strokeStyle = '#f4ecd8';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(boxX + 2, boxY + 2, boxW - 4, boxH - 4);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#f4ecd8';
+  ctx.font = '15px monospace';
+  const lines = wrapLinesCentered(
+    'More lands are being created. More vinyl awaits. Check back later homie!',
+    boxW - 48
+  );
+  const startY = boxY + 30;
+  lines.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, startY + i * 20));
+
+  ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
+  ctx.font = 'bold 14px monospace';
+  ctx.fillText('Press [E] or tap screen to return', VIEW_W / 2, boxY + boxH - 16);
+}
+
+// Like wrapText(), but returns the wrapped lines instead of drawing them
+// left-aligned, so a caller can center each line itself.
+function wrapLinesCentered(text, maxW) {
+  const words = text.split(' ');
+  const lines = [];
+  let line = '';
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; }
+    else line = test;
+  }
+  if (line) lines.push(line);
+  return lines;
 }
 
 function wrapText(text, x, y, maxW, lh) {
