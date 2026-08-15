@@ -452,11 +452,8 @@ function makeOverworld() {
   g[STADIUM_OPEN_Y][STADIUM_X] = '.';                     // west opening
   g[STADIUM_OPEN_Y][STADIUM_X + STADIUM_W - 1] = '.';     // east opening
 
-  // flea market corner: stalls (fences) + crates, one holds the white label
-  // NOTE: skip the tile directly above the Pure Pop Records door so the fence
-  // doesn't block access to it.
-  for (let x = 25; x <= 31; x++) { if (x === thrift.doorX) continue; g[18][x] = 'f'; }
-  for (let y = 18; y <= 22; y++) g[y][32] = 'f';
+  // flea market corner: crates only (the fence stalls were removed — they
+  // boxed the player in too much while walking around), one holds the white label
   g[20][26] = 'c'; g[21][28] = 'c'; g[20][30] = 'c';
 
   const map = {
@@ -723,9 +720,18 @@ let toast = null;    // { text, t }
 const letsDoThisSfx = loadSfx('assets/lets_do_this');
 function loadSfx(basePath) {
   const a = new Audio();
-  a.src = basePath + '.mp3';
   a.preload = 'auto';
   a.volume = 0.9;
+  // Try each format as a separate <source>, so whichever file actually
+  // exists (mp3/ogg/wav) gets picked up rather than only ever looking for
+  // .mp3. Per the media spec, the browser falls through to the next
+  // <source> both on an unsupported type AND on a failed/missing fetch, so
+  // this covers "I dropped in a .wav" as well as "the .mp3 doesn't exist".
+  ['mp3', 'ogg', 'wav'].forEach((ext) => {
+    const src = document.createElement('source');
+    src.src = `${basePath}.${ext}`;
+    a.appendChild(src);
+  });
   return a;
 }
 
@@ -736,7 +742,10 @@ function chooseCharacter(id) {
   state = 'play';
   music.setMenuBreak(false);
   if (!music.muted) {
-    letsDoThisSfx.currentTime = 0;
+    // Resetting currentTime before the clip has buffered any data can throw
+    // in some browsers (e.g. Safari), which would otherwise abort this whole
+    // block and skip play() entirely — so it's wrapped separately.
+    try { letsDoThisSfx.currentTime = 0; } catch (e) {}
     letsDoThisSfx.play().catch(() => {}); // ignore autoplay-blocked / missing-file errors
   }
 }
