@@ -281,6 +281,23 @@ const VERMONT_NEWS = [
 const keys = {};
 let interactPressed = false;
 let buyPressed = false;
+
+// ---- "fifa" keyword easter egg -------------------------------------------
+// Typing the word "fifa" on a physical keyboard (any time, in any state)
+// pops a splash + countdown popup, then hands control back to whatever
+// state the player was in. Keyboard-only by nature: touch users have no
+// keys to type, so this simply never fires for them.
+const FIFA_CODE = 'fifa';
+let fifaBuffer = '';
+let fifaReturnState = 'play';
+let fifaStartTime = 0;
+function triggerFifaEasterEgg() {
+  if (state === 'fifa') return; // already showing, don't restart the clock
+  fifaReturnState = state;
+  state = 'fifa';
+  fifaStartTime = performance.now();
+}
+
 window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k) || k === ' ') e.preventDefault();
@@ -293,6 +310,18 @@ window.addEventListener('keydown', (e) => {
     if (k === 'y') toggleTea();
     if (k === 'arrowleft') selectMove = -1;
     if (k === 'arrowright') selectMove = 1;
+
+    // track typed letters for the "fifa" easter egg, keeping only the last
+    // 4 characters typed so it works no matter what came before
+    if (k.length === 1 && k >= 'a' && k <= 'z') {
+      fifaBuffer = (fifaBuffer + k).slice(-FIFA_CODE.length);
+      if (fifaBuffer === FIFA_CODE) {
+        fifaBuffer = '';
+        triggerFifaEasterEgg();
+      }
+    } else {
+      fifaBuffer = '';
+    }
   }
   keys[k] = true;
   music.start(); // audio needs a user gesture
@@ -365,6 +394,11 @@ titleSkyImg.src = 'assets/title_sky.png';
 // placeholder portal doors at the west/east edges of the map.
 const portalClosedImg = new Image();
 portalClosedImg.src = 'assets/closed_for_now.png';
+
+// Easter-egg splash shown when the player types "fifa" on a keyboard (see
+// the fifaBuffer tracking in the keydown listener below).
+const fifaImg = new Image();
+fifaImg.src = 'assets/fifa.png';
 
 // ---------------------------------------------------------------- maps
 const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J']);
@@ -714,7 +748,7 @@ const player = {
   tempItem: null, tempItemTimer: 0,
 };
 const collected = new Set();
-let state = 'splash'; // splash | title | select | play | dialog | record | win | portal
+let state = 'splash'; // splash | title | select | play | dialog | record | win | portal | fifa
 let dialog = null;   // { name, lines, i }
 let shownRecord = null;
 let activePortal = null; // { x, y } tile the player walked into to open the portal popup
@@ -1585,6 +1619,10 @@ function update(dt) {
         activePortal = null;
       }
     }
+  } else if (state === 'fifa') {
+    if (performance.now() - fifaStartTime >= 5000) {
+      state = fifaReturnState;
+    }
   }
   interactPressed = false;
   buyPressed = false;
@@ -1692,6 +1730,7 @@ function render(time) {
   if (state === 'record') drawRecordCard();
   if (state === 'win') drawWin();
   if (state === 'portal') drawPortalPopup();
+  if (state === 'fifa') drawFifaPopup();
   if (toast) drawToast();
 }
 
@@ -5002,6 +5041,41 @@ function drawPortalPopup() {
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
   ctx.font = 'bold 14px monospace';
   ctx.fillText('Press [E] or tap screen to return', VIEW_W / 2, boxY + boxH - 16);
+}
+
+// "fifa" keyword easter egg: splash image + a countdown popup that reads
+// "Time for a quick friendly! Back in 5...4...3..." with a live number,
+// shown for 5 seconds (see triggerFifaEasterEgg / fifaStartTime) before
+// control hands back to whatever state the player was in.
+function drawFifaPopup() {
+  ctx.fillStyle = 'rgba(8,6,12,0.68)';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+  if (fifaImg.complete && fifaImg.naturalWidth) {
+    const iw = fifaImg.naturalWidth, ih = fifaImg.naturalHeight;
+    const scale = Math.min((VIEW_W * 0.72) / iw, (VIEW_H * 0.6) / ih);
+    const dw = iw * scale, dh = ih * scale;
+    const dx = (VIEW_W - dw) / 2, dy = 26;
+    ctx.drawImage(fifaImg, dx, dy, dw, dh);
+  }
+
+  const secondsLeft = Math.max(1, Math.ceil(5 - (performance.now() - fifaStartTime) / 1000));
+
+  const boxW = VIEW_W - 160, boxH = 100, boxX = 80, boxY = VIEW_H - boxH - 24;
+  ctx.fillStyle = 'rgba(10,8,14,0.94)';
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+  ctx.strokeStyle = '#f4ecd8';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(boxX + 2, boxY + 2, boxW - 4, boxH - 4);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#f4ecd8';
+  ctx.font = '16px monospace';
+  ctx.fillText('Time for a quick friendly!', VIEW_W / 2, boxY + 36);
+
+  ctx.fillStyle = '#e0b040';
+  ctx.font = 'bold 26px monospace';
+  ctx.fillText(`Back in ${secondsLeft}...`, VIEW_W / 2, boxY + 74);
 }
 
 // Like wrapText(), but returns the wrapped lines instead of drawing them
