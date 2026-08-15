@@ -404,8 +404,8 @@ function makeOverworld() {
   }
 
   const groove = building(4, 3, 7, 4, 'Green Door Studio', '#76503a', '#4e3328', 9); // door moved to right
-  const henrys = building(23, 3, 4, 4, "Henry's Diner", '#c23b30', '#2f2b28'); // classic diner, just west of Hey Bud
-  const wax    = building(28, 3, 7, 4, 'Hey Bud', '#bf4f6f', '#93384f');
+  const henrys = building(23, 3, 4, 4, "Henry's Diner", '#f2eee2', '#e8b830'); // white with yellow trim, classic diner, just west of Hey Bud
+  const wax    = building(28, 3, 7, 4, 'Hey Bud', '#f2efe4', '#2f8fa8'); // white w/ teal-topped mural band, red door & kickplate
   const diner  = building(4, 14, 5, 4, 'Kountry Kart Deli', '#c07a38', '#96591f'); // smaller - 5 tiles wide
   const nectars = building(9, 14, 4, 6, 'Nectars', '#2a2a3a', '#1a1a2a'); // taller building next to deli
   const thrift = building(28, 14, 5, 4, 'Pure Pop Records', '#3f8fbf', '#2a6a93'); // smaller to make room
@@ -1986,6 +1986,7 @@ function drawBuildings(map) {
     const isJuniors = b.name === "Junior's";
     const isHenrys = b.name === "Henry's Diner";
     const isComedyClub = b.name === 'VT COMEDY CLUB';
+    const isDeli = b.name === 'Kountry Kart Deli';
 
     // wall: outline, base fill, side shading bands, and a darker foundation
     // strip along the bottom — same layered look as the keeper sprites.
@@ -2036,23 +2037,25 @@ function drawBuildings(map) {
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.fillRect(px, py + TILE + 8, w, 3);
 
-    for (let i = 0; i < b.w; i++) {
-      if (b.x + i === b.doorX) continue;
-      if (i === 0 || i === b.w - 1) continue;
-      const wx = px + i * TILE + 8, wy = py + h - TILE - 14;
-      ctx.fillStyle = '#3a2a1c';                          // frame
-      ctx.fillRect(wx - 2, wy - 2, 20, 22);
-      ctx.fillStyle = '#ffe9a0';                           // glass base
-      ctx.fillRect(wx, wy, 16, 18);
-      ctx.fillStyle = 'rgba(0,0,0,0.22)';                  // lower pane in shadow
-      ctx.fillRect(wx, wy + 9, 16, 9);
-      ctx.fillStyle = 'rgba(255,255,255,0.5)';             // glint, upper-left
-      ctx.fillRect(wx + 1, wy + 1, 5, 5);
-      ctx.fillStyle = '#3a2a1c';                           // muntin cross
-      ctx.fillRect(wx + 7, wy, 2, 18);
-      ctx.fillRect(wx, wy + 8, 16, 2);
-      ctx.fillStyle = '#2a1c12';                           // sill
-      ctx.fillRect(wx - 3, wy + 19, 22, 3);
+    if (!isDeli) {
+      for (let i = 0; i < b.w; i++) {
+        if (b.x + i === b.doorX) continue;
+        if (i === 0 || i === b.w - 1) continue;
+        const wx = px + i * TILE + 8, wy = py + h - TILE - 14;
+        ctx.fillStyle = '#3a2a1c';                          // frame
+        ctx.fillRect(wx - 2, wy - 2, 20, 22);
+        ctx.fillStyle = '#ffe9a0';                           // glass base
+        ctx.fillRect(wx, wy, 16, 18);
+        ctx.fillStyle = 'rgba(0,0,0,0.22)';                  // lower pane in shadow
+        ctx.fillRect(wx, wy + 9, 16, 9);
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';             // glint, upper-left
+        ctx.fillRect(wx + 1, wy + 1, 5, 5);
+        ctx.fillStyle = '#3a2a1c';                           // muntin cross
+        ctx.fillRect(wx + 7, wy, 2, 18);
+        ctx.fillRect(wx, wy + 8, 16, 2);
+        ctx.fillStyle = '#2a1c12';                           // sill
+        ctx.fillRect(wx - 3, wy + 19, 22, 3);
+      }
     }
 
     if (isGreenDoorStudio) {
@@ -2136,6 +2139,24 @@ function drawBuildings(map) {
       drawOpenDoorSign(dx, py + h - TILE);
       // "3rd Thursdays" hip-hop night flyer taped in a window near the entrance
       drawThursPoster(dx - TILE - 4, py + h - TILE - 18);
+    } else if (isDeli) {
+      // No separate wood door here — the deli's whole front is one glass
+      // storefront, entry included, drawn by drawDeliDecor() below.
+    } else if (isHeyBud) {
+      // red-framed glass door, matching the reference storefront's red door
+      const doorXi = dx + 4, doorY = py + h - TILE + 2, doorW = TILE - 8, doorH = TILE - 2;
+      ctx.fillStyle = '#1c140f';
+      ctx.fillRect(doorXi - 2, doorY - 3, doorW + 4, doorH + 3);
+      ctx.fillStyle = '#a8281f';
+      ctx.fillRect(doorXi, doorY, doorW, doorH);
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';                  // shadowed half
+      ctx.fillRect(doorXi, doorY, doorW / 2, doorH);
+      ctx.fillStyle = 'rgba(255,255,255,0.1)';             // lit half
+      ctx.fillRect(doorXi + doorW / 2, doorY, doorW / 2 - 1, doorH);
+      ctx.fillStyle = 'rgba(20,18,22,0.55)';               // dark glass insert
+      ctx.fillRect(doorXi + 3, doorY + 4, doorW - 6, doorH * 0.6);
+      ctx.fillStyle = '#e0c060';
+      ctx.fillRect(dx + TILE - 12, py + h - 16, 3, 3);
     } else {
       // Standard door for other buildings: outline, frame, shaded panels, handle
       const doorXi = dx + 4, doorY = py + h - TILE + 2, doorW = TILE - 8, doorH = TILE - 2;
@@ -2155,6 +2176,7 @@ function drawBuildings(map) {
     }
 
     if (isHeyBud) drawHeyBudDecor(px, py, w, h);
+    if (isDeli) drawDeliDecor(px, py, w, h, dx);
     if (isNectars) {
       drawNectarsDecor(px, py, w, h);
       drawWallPoster(px, py, w, h);
@@ -2215,8 +2237,25 @@ function drawBuildings(map) {
       ctx.fillStyle = b.roof || '#e0b040';
       ctx.fillRect(sx, sy + sh - 3, sw, 3);
       ctx.textAlign = 'center';
-      ctx.fillStyle = '#f9f2e0';
-      ctx.fillText(b.name, px + w / 2, sy + sh / 2 + fsize * 0.36);
+      if (isHenrys) {
+        // glowing red neon-tube look: a soft outer glow under a brighter
+        // pink-white core, so the lettering reads like a lit neon sign
+        // against the dark plate instead of flat printed text.
+        const tx2 = px + w / 2, ty2 = sy + sh / 2 + fsize * 0.36;
+        ctx.save();
+        ctx.shadowColor = '#ff2a3c';
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = '#ff2a3c';
+        ctx.fillText(b.name, tx2, ty2);
+        ctx.fillText(b.name, tx2, ty2); // second pass deepens the glow
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ffc4cb';
+        ctx.fillText(b.name, tx2, ty2);
+        ctx.restore();
+      } else {
+        ctx.fillStyle = '#f9f2e0';
+        ctx.fillText(b.name, px + w / 2, sy + sh / 2 + fsize * 0.36);
+      }
     }
   }
 }
@@ -2470,39 +2509,105 @@ function drawGraffiti(px, py, w, h) {
 
 function drawHeyBudDecor(px, py, w, h) {
   ctx.save();
-  ctx.strokeStyle = '#285f32';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(px + 8, py + 30);
-  ctx.quadraticCurveTo(px + 16, py + 46, px + 22, py + 34);
-  ctx.quadraticCurveTo(px + 30, py + 49, px + 38, py + 35);
-  ctx.quadraticCurveTo(px + 48, py + 49, px + 57, py + 34);
-  ctx.stroke();
 
-  const leaves = [[12,37],[22,40],[31,36],[43,41],[54,36],[67,40],[83,35],[101,42],[116,36],[126,42],[137,35],[151,42],[174,37],[190,42],[205,36]];
-  ctx.fillStyle = '#3f863e';
-  for (const [lx, ly] of leaves) {
+  // Wavy teal / white / orange mural band across the top of the wall —
+  // echoes the real storefront's abstract paint job wrapping the top edge.
+  const muralY = py + 46, muralH = 20;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(px, muralY, w, muralH);
+  ctx.clip();
+  ctx.fillStyle = '#2f8fa8';
+  ctx.fillRect(px, muralY, w, muralH);
+  const blobs = [
+    [8, 6, 14], [30, 12, 10], [52, 4, 16], [76, 14, 9],
+    [98, 6, 15], [122, 13, 10], [146, 4, 14], [170, 13, 9],
+    [194, 6, 15], [214, 12, 10],
+  ];
+  blobs.forEach(([bx, by, r], i) => {
+    ctx.fillStyle = i % 2 === 0 ? '#eef1ea' : '#dd6a38';
     ctx.beginPath();
-    ctx.arc(px + lx, py + ly, 5, 0, Math.PI * 2);
+    ctx.ellipse(px + bx, muralY + by, r, r * 0.55, 0.35, 0, Math.PI * 2);
     ctx.fill();
-  }
+  });
+  ctx.restore();
 
-  drawPlantPot(px + 8, py + h - 5);
-  drawPlantPot(px + w - 20, py + h - 5);
+  // red corrugated kickplate band along the base, under the windows/door —
+  // matches the real building's red ribbed metal skirt
+  const bandY = py + h - 14;
+  ctx.fillStyle = '#a8281f';
+  ctx.fillRect(px, bandY, w, 14);
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  for (let x = 0; x < w; x += 8) ctx.fillRect(px + x, bandY, 4, 14);
 
-  ctx.strokeStyle = '#3a2a20';
-  ctx.lineWidth = 2;
+  drawPlantPot(px + 8, py + h - 14);
+  drawPlantPot(px + w - 20, py + h - 14);
+
+  ctx.restore();
+}
+
+// Kountry Kart Deli: replaces the standard punch-windows + door with one
+// continuous floor-to-ceiling glass storefront across the whole front wall,
+// door included, so the building reads as "all windows" up front.
+function drawDeliDecor(px, py, w, h, doorPx) {
+  ctx.save();
+
+  const top = py + 44;      // just below the roof/eave trim
+  const bottom = py + h - 4; // just above the foundation shading
+  const left = px + 6, right = px + w - 6;
+  const glassW = right - left, glassH = bottom - top;
+
+  // dark recess behind the glazing so the panes read as inset, not flush paint
+  ctx.fillStyle = '#1c2a30';
+  ctx.fillRect(left - 2, top - 2, glassW + 4, glassH + 4);
+
+  // cool blue-tinted glass fill
+  const grad = ctx.createLinearGradient(0, top, 0, bottom);
+  grad.addColorStop(0, 'rgba(214,236,244,0.65)');
+  grad.addColorStop(0.5, 'rgba(152,196,216,0.55)');
+  grad.addColorStop(1, 'rgba(110,150,175,0.6)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(left, top, glassW, glassH);
+
+  // vertical mullions dividing the storefront into panes
+  ctx.fillStyle = '#233238';
+  const paneW = 26;
+  for (let x = left; x <= right; x += paneW) ctx.fillRect(x, top, 3, glassH);
+  // slim transom line near the top
+  ctx.fillRect(left, top + 14, glassW, 3);
+
+  // diagonal glare streak for a glassy highlight
+  ctx.save();
   ctx.beginPath();
-  ctx.moveTo(px + w - 44, py + 25);
-  ctx.lineTo(px + w - 38, py + 47);
-  ctx.stroke();
+  ctx.rect(left, top, glassW, glassH);
+  ctx.clip();
+  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  ctx.beginPath();
+  ctx.moveTo(left, top + glassH * 0.15);
+  ctx.lineTo(left + 16, top);
+  ctx.lineTo(left + 40, top);
+  ctx.lineTo(left + 12, top + glassH);
+  ctx.lineTo(left - 12, top + glassH);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
 
-  ctx.fillStyle = '#9b633a';
-  ctx.fillRect(px + w - 48, py + 45, 20, 7);
-  ctx.fillStyle = '#4d9342';
-  ctx.fillRect(px + w - 44, py + 38, 5, 9);
-  ctx.fillRect(px + w - 37, py + 35, 5, 12);
-  ctx.fillRect(px + w - 30, py + 39, 5, 8);
+  // low kickplate/sill along the very bottom
+  ctx.fillStyle = '#3a4a4e';
+  ctx.fillRect(left, bottom - 6, glassW, 6);
+
+  // glass entry door set into the same glass band — a slightly darker pane
+  // with a vertical push handle, so the front still reads as one continuous
+  // window wall rather than glass-plus-a-separate-door
+  const doorW = TILE - 10, doorL = doorPx + 5;
+  ctx.fillStyle = 'rgba(60,90,105,0.5)';
+  ctx.fillRect(doorL, top, doorW, glassH);
+  ctx.strokeStyle = '#233238';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(doorL, top, doorW, glassH);
+  ctx.fillStyle = '#cfd8da';
+  ctx.fillRect(doorL + doorW - 7, top + glassH * 0.4, 3, glassH * 0.28);
+
   ctx.restore();
 }
 
