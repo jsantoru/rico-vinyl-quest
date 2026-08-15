@@ -4720,7 +4720,7 @@ const SELECT_LABEL_POS = [
 const SELECT_TITLES = [
   { main: 'SANTOS', sub: null },
   { main: 'RICO', sub: '(YANKS)' },
-  { main: 'RICO', sub: '(Hiero)' },
+  { main: 'RICO', sub: '(HIERO)' },
 ];
 
 // Draws text with a chunky dark outline behind a gold gradient fill, the
