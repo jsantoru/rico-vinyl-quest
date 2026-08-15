@@ -4792,10 +4792,10 @@ function drawCharacterSelect(time) {
       const title = SELECT_TITLES[i];
       const lx = originX + pos.xFrac * dw, ly = originY + pos.yFrac * dh;
       if (title.sub) {
-        drawRetroTitle(title.main, lx, ly - 5, 16);
-        drawRetroTitle(title.sub, lx, ly + 12, 11);
+        drawRetroTitle(title.main, lx, ly - 8, 26);
+        drawRetroTitle(title.sub, lx, ly + 18, 16);
       } else {
-        drawRetroTitle(title.main, lx, ly + 5, 17);
+        drawRetroTitle(title.main, lx, ly + 8, 28);
       }
     });
   } else {
@@ -4818,10 +4818,10 @@ function drawCharacterSelect(time) {
       const title = SELECT_TITLES[i];
       const lx = x + panelW / 2, ly = y + panelH - 34;
       if (title.sub) {
-        drawRetroTitle(title.main, lx, ly - 5, 20);
-        drawRetroTitle(title.sub, lx, ly + 14, 13);
+        drawRetroTitle(title.main, lx, ly - 10, 32);
+        drawRetroTitle(title.sub, lx, ly + 20, 19);
       } else {
-        drawRetroTitle(title.main, lx, ly + 6, 22);
+        drawRetroTitle(title.main, lx, ly + 10, 34);
       }
     });
   }
