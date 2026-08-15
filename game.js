@@ -397,6 +397,7 @@ function makeOverworld() {
   }
 
   const groove = building(4, 3, 7, 4, 'Green Door Studio', '#76503a', '#4e3328', 9); // door moved to right
+  const henrys = building(23, 3, 4, 4, "Henry's Diner", '#c23b30', '#2f2b28'); // classic diner, just west of Hey Bud
   const wax    = building(28, 3, 7, 4, 'Hey Bud', '#bf4f6f', '#93384f');
   const diner  = building(4, 14, 5, 4, 'Kountry Kart Deli', '#c07a38', '#96591f'); // smaller - 5 tiles wide
   const nectars = building(9, 14, 4, 6, 'Nectars', '#2a2a3a', '#1a1a2a'); // taller building next to deli
@@ -424,7 +425,7 @@ function makeOverworld() {
     if (g[lowerBridgeRow][x] === '~') g[lowerBridgeRow][x] = 'b';
   }
 
-  const trees = [[3,20],[5,22],[7,19],[13,21],[15,23],[3,23],[10,23],[16,19],[36,20],[34,23],[9,12],[14,13],[25,12],[36,12],[2,12],[37,7],[2,7],[24,23],[13,6],[26,6]];
+  const trees = [[3,20],[5,22],[7,19],[13,21],[15,23],[3,23],[10,23],[36,20],[34,23],[9,12],[14,13],[25,12],[36,12],[2,12],[37,7],[2,7],[24,23],[13,6],[26,6]];
   for (const [tx, ty] of trees) if (g[ty][tx] === '.') g[ty][tx] = '#';
 
   // Vermont Green FC soccer stadium — a big solid outdoor structure with no
@@ -436,6 +437,14 @@ function makeOverworld() {
   const STADIUM_X = 17, STADIUM_Y = 17, STADIUM_W = 7, STADIUM_H = 8;
   for (let yy = STADIUM_Y; yy < STADIUM_Y + STADIUM_H; yy++)
     for (let xx = STADIUM_X; xx < STADIUM_X + STADIUM_W; xx++) g[yy][xx] = 'w';
+  // carve out the pitch itself so the player can walk around inside the
+  // bowl, then punch two openings through the west/east walls (at the same
+  // row) so there's a way in and out on either side of the field.
+  for (let yy = STADIUM_Y + 1; yy < STADIUM_Y + STADIUM_H - 1; yy++)
+    for (let xx = STADIUM_X + 1; xx < STADIUM_X + STADIUM_W - 1; xx++) g[yy][xx] = '.';
+  const STADIUM_OPEN_Y = STADIUM_Y + Math.floor(STADIUM_H / 2); // must match drawStadium()'s gate row
+  g[STADIUM_OPEN_Y][STADIUM_X] = '.';                     // west opening
+  g[STADIUM_OPEN_Y][STADIUM_X + STADIUM_W - 1] = '.';     // east opening
 
   // flea market corner: stalls (fences) + crates, one holds the white label
   // NOTE: skip the tile directly above the Pure Pop Records door so the fence
@@ -482,7 +491,7 @@ function makeOverworld() {
     { id: 'news2', tx: 33, ty: 12 },
     { id: 'news3', tx: 30, ty: 24 },
   ];
-  return { map, doors: { groove, wax, diner, nectars, thrift, juniors } };
+  return { map, doors: { groove, henrys, wax, diner, nectars, thrift, juniors } };
 }
 
 // small deterministic RNG so the swamp layout is identical on every load
@@ -575,6 +584,7 @@ function makeShop(id, opts) {
     crates: {}, npcs: [],
     darkClub: opts.darkClub || false,
     pizzaShop: opts.pizzaShop || false,
+    diner: opts.diner || false,
   };
   const spots = [[1,4],[1,6],[12,4],[12,6],[2,8],[11,8]];
   opts.crates.forEach((c, i) => {
@@ -609,6 +619,16 @@ const shops = {
               'Should still be in a crate on the RIGHT side, behind the ferns.'],
       foundLine: 'Midnight Stab, right here at Hey Bud? Those horns are gonna grow on you.' },
     crates: [ { junkSeed: 3 }, { junkSeed: 4 }, { record: 'stab' }, { junkSeed: 5 } ],
+  }),
+  henrys: makeShop('henrys', {
+    floor: '#e8dcc8', plank: '#d8c8a8', wallColor: '#8a2820',
+    keeper: { name: 'HENRY', shirt: '#f4ecd8', skin: '#c89268',
+      lines: ['Welcome to Henry\'s — grab a stool, the coffee\'s always on.',
+              'Been flipping burgers on this griddle since before you were born.',
+              'Menu\'s simple: burgers, fries, milkshakes. Don\'t overthink it.'],
+      foundLine: 'Well butter my biscuit — is that a record? Keep on truckin\', kid.' },
+    crates: [],
+    diner: true,
   }),
   diner: makeShop('diner', {
     floor: '#b8a08a', plank: '#a89078', wallColor: '#7a4a3a',
@@ -1549,6 +1569,7 @@ function render(time) {
   }
   if (map.darkClub) drawNectarsInterior(time);
   if (map.pizzaShop) drawJuniorsInterior(time);
+  if (map.diner) drawHenrysInterior(time);
   if (map.keeper) drawKeeper(map.keeper);
   drawPlayer(time);
 
@@ -1802,6 +1823,7 @@ function drawBuildings(map) {
     const isThrift = b.name === 'Pure Pop Records';
     const isNectars = b.name === 'Nectars';
     const isJuniors = b.name === "Junior's";
+    const isHenrys = b.name === "Henry's Diner";
 
     // wall: outline, base fill, side shading bands, and a darker foundation
     // strip along the bottom — same layered look as the keeper sprites.
@@ -1976,6 +1998,7 @@ function drawBuildings(map) {
       drawWallPoster(px, py, w, h);
     }
     if (isJuniors) drawJuniorsDecor(px, py, w, h);
+    if (isHenrys) drawHenrysDecor(px, py, w, h);
     // "3rd Thursdays" flyer on the outside wall of Pure Pop Records
     if (isThrift) drawThursPoster(px + 6, py + 40);
 
@@ -2543,6 +2566,14 @@ function drawStadium() {
   ctx.fillText('VERMONT GREEN', cx, py + 20);
   ctx.font = 'bold 10px monospace';
   ctx.fillText('\u2605\u2605 CHAMPIONS', cx, py + 34);
+
+  // west & east entrance gaps in the outer wall, at the same map row as the
+  // walkable openings carved into the collision grid (STADIUM_OPEN_Y in
+  // makeOverworld) so the visual lines up with where the player can walk in.
+  const gateY = py + TILE * Math.floor(TH / 2), gateH = TILE;
+  ctx.fillStyle = '#3e7c34';
+  ctx.fillRect(px - 12, gateY, 26, gateH);       // west gate
+  ctx.fillRect(px + w - 14, gateY, 26, gateH);   // east gate
 
   // inner stand ring, lighter green, with a faint row of seat-dot texture
   ctx.fillStyle = GREEN_LT;
@@ -3526,6 +3557,39 @@ function drawJuniorsDecor(px, py, w, h) {
   ctx.restore();
 }
 
+function drawHenrysDecor(px, py, w, h) {
+  ctx.save();
+
+  // black & white checkerboard trim band along the base — classic diner look
+  const bandY = py + h - 14, sq = 8;
+  for (let i = 0; i * sq < w; i++) {
+    ctx.fillStyle = (i % 2 === 0) ? '#f4ecd8' : '#1c1c1e';
+    ctx.fillRect(px + i * sq, bandY, sq, 8);
+  }
+
+  // red-and-white striped awning over the door
+  const awnY = py + h - TILE - 16;
+  for (let i = 0; i * 8 < w; i++) {
+    ctx.fillStyle = (i % 2 === 0) ? '#c23b30' : '#f4ecd8';
+    ctx.fillRect(px + i * 8, awnY, 8, 10);
+  }
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(px, awnY + 10, w, 3);
+
+  // round chrome-ringed "EAT" sign, diner-style
+  const cx = px + w / 2, cy = py + 46;
+  ctx.fillStyle = '#c8ccd0';
+  ctx.beginPath(); ctx.arc(cx, cy, 15, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#e04030';
+  ctx.beginPath(); ctx.arc(cx, cy, 11, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#f4ecd8';
+  ctx.font = 'bold 10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('EAT', cx, cy + 4);
+
+  ctx.restore();
+}
+
 function drawJuniorsInterior(time) {
   // Classic NY style pizza shop interior
   
@@ -3638,6 +3702,82 @@ function drawJuniorsInterior(time) {
       ctx.fillRect(fx * TILE, fy * TILE, TILE, TILE);
     }
   }
+}
+
+function drawHenrysInterior(time) {
+  // Classic old-school diner: black & white checker floor, long red-topped
+  // counter with chrome stools, a soda fountain, and a corner jukebox.
+
+  // checkerboard floor across the middle of the room
+  for (let fy = 3; fy <= 7; fy++) {
+    for (let fx = 1; fx <= 12; fx++) {
+      if ((fx + fy) % 2 === 0) {
+        ctx.fillStyle = 'rgba(0,0,0,0.12)';
+        ctx.fillRect(fx * TILE, fy * TILE, TILE, TILE);
+      }
+    }
+  }
+
+  // long counter along the back wall
+  const counterX = 2 * TILE, counterY = 2 * TILE;
+  const counterW = 9 * TILE, counterH = TILE + 6;
+  ctx.fillStyle = '#8a2820';
+  ctx.fillRect(counterX, counterY, counterW, counterH);
+  ctx.fillStyle = '#c8ccd0';
+  ctx.fillRect(counterX, counterY, counterW, 6);
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(counterX, counterY + counterH - 6, counterW, 6);
+
+  // chrome stools along the front of the counter
+  for (let i = 0; i < 6; i++) {
+    const sx = counterX + 14 + i * 26, sy = counterY + counterH + 12;
+    ctx.fillStyle = '#9a9ea2';
+    ctx.fillRect(sx - 2, sy - 10, 4, 10);
+    ctx.fillStyle = '#c23b30';
+    ctx.beginPath(); ctx.ellipse(sx, sy - 12, 9, 5, 0, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // soda fountain / milkshake mixer on the counter
+  const fountX = counterX + counterW - 40, fountY = counterY - 22;
+  ctx.fillStyle = '#c8ccd0';
+  ctx.fillRect(fountX, fountY, 30, 24);
+  ctx.fillStyle = '#7a2018';
+  ctx.fillRect(fountX + 4, fountY + 4, 22, 8);
+  ctx.fillStyle = '#e8e8ec';
+  ctx.fillRect(fountX + 10, fountY - 6, 3, 8);
+  ctx.fillRect(fountX + 17, fountY - 6, 3, 8);
+
+  // pie case on the other end of the counter
+  const pieX = counterX + 6, pieY = counterY - 20;
+  ctx.fillStyle = 'rgba(200,220,240,0.3)';
+  ctx.fillRect(pieX, pieY, 26, 20);
+  ctx.strokeStyle = '#9a9a9e';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(pieX, pieY, 26, 20);
+  ctx.fillStyle = '#e8c060';
+  ctx.beginPath();
+  ctx.moveTo(pieX + 13, pieY + 8);
+  ctx.lineTo(pieX + 21, pieY + 16);
+  ctx.lineTo(pieX + 5, pieY + 16);
+  ctx.closePath();
+  ctx.fill();
+
+  // "HENRY'S" sign on the back wall
+  ctx.fillStyle = '#e0483c';
+  ctx.font = 'bold 15px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText("HENRY'S", 6.5 * TILE, 1 * TILE + 4);
+
+  // jukebox in the corner, red & chrome
+  const jbX = 11.3 * TILE, jbY = 6 * TILE;
+  ctx.fillStyle = '#7a2018';
+  ctx.fillRect(jbX, jbY, 22, 34);
+  ctx.fillStyle = '#c8ccd0';
+  ctx.fillRect(jbX + 2, jbY + 2, 18, 6);
+  ctx.fillStyle = 'rgba(120,200,220,0.55)';
+  ctx.fillRect(jbX + 4, jbY + 10, 14, 14);
+  ctx.fillStyle = '#e8c060';
+  ctx.fillRect(jbX + 6, jbY + 26, 10, 4);
 }
 
 function drawYardSign(x, y) {
