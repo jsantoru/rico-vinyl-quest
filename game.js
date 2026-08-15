@@ -382,12 +382,16 @@ function makeOverworld() {
   for (let x = 1; x < W-1; x++) { g[9][x] = 'r'; }
   for (let y = 1; y < H-1; y++) { g[y][19] = 'r'; }
 
-  // Placeholder portal doors on the west & east edges of the map, sitting
-  // right on Main Street (row 9) so they read as a natural continuation of
-  // the road. They don't lead anywhere yet — walking into one pops the
-  // "more lands coming" splash (see checkPortal()/drawPortalPopup()).
+  // Placeholder portal doors on the west, east, north & south edges of the
+  // map. The west/east pair sits right on Main Street (row 9); the
+  // north/south pair sits on the vertical cross-street (column 19), so all
+  // four read as a natural continuation of a road. None lead anywhere yet —
+  // walking into one pops the "more lands coming" splash (see
+  // checkPortal()/drawPortalPopup()).
   g[9][0] = 'P';
   g[9][W - 1] = 'P';
+  g[0][19] = 'P';
+  g[H - 1][19] = 'P';
 
   const buildings = [];
   function building(x, y, w, h, name, wall, roof, customDoorX) {
@@ -1563,10 +1567,17 @@ function update(dt) {
       state = 'play';
       if (activePortal) {
         // step the player back off the portal tile onto the road tile just
-        // inside the map, so the popup doesn't instantly reopen
-        const pushDir = activePortal.x === 0 ? 1 : -1;
-        player.x = (activePortal.x + pushDir + 0.5) * TILE;
-        player.y = (activePortal.y + 0.5) * TILE;
+        // inside the map, so the popup doesn't instantly reopen. Push
+        // horizontally for the west/east portals, vertically for the
+        // north/south ones — whichever edge the portal actually sits on.
+        const m = maps[player.map];
+        let pushX = 0, pushY = 0;
+        if (activePortal.x === 0) pushX = 1;
+        else if (activePortal.x === m.w - 1) pushX = -1;
+        else if (activePortal.y === 0) pushY = 1;
+        else if (activePortal.y === m.h - 1) pushY = -1;
+        player.x = (activePortal.x + pushX + 0.5) * TILE;
+        player.y = (activePortal.y + pushY + 0.5) * TILE;
         activePortal = null;
       }
     }
