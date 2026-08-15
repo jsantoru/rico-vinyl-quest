@@ -383,15 +383,15 @@ function makeOverworld() {
   for (let y = 1; y < H-1; y++) { g[y][19] = 'r'; }
 
   // Placeholder portal doors on the west, east, north & south edges of the
-  // map. The west/east pair sits right on Main Street (row 9); the
-  // north/south pair sits on the vertical cross-street (column 19), so all
-  // four read as a natural continuation of a road. None lead anywhere yet —
-  // walking into one pops the "more lands coming" splash (see
-  // checkPortal()/drawPortalPopup()).
-  g[9][0] = 'P';
-  g[9][W - 1] = 'P';
-  g[0][19] = 'P';
-  g[H - 1][19] = 'P';
+  // map, each two tiles wide. The west/east pair sits right on Main Street
+  // (rows 9-10); the north/south pair sits on the vertical cross-street
+  // (columns 19-20), so all four read as a natural continuation of a road.
+  // None lead anywhere yet — walking into one pops the "more lands coming"
+  // splash (see checkPortal()/drawPortalPopup()).
+  g[9][0] = 'P';  g[10][0] = 'P';
+  g[9][W - 1] = 'P';  g[10][W - 1] = 'P';
+  g[0][19] = 'P';  g[0][20] = 'P';
+  g[H - 1][19] = 'P';  g[H - 1][20] = 'P';
 
   const buildings = [];
   function building(x, y, w, h, name, wall, roof, customDoorX) {
@@ -455,6 +455,10 @@ function makeOverworld() {
   const STADIUM_OPEN_Y = STADIUM_Y + Math.floor(STADIUM_H / 2); // must match drawStadium()'s gate row
   g[STADIUM_OPEN_Y][STADIUM_X] = '.';                     // west opening
   g[STADIUM_OPEN_Y][STADIUM_X + STADIUM_W - 1] = '.';     // east opening
+  // south opening, directly above the vertical cross-street (column 19) so
+  // the pitch connects straight down through the one open road row below
+  // the stadium (24) to the south portal on the map's bottom edge (25).
+  g[STADIUM_Y + STADIUM_H - 1][19] = '.';
 
   // flea market corner: crates only (the fence stalls were removed — they
   // boxed the player in too much while walking around), one holds the white label
