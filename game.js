@@ -394,6 +394,9 @@ function makeOverworld() {
   const nectars = building(9, 14, 4, 6, 'Nectars', '#2a2a3a', '#1a1a2a'); // taller building next to deli
   const thrift = building(28, 14, 5, 4, 'Pure Pop Records', '#3f8fbf', '#2a6a93'); // smaller to make room
   const juniors = building(33, 14, 4, 4, "Junior's", '#d84030', '#a83020'); // pizza shop
+  // Tiny comedy club squeezed into the last 2 open columns before the town's
+  // east wall — right next door to Junior's, hence the "tiny" footprint.
+  const comedy  = building(37, 14, 2, 4, 'VT COMEDY CLUB', '#3a1a52', '#24102f');
 
   // park + winding river, avoiding the building footprints
   const riverTiles = [];
@@ -482,7 +485,7 @@ function makeOverworld() {
     { id: 'news2', tx: 33, ty: 12 },
     { id: 'news3', tx: 30, ty: 24 },
   ];
-  return { map, doors: { groove, henrys, wax, diner, nectars, thrift, juniors } };
+  return { map, doors: { groove, henrys, wax, diner, nectars, thrift, juniors, comedy } };
 }
 
 // small deterministic RNG so the swamp layout is identical on every load
@@ -576,6 +579,7 @@ function makeShop(id, opts) {
     darkClub: opts.darkClub || false,
     pizzaShop: opts.pizzaShop || false,
     diner: opts.diner || false,
+    comedyClub: opts.comedyClub || false,
   };
   const spots = [[1,4],[1,6],[12,4],[12,6],[2,8],[11,8]];
   opts.crates.forEach((c, i) => {
@@ -661,6 +665,18 @@ const shops = {
       foundLine: 'Grab a slice before you go. You\'ll need the energy!' },
     crates: [],
     pizzaShop: true,
+  }),
+  comedy: makeShop('comedy', {
+    world: 'town',
+    floor: '#241830', plank: '#1a1224', wallColor: '#3a1a52',
+    keeper: { name: 'MOOZY', shirt: '#e0b040', skin: '#c89a72',
+      lines: ['Welcome to the VT COMEDY CLUB — smallest room in town, biggest laughs.',
+              'Open mic every night. Sign-up sheet\'s by the door, no cover charge.',
+              'Records? Nah, we don\'t spin vinyl in here — just bad puns and worse timing.',
+              'Try Pure Pop Records down the street if you\'re digging for tunes.'],
+      foundLine: 'Ha! Save that energy for the mic, we could use it.' },
+    crates: [],
+    comedyClub: true,
   }),
 };
 
@@ -1572,6 +1588,7 @@ function render(time) {
   if (map.darkClub) drawNectarsInterior(time);
   if (map.pizzaShop) drawJuniorsInterior(time);
   if (map.diner) drawHenrysInterior(time);
+  if (map.comedyClub) drawComedyClubInterior(time);
   if (map.keeper) drawKeeper(map.keeper);
   drawPlayer(time);
 
@@ -1826,6 +1843,7 @@ function drawBuildings(map) {
     const isNectars = b.name === 'Nectars';
     const isJuniors = b.name === "Junior's";
     const isHenrys = b.name === "Henry's Diner";
+    const isComedyClub = b.name === 'VT COMEDY CLUB';
 
     // wall: outline, base fill, side shading bands, and a darker foundation
     // strip along the bottom — same layered look as the keeper sprites.
@@ -2001,6 +2019,7 @@ function drawBuildings(map) {
     }
     if (isJuniors) drawJuniorsDecor(px, py, w, h);
     if (isHenrys) drawHenrysDecor(px, py, w, h);
+    if (isComedyClub) drawComedyClubDecor(px, py, w, h);
     // "3rd Thursdays" flyer on the outside wall of Pure Pop Records
     if (isThrift) drawThursPoster(px + 6, py + 40);
 
@@ -2341,6 +2360,7 @@ function drawTownDecorations(time) {
   drawYardSign(25 * TILE - 10, 20 * TILE);
   drawFountainArea(time);
   drawCenterStretch();
+  drawJazzFestBanner(time);
   drawStadium();
   drawIceCreamVan();
   drawNewsstands();
@@ -2654,6 +2674,60 @@ function drawCenterStretch() {
   drawStand(21 * TILE, 16 * TILE + 6,  { top: '#7a5a92', top2: '#f4efe3', body: '#b89878', a: '#d8b050', b: '#c8785a' });
   drawStand(21 * TILE, 19 * TILE + 6,  { top: '#3f6fb0', top2: '#f4efe3', body: '#e8e0d0', a: '#7a4a2a', b: '#d0c06a' });
   drawStand(18 * TILE, 6 * TILE + 6,   { top: '#b8508a', top2: '#f4efe3', body: '#6a9a4a', a: '#e0609a', b: '#4a8a5a' });
+}
+
+// A banner strung between two poles across the main crossroads, announcing
+// the town's annual summer jazz festival. Purely decorative — it hangs above
+// the road tiles rather than modifying the grid, so it never blocks movement.
+function drawJazzFestBanner(time) {
+  const polL = 17 * TILE, polR = 23 * TILE;
+  const poleTopY = 11 * TILE, poleBotY = 13 * TILE + 16;
+
+  ctx.save();
+
+  // wooden poles anchoring the banner on either side of the road
+  ctx.fillStyle = '#5a3a20';
+  ctx.fillRect(polL - 3, poleTopY, 6, poleBotY - poleTopY);
+  ctx.fillRect(polR - 3, poleTopY, 6, poleBotY - poleTopY);
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(polL - 3, poleBotY - 4, 6, 4);
+  ctx.fillRect(polR - 3, poleBotY - 4, 6, 4);
+
+  // banner cloth, gently swaying, strung between the poles above the road
+  const sway = Math.sin(time * 1.3) * 3;
+  const topY = poleTopY + 12, bh = 34;
+  const x0 = polL + 4, x1 = polR - 4;
+  const teeth = 6;
+
+  ctx.fillStyle = '#4a1e5e';
+  ctx.beginPath();
+  ctx.moveTo(x0, topY);
+  ctx.lineTo(x1, topY);
+  for (let i = 0; i <= teeth; i++) {
+    const tx = x1 - (i / teeth) * (x1 - x0);
+    const ty = topY + bh + sway + (i % 2 === 0 ? 0 : -6);
+    ctx.lineTo(tx, ty);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#f0c840';
+  ctx.fillRect(x0, topY, x1 - x0, 4);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#f4ecd8';
+  ctx.font = 'bold 15px monospace';
+  ctx.fillText('BTV JAZZ FEST', (x0 + x1) / 2, topY + bh / 2 - 3 + sway * 0.3);
+  ctx.fillStyle = '#e0b040';
+  ctx.font = 'bold 8px monospace';
+  ctx.fillText('ANNUAL SUMMER FESTIVAL', (x0 + x1) / 2, topY + bh / 2 + 11 + sway * 0.3);
+
+  ctx.fillStyle = '#f0c840';
+  ctx.font = '12px monospace';
+  ctx.fillText('\u266a', x0 + 12, topY + 14);
+  ctx.fillText('\u266b', x1 - 12, topY + 14);
+
+  ctx.restore();
 }
 
 function drawFountainArea(time) {
@@ -3559,6 +3633,57 @@ function drawJuniorsDecor(px, py, w, h) {
   ctx.restore();
 }
 
+// Round sign with a cartoon cow face on it — VT Comedy Club's mascot/logo,
+// mounted on the wall between the name plate up top and the door below.
+// The building footprint is only 2 tiles wide, so everything here is sized
+// small and centered on the wall rather than spread out.
+function drawComedyClubDecor(px, py, w, h) {
+  ctx.save();
+
+  const cx = px + w / 2;
+  const cy = py + 66;
+  const r = 15;
+
+  // glow + chrome-style ring, echoing the round signs elsewhere in town
+  ctx.fillStyle = 'rgba(224,176,64,0.18)';
+  ctx.beginPath(); ctx.arc(cx, cy, r + 5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#e8e4dc';
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#8a6a20';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // cow face: white head, black patches, pink snout, big goofy grin
+  ctx.fillStyle = '#f4ecd8';
+  ctx.beginPath(); ctx.arc(cx, cy + 1, r - 3, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#241a1a';                      // black patches
+  ctx.beginPath(); ctx.ellipse(cx - 7, cy - 5, 4, 5, 0.4, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx + 6, cy + 4, 3, 4, -0.3, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#f4ecd8';                       // ears
+  ctx.beginPath(); ctx.ellipse(cx - r + 2, cy - 3, 3, 5, 0.6, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx + r - 2, cy - 3, 3, 5, -0.6, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#f0b8c8';                       // snout
+  ctx.beginPath(); ctx.ellipse(cx, cy + 7, 8, 5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#3a2222';                        // nostrils
+  ctx.beginPath(); ctx.ellipse(cx - 3, cy + 7, 1.2, 1.6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx + 3, cy + 7, 1.2, 1.6, 0, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#1c1414';                        // eyes
+  ctx.beginPath(); ctx.arc(cx - 4, cy - 2, 1.6, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 4, cy - 2, 1.6, 0, Math.PI * 2); ctx.fill();
+
+  ctx.strokeStyle = '#3a2222';                      // grin, laughing wide
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.arc(cx, cy + 3, 5, 0.15 * Math.PI, 0.85 * Math.PI);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
 function drawHenrysDecor(px, py, w, h) {
   ctx.save();
 
@@ -3704,6 +3829,92 @@ function drawJuniorsInterior(time) {
       ctx.fillRect(fx * TILE, fy * TILE, TILE, TILE);
     }
   }
+}
+
+function drawComedyClubInterior(time) {
+  // Small brick-backed stage with a spotlight, mic stand, a row of stools
+  // facing it, and a curtain along the side wall — plus a little cow-face
+  // callback to the sign outside.
+
+  // back wall brick, exposed-brick comedy-club look
+  ctx.fillStyle = '#3a2830';
+  ctx.fillRect(0, 0, 14 * TILE, 3 * TILE);
+  ctx.strokeStyle = '#2a1c22';
+  ctx.lineWidth = 1;
+  for (let row = 0; row < 4; row++) {
+    const by = 8 + row * 16;
+    ctx.beginPath(); ctx.moveTo(0, by); ctx.lineTo(14 * TILE, by); ctx.stroke();
+    const offset = row % 2 === 0 ? 0 : 14;
+    for (let bx = offset; bx < 14 * TILE; bx += 28) {
+      ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx, by + 16); ctx.stroke();
+    }
+  }
+
+  // stage platform
+  const stageX = 3 * TILE, stageY = 2 * TILE + 20, stageW = 8 * TILE, stageH = 10;
+  ctx.fillStyle = '#5a3a48';
+  ctx.fillRect(stageX, stageY, stageW, stageH);
+  ctx.fillStyle = '#40222e';
+  ctx.fillRect(stageX, stageY + stageH - 3, stageW, 3);
+
+  // spotlight cone, gently flickers
+  const flick = 0.75 + 0.25 * Math.sin(time * 3);
+  ctx.save();
+  ctx.fillStyle = `rgba(255, 233, 160, ${0.16 * flick})`;
+  ctx.beginPath();
+  ctx.moveTo(6.5 * TILE, 0);
+  ctx.lineTo(5 * TILE, stageY);
+  ctx.lineTo(8 * TILE, stageY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // mic stand, center stage
+  const micX = 6.5 * TILE, micBaseY = stageY;
+  ctx.strokeStyle = '#1c1c1e';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(micX, micBaseY); ctx.lineTo(micX, micBaseY - 28); ctx.stroke();
+  ctx.fillStyle = '#2a2a2e';
+  ctx.fillRect(micX - 10, micBaseY - 2, 20, 3);
+  ctx.fillStyle = '#c8c8cc';
+  ctx.beginPath(); ctx.arc(micX, micBaseY - 32, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#1c1c1e';
+  ctx.beginPath(); ctx.arc(micX, micBaseY - 32, 3, 0, Math.PI * 2); ctx.fill();
+
+  // deep purple curtain along the right wall
+  const curtX = 11 * TILE;
+  for (let i = 0; i < 3; i++) {
+    ctx.fillStyle = i % 2 === 0 ? '#4a2060' : '#3a1850';
+    ctx.fillRect(curtX + i * 10, 0, 10, 6 * TILE);
+  }
+
+  // a few stools facing the stage
+  ctx.fillStyle = '#8a5a30';
+  [[4, 7], [6.5, 7.5], [9, 7]].forEach(([tx, ty]) => {
+    const sx = tx * TILE, sy = ty * TILE;
+    ctx.beginPath(); ctx.ellipse(sx, sy, 9, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#5a3a1e';
+    ctx.fillRect(sx - 2, sy + 3, 4, 10);
+    ctx.fillStyle = '#8a5a30';
+  });
+
+  // "COMEDY NIGHT" marquee lettering above the stage
+  ctx.fillStyle = '#e0b040';
+  ctx.font = 'bold 15px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('COMEDY NIGHT', 7 * TILE, 1 * TILE + 4);
+
+  // little cow-face plaque on the brick wall, echoing the sign outside
+  const ccx = 12 * TILE, ccy = 1 * TILE + 8, cr = 9;
+  ctx.fillStyle = '#f4ecd8';
+  ctx.beginPath(); ctx.arc(ccx, ccy, cr, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#241a1a';
+  ctx.beginPath(); ctx.ellipse(ccx - 4, ccy - 3, 2.4, 3, 0.4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#f0b8c8';
+  ctx.beginPath(); ctx.ellipse(ccx, ccy + 4, 4.5, 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#1c1414';
+  ctx.beginPath(); ctx.arc(ccx - 2, ccy - 1, 1, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(ccx + 2, ccy - 1, 1, 0, Math.PI * 2); ctx.fill();
 }
 
 function drawHenrysInterior(time) {
