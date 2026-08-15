@@ -814,18 +814,29 @@ const music = {
     src.start(t); src.stop(t + (pop ? 0.06 : stepDur));
   },
 
+  // How far ahead of real audio time we keep notes scheduled. The outdoor
+  // town map draws a lot more per frame than an interior (fountain, jazz
+  // banner, wall painter, parked cars, newsstands, etc. all redrawn from
+  // scratch every frame), so main-thread frames/GC pauses run noticeably
+  // longer there than indoors. If a stall outlasts this buffer, playback
+  // runs dry and you hear a glitch/stutter — so this needs enough margin
+  // to comfortably absorb outdoor-map frame spikes, not just indoor ones.
+  LOOKAHEAD: 0.9,
+
   pump() {
     const stepDur = 60 / this.BPM / 4;
     // If something stalled the main thread for a long stretch (tab backgrounded,
     // a very long GC pause, etc.), don't dump a burst of overdue notes all at
-    // once — just resync a beat ahead and carry on from there.
-    if (this.nextTime < this.ctx.currentTime - 0.5) {
+    // once — just resync a beat ahead and carry on from there. This should only
+    // trigger for genuinely extreme stalls, well beyond LOOKAHEAD, so ordinary
+    // outdoor-map frame jank gets absorbed by the buffer instead of resyncing.
+    if (this.nextTime < this.ctx.currentTime - this.LOOKAHEAD * 2) {
       this.nextTime = this.ctx.currentTime + 0.05;
     }
     // Scheduled well ahead of real time (not just ~1 frame) so a slow
     // render frame in the busy outdoor map can't cause the scheduler to
     // fall behind and produce audible stutter/catch-up bursts.
-    while (this.nextTime < this.ctx.currentTime + 0.4) {
+    while (this.nextTime < this.ctx.currentTime + this.LOOKAHEAD) {
       this.schedule(this.step, this.nextTime, stepDur);
       this.step = (this.step + 1) % 32;
       this.nextTime += stepDur;
