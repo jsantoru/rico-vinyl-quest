@@ -440,7 +440,7 @@ function makeOverworld() {
   // draws it clipped to this footprint); the bottom 1/4 is meant to continue
   // into the map area planned for directly south of here, to be connected
   // once that map exists.
-  const STADIUM_X = 17, STADIUM_Y = 17, STADIUM_W = 7, STADIUM_H = 8;
+  const STADIUM_X = 17, STADIUM_Y = 17, STADIUM_W = 6, STADIUM_H = 7;
   for (let yy = STADIUM_Y; yy < STADIUM_Y + STADIUM_H; yy++)
     for (let xx = STADIUM_X; xx < STADIUM_X + STADIUM_W; xx++) g[yy][xx] = 'w';
   // carve out the pitch itself so the player can walk around inside the
@@ -460,7 +460,7 @@ function makeOverworld() {
     id: 'town', world: 'town', w: W, h: H, grid: g, outside: true, buildings,
     doors: {}, crates: {}, npcs: [], riverTiles,
     // ambient life lanes for this map (which road rows each spawns on)
-    // dogRow moved off 23 -> 6: the new stadium footprint (rows 17-24) now
+    // dogRow moved off 23 -> 6: the new stadium footprint (rows 17-23) now
     // sits on top of the old dog lane.
     ambient: { bikeRows: [9], walkerRow: 12, dogRow: 6 },
   };
@@ -2704,7 +2704,7 @@ function drawFloodlight(x, y) {
 // the remaining 1/4 is meant to reappear in the map area planned for
 // directly south of this one, once it's built and the two are connected.
 function drawStadium() {
-  const TX = 17, TY = 17, TW = 7, TH = 8; // must match STADIUM_* in makeOverworld()
+  const TX = 17, TY = 17, TW = 6, TH = 7; // must match STADIUM_* in makeOverworld()
   const px = TX * TILE, py = TY * TILE;
   const w = TW * TILE, hVis = TH * TILE;
   const hFull = hVis / 0.75; // full stadium height if it weren't cut off
