@@ -418,7 +418,7 @@ const gzaImg = new Image();
 gzaImg.src = 'assets/gza.png';
 
 // ---------------------------------------------------------------- maps
-const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J', 'S', 'A', 'N']);
+const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J', 'S', 'A', 'N', 'F']);
 
 function blankGrid(w, h, fill) {
   return Array.from({ length: h }, () => Array(w).fill(fill));
@@ -464,6 +464,18 @@ function makeOverworld() {
   // Tiny comedy club squeezed into the last 2 open columns before the town's
   // east wall — right next door to Junior's, hence the "tiny" footprint.
   const comedy  = building(37, 14, 2, 4, 'VT COMEDY CLUB', '#3a1a52', '#24102f');
+
+  // Church: kept as its own bespoke red-brick meetinghouse (drawChurch(),
+  // drawn separately in drawTownDecorations) rather than run through the
+  // generic building() renderer, so the custom steeple/brick art doesn't get
+  // covered by a second plain box underneath it. Still needs solid wall
+  // tiles + a working door though, sized and positioned to match
+  // drawChurch()'s own footprint exactly (px=18*TILE, py=6*TILE, 3x3 tiles).
+  const CHURCH_X = 18, CHURCH_Y = 6, CHURCH_W = 3, CHURCH_H = 3;
+  for (let yy = CHURCH_Y; yy < CHURCH_Y + CHURCH_H; yy++)
+    for (let xx = CHURCH_X; xx < CHURCH_X + CHURCH_W; xx++) g[yy][xx] = 'w';
+  const church = { doorX: CHURCH_X + Math.floor(CHURCH_W / 2), doorY: CHURCH_Y + CHURCH_H - 1 };
+  g[church.doorY][church.doorX] = 'D';
 
   // park + winding river, avoiding the building footprints
   const riverTiles = [];
@@ -553,7 +565,7 @@ function makeOverworld() {
     { id: 'news2', tx: 33, ty: 12 },
     { id: 'news3', tx: 30, ty: 24 },
   ];
-  return { map, doors: { groove, henrys, wax, diner, nectars, thrift, juniors, comedy } };
+  return { map, doors: { groove, henrys, wax, diner, nectars, thrift, juniors, comedy, church } };
 }
 
 // small deterministic RNG so the swamp layout is identical on every load
@@ -656,6 +668,9 @@ function makeShop(id, opts) {
   // Shop npcs (e.g. Kanga & Truth in Green Door Studio) block movement just
   // like the keeper does, so the player can't walk through them.
   (opts.npcs || []).forEach((n) => { g[n.ty][n.tx] = 'N'; });
+  // Big carnival floor props (giant lollipops, candy canes, popcorn buckets)
+  // — solid, so they read as real fairground fixtures, not floor decals.
+  (opts.carnivalProps || []).forEach(([fx, fy]) => { g[fy][fx] = 'F'; });
   const map = {
     id, world: opts.world || 'town', w: W, h: H, grid: g, outside: false,
     floor: opts.floor, plank: opts.plank, wallColor: opts.wallColor,
@@ -666,6 +681,9 @@ function makeShop(id, opts) {
     graffitiWalls: opts.graffitiWalls || false,
     cypherVibe: opts.cypherVibe || false,
     paintFloor: opts.paintFloor || false,
+    confettiColors: opts.confettiColors || null,
+    bigTopWalls: opts.bigTopWalls || false,
+    buntingFlags: opts.buntingFlags || false,
     couchPillow: opts.couchPillow || null,
     crates: {}, npcs: opts.npcs || [],
     darkClub: opts.darkClub || false,
@@ -844,6 +862,41 @@ const shops = {
       foundLine: 'Ha! Save that energy for the mic, we could use it.' },
     crates: [],
     comedyClub: true,
+  }),
+  church: makeShop('church', {
+    world: 'town',
+    // Candy-pink floor, deep violet walls, big-top candy stripes, bunting
+    // pennants along the ceiling line, rainbow confetti underfoot — the
+    // sedate red-brick meetinghouse outside gives zero warning for this.
+    floor: '#ffe1f2', plank: '#ffc4e0', wallColor: '#4a1268',
+    paintFloor: true,
+    confettiColors: ['#ff5fa2', '#5fd0ff', '#ffe14d', '#8cff5f', '#c85fff'],
+    bigTopWalls: true,
+    buntingFlags: true,
+    muralWall: true,
+    paintings: {
+      '0,2': { base: '#ff5fa2', a: '#5fd0ff', b: '#ffe14d' },
+      '0,3': { base: '#5fd0ff', a: '#ff5fa2', b: '#8cff5f' },
+      '0,5': { base: '#ffe14d', a: '#c85fff', b: '#ff5fa2' },
+      '0,7': { base: '#8cff5f', a: '#5fd0ff', b: '#ffe14d' },
+    },
+    // Giant lollipops, candy canes, and popcorn buckets scattered around
+    // the floor — solid, so they read as real fairground fixtures.
+    carnivalProps: [[2, 6], [11, 6], [2, 8], [11, 8]],
+    // Lanny holds down the centered counter spot (the same "front and
+    // center" position SK1 uses in Green Door Studio) so she's always the
+    // first thing the player sees walking in.
+    keeper: { name: 'LANNY', shirt: '#ff2f8a', skin: '#e8b48a',
+      lines: [
+        'Every eye in the room is on Lanny — and honestly? She loves it.',
+        'She throws her head back and launches into a big, dramatic rendition of "Ironic." None of it is actually ironic. Doesn\'t matter.',
+        'Now she\'s pointing dramatically at absolutely nobody in particular, belting out "You Oughta Know." Riveting stuff.',
+        'She croons her way through "Hand in My Pocket" — one hand, fittingly, still in her pocket the entire time.',
+        'Spinning in a slow circle now, mid-chorus of "Head Over Feet." You clap along whether you meant to or not.',
+        'Somewhere between a whisper and a wail, she works through "Uninvited." Nobody invited this. Here we are anyway.',
+        'Big finish: she closes it out on "Thank U," bowing so low her sequined cape nearly hits the floor.',
+      ] },
+    crates: [],
   }),
 };
 
@@ -1883,7 +1936,7 @@ function drawTiles(map, time, camX = 0, camY = 0) {
         ctx.fillRect(px, py + 11, TILE, 1);
         ctx.fillRect(px, py + 25, TILE, 1);
         if (map.paintFloor && (ch === '=') && h % 4 === 0) {
-          const drips = ['#c0403a', '#3a7ab0', '#e0b030', '#4a8a4a'];
+          const drips = map.confettiColors || ['#c0403a', '#3a7ab0', '#e0b030', '#4a8a4a'];
           ctx.fillStyle = drips[h % drips.length];
           ctx.globalAlpha = 0.5;
           ctx.beginPath();
@@ -1953,12 +2006,14 @@ function drawTiles(map, time, camX = 0, camY = 0) {
           ctx.fillStyle = 'rgba(0,0,0,0.18)';
           ctx.fillRect(px, py + 14, TILE, 2);
           ctx.fillRect(px + (ty % 2 === 0 ? 8 : 20), py, 2, 14);
+          if (map.bigTopWalls) drawBigTopStripe(px, py, tx);
           if (map.graffitiWalls) drawWildStyleGraffiti(px, py, tx, ty);
           if (map.paintings && map.paintings[key(tx, ty)]) {
             drawWallPainting(px, py, map.paintings[key(tx, ty)]);
           } else if (map.muralWall && ty === 0) {
             drawMuralSwatch(px, py, tx);
           }
+          if (map.buntingFlags && ty === 0) drawBunting(px, py, tx);
           break;
         }
         case 'T': {
@@ -1980,6 +2035,7 @@ function drawTiles(map, time, camX = 0, camY = 0) {
         case 'A': drawArmchair(px, py); break;
         case 'Y': drawMicStand(px, py); break;
         case 'G': drawHipHopGear(px, py, tx, ty); break;
+        case 'F': drawCarnivalProp(px, py, tx, ty); break;
         case 'J': {
           ctx.fillStyle = '#1c140f';
           ctx.fillRect(px + 3, py - 1, TILE - 6, TILE + 1);
@@ -2546,6 +2602,88 @@ function drawHipHopGear(px, py, tx, ty) {
     ctx.strokeStyle = 'rgba(180,180,180,0.5)';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(px + 26, py + 14); ctx.lineTo(px + 27, py + 11); ctx.stroke();
+  }
+}
+
+// Candy-stripe "big top" tent wall — a translucent vertical stripe laid over
+// the base wall fill, alternating by column so it reads as continuous
+// diagonal-free candy-cane striping across the whole room.
+function drawBigTopStripe(px, py, tx) {
+  const stripeColors = ['#ff3b5c', '#fff6f0'];
+  ctx.fillStyle = stripeColors[tx % 2];
+  ctx.globalAlpha = 0.5;
+  ctx.fillRect(px, py, TILE, TILE - 2);
+  ctx.globalAlpha = 1;
+}
+
+// A couple of small triangle pennant flags strung along the bottom lip of
+// the top wall row — kept inside the tile's own bounds so it never gets
+// clipped by the floor row drawn just after it.
+function drawBunting(px, py, tx) {
+  const colors = ['#ff5fa2', '#5fd0ff', '#ffe14d', '#8cff5f', '#c85fff'];
+  const c1 = colors[tx % colors.length];
+  const c2 = colors[(tx + 2) % colors.length];
+  ctx.fillStyle = c1;
+  ctx.beginPath();
+  ctx.moveTo(px + 3, py + 16); ctx.lineTo(px + 13, py + 16); ctx.lineTo(px + 8, py + 29);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = c2;
+  ctx.beginPath();
+  ctx.moveTo(px + 18, py + 16); ctx.lineTo(px + 28, py + 16); ctx.lineTo(px + 23, py + 29);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(px, py + 16); ctx.lineTo(px + TILE, py + 16); ctx.stroke();
+}
+
+// Oversized fairground floor props — giant lollipop, candy cane, or popcorn
+// bucket — solid fixtures scattered around a carnival-themed room.
+function drawCarnivalProp(px, py, tx, ty) {
+  const variant = hash2(tx, ty) % 3;
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath();
+  ctx.ellipse(px + 16, py + 28, 10, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  if (variant === 0) {
+    // giant swirl lollipop
+    ctx.strokeStyle = '#f4ecd8';
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(px + 16, py + 30); ctx.lineTo(px + 16, py + 15); ctx.stroke();
+    ctx.fillStyle = '#ff5fa2';
+    ctx.beginPath(); ctx.arc(px + 16, py + 8, 11, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#5fd0ff'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(px + 16, py + 8, 7, 0.6, Math.PI * 1.6); ctx.stroke();
+    ctx.strokeStyle = '#ffe14d'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(px + 16, py + 8, 4, 1.2, Math.PI * 2.2); ctx.stroke();
+  } else if (variant === 1) {
+    // candy cane
+    ctx.strokeStyle = '#fff6f0'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(px + 14, py + 30); ctx.lineTo(px + 14, py + 13);
+    ctx.arc(px + 18, py + 13, 4, Math.PI, 0);
+    ctx.lineTo(px + 22, py + 17);
+    ctx.stroke();
+    ctx.strokeStyle = '#ff3b5c'; ctx.lineWidth = 3;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(px + 11, py + 27 - i * 5);
+      ctx.lineTo(px + 17, py + 24 - i * 5);
+      ctx.stroke();
+    }
+    ctx.lineCap = 'butt';
+  } else {
+    // popcorn bucket
+    ctx.fillStyle = '#ff3b5c';
+    ctx.fillRect(px + 8, py + 16, 16, 14);
+    ctx.fillStyle = '#fff6f0';
+    ctx.fillRect(px + 8, py + 16, 4, 14);
+    ctx.fillRect(px + 16, py + 16, 4, 14);
+    ctx.fillRect(px + 24, py + 16, 4, 14);
+    ctx.fillStyle = '#ffe9c8';
+    for (let i = 0; i < 6; i++) {
+      const kx = px + 9 + (i * 4) % 18, ky = py + 9 + ((i * 7) % 8);
+      ctx.beginPath(); ctx.arc(kx, ky, 3, 0, Math.PI * 2); ctx.fill();
+    }
   }
 }
 
@@ -5235,14 +5373,14 @@ function drawDeliSeatingArea() {
 }
 
 // ---------------------------------------------------------------- keeper
-const KEEPER_HAIR = { DEE: '#5a2e1c', ROSIE: '#c8c0b0', ZEKE: '#241a12', JADE: '#141014', TONY: '#2a2018' };
+const KEEPER_HAIR = { DEE: '#5a2e1c', ROSIE: '#c8c0b0', ZEKE: '#241a12', JADE: '#141014', TONY: '#2a2018', LANNY: '#3a1a5c' };
 
 // Optional per-keeper artwork. Drop a PNG at assets/keepers/<name>.png (any
 // size — it's scaled to KEEPER_SPR_H, feet anchored at the same floor line
 // the procedural sprite uses) and it's picked up automatically. Until a file
 // exists (or while it's still loading), drawKeeper falls back to the shaded
 // procedural sprite below, so nothing ever renders blank.
-const KEEPER_NAMES = ['SK1', 'DEE', 'ROSIE', 'ZEKE', 'JADE', 'TONY'];
+const KEEPER_NAMES = ['SK1', 'DEE', 'ROSIE', 'ZEKE', 'JADE', 'TONY', 'LANNY'];
 const KEEPER_SPR_H = 64;
 const keeperImgs = {};
 KEEPER_NAMES.forEach((name) => {
