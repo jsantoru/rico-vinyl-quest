@@ -639,6 +639,8 @@ function makeShop(id, opts) {
   g[H-1][6] = 'E';
   (opts.couchTiles || []).forEach(([cx, cy]) => { g[cy][cx] = 'S'; });
   (opts.armchairTiles || []).forEach(([cx, cy]) => { g[cy][cx] = 'A'; });
+  if (opts.micStand) { g[opts.micStand[1]][opts.micStand[0]] = 'Y'; }
+  (opts.gearTiles || []).forEach(([gx, gy]) => { g[gy][gx] = 'G'; });
   const map = {
     id, world: opts.world || 'town', w: W, h: H, grid: g, outside: false,
     floor: opts.floor, plank: opts.plank, wallColor: opts.wallColor,
@@ -646,6 +648,8 @@ function makeShop(id, opts) {
     artTable: opts.artTable || false,
     paintings: opts.paintings || null,
     muralWall: opts.muralWall || false,
+    graffitiWalls: opts.graffitiWalls || false,
+    cypherVibe: opts.cypherVibe || false,
     paintFloor: opts.paintFloor || false,
     couchPillow: opts.couchPillow || null,
     crates: {}, npcs: opts.npcs || [],
@@ -683,6 +687,14 @@ const shops = {
     },
     // big abstract mural across the back wall behind the keeper
     muralWall: true,
+    // every wall tile gets a wild-style graffiti pass (garage art-gallery
+    // look), with the framed paintings/mural sitting on top of it like
+    // pieces hung over a painted wall
+    graffitiWalls: true,
+    // cypher-night clutter: mic stand, scattered gear, bottles + ashtrays
+    cypherVibe: true,
+    micStand: [7, 5],
+    gearTiles: [[3, 3], [8, 3], [4, 7], [10, 7], [2, 5]],
     // dark couch along the right wall (with a throw pillow) plus a gold
     // armchair pulled up near the table, mirroring the photo's seating nook
     couchTiles: [[12, 7], [12, 8]],
@@ -700,7 +712,7 @@ const shops = {
     // Kanga on the turntables, posted up next to SK1's table; Truth holding
     // down the middle of the floor.
     npcs: [
-      { id: 'kanga', tx: 6, ty: 1, name: 'KANGA', sprite: 'kanga', spriteH: 92,
+      { id: 'kanga', tx: 6, ty: 4, name: 'KANGA', sprite: 'kanga', spriteH: 92,
         lines: [
           'Yo — Kanga on the ones and twos. Got a crate of dubs right here, all killer, no filler.',
           'That frog record on top? Don\'t ask, don\'t sleep on it either. Certified heat.',
@@ -708,7 +720,7 @@ const shops = {
         ] },
       { id: 'truth', tx: 5, ty: 6, name: 'TRUTH', sprite: 'truth', spriteH: 78,
         lines: [
-          'Truth, BSD, swamp life, all day. You already know.',
+          'Truth, QSD, swamp life, all day. You already know.',
           'Cane\'s for style, not for support — don\'t get it twisted.',
           'Green Door\'s family. Anybody good with you is good with me.',
         ] },
@@ -1894,6 +1906,7 @@ function drawTiles(map, time, camX = 0, camY = 0) {
           ctx.fillStyle = 'rgba(0,0,0,0.18)';
           ctx.fillRect(px, py + 14, TILE, 2);
           ctx.fillRect(px + (ty % 2 === 0 ? 8 : 20), py, 2, 14);
+          if (map.graffitiWalls) drawWildStyleGraffiti(px, py, tx, ty);
           if (map.paintings && map.paintings[key(tx, ty)]) {
             drawWallPainting(px, py, map.paintings[key(tx, ty)]);
           } else if (map.muralWall && ty === 0) {
@@ -1903,7 +1916,7 @@ function drawTiles(map, time, camX = 0, camY = 0) {
         }
         case 'T': {
           if (map.artTable) {
-            drawArtTable(px, py, tx);
+            drawArtTable(px, py, tx, map.cypherVibe);
             break;
           }
           ctx.fillStyle = '#2a1c10';
@@ -1918,6 +1931,8 @@ function drawTiles(map, time, camX = 0, camY = 0) {
         }
         case 'S': drawCouch(px, py, !!(map.couchPillow && map.couchPillow.x === tx && map.couchPillow.y === ty)); break;
         case 'A': drawArmchair(px, py); break;
+        case 'Y': drawMicStand(px, py); break;
+        case 'G': drawHipHopGear(px, py, tx, ty); break;
         case 'J': {
           ctx.fillStyle = '#1c140f';
           ctx.fillRect(px + 3, py - 1, TILE - 6, TILE + 1);
@@ -2075,7 +2090,7 @@ function drawSwampDecorations(time, map, camX, camY) {
 // deep red velvet cloth draped over a plain wood table, a small caddy of
 // art supplies sitting on top, and a stack of records leaned against the
 // base.
-function drawArtTable(px, py, tx) {
+function drawArtTable(px, py, tx, cypherVibe) {
   // wood legs, same footprint as the classic table
   ctx.fillStyle = '#2a1c10';
   ctx.fillRect(px, py + 5, TILE, TILE - 5);
@@ -2092,8 +2107,12 @@ function drawArtTable(px, py, tx) {
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   for (let fx = 3; fx < TILE; fx += 6) ctx.fillRect(px + fx, py, 1, 12); // cloth folds
 
-  // alternating studio props sitting on the cloth
-  if (tx % 2 === 0) {
+  // alternating studio props sitting on the cloth — a third, cypher-night
+  // prop (empties + a smoking ashtray) joins the rotation when the shop
+  // has cypherVibe set
+  const propCount = cypherVibe ? 3 : 2;
+  const propIdx = tx % propCount;
+  if (propIdx === 0) {
     // caddy box of art supplies (brushes + pencils poking out)
     ctx.fillStyle = '#3a2c1c';
     ctx.fillRect(px + 10, py - 8, 12, 9);
@@ -2104,7 +2123,7 @@ function drawArtTable(px, py, tx) {
       ctx.fillStyle = toolColors[i];
       ctx.fillRect(px + 12 + i * 2, py - 14, 1, 7);
     }
-  } else {
+  } else if (propIdx === 1) {
     // wooden palette with dabs of paint
     ctx.fillStyle = '#a87c48';
     ctx.beginPath();
@@ -2116,6 +2135,28 @@ function drawArtTable(px, py, tx) {
     ctx.beginPath(); ctx.arc(px + 22, py - 2, 1.4, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#3a7ab0';
     ctx.beginPath(); ctx.arc(px + 24, py - 5, 1.4, 0, Math.PI * 2); ctx.fill();
+  } else {
+    // a couple of empty bottles and a full ashtray, left over from the
+    // last cypher session
+    ctx.fillStyle = 'rgba(80,140,90,0.85)';
+    ctx.fillRect(px + 9, py - 13, 5, 14);
+    ctx.fillRect(px + 10, py - 16, 3, 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.fillRect(px + 9, py - 11, 1, 8);
+    ctx.fillStyle = 'rgba(150,110,60,0.85)';
+    ctx.fillRect(px + 16, py - 10, 4, 11);
+    ctx.fillRect(px + 17, py - 12, 2, 3);
+    // ashtray with a couple of lit cigarettes resting on the rim
+    ctx.fillStyle = '#8a8880';
+    ctx.beginPath(); ctx.ellipse(px + 25, py - 3, 5.5, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#5a5852';
+    ctx.beginPath(); ctx.ellipse(px + 25, py - 3, 3.5, 1.6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#e8e4dc';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(px + 23, py - 4); ctx.lineTo(px + 20, py - 6); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px + 27, py - 4); ctx.lineTo(px + 30, py - 7); ctx.stroke();
+    ctx.fillStyle = '#c04030';
+    ctx.fillRect(px + 19.5, py - 6.5, 1.4, 1.4);
   }
 
   // stack of records leaned against the base of the table
@@ -2167,6 +2208,81 @@ function drawMuralSwatch(px, py, tx) {
   ctx.moveTo(px + 2, py + 28);
   ctx.lineTo(px + TILE - 2, py + 6);
   ctx.stroke();
+}
+
+// Wild-style interior graffiti, one wall tile at a time. Each tile gets a
+// jagged interlocking spray-paint block, a contrasting spike/arrow accent,
+// a hard black keyline, a couple of drips, and a spray-can highlight dot —
+// varied per-tile via hash2 so a whole wall run reads as one chaotic,
+// hand-painted piece rather than a repeating decal. Framed paintings and
+// the back mural are drawn on top of this, like gallery pieces hung over
+// a painted wall.
+function drawWildStyleGraffiti(px, py, tx, ty) {
+  const h = hash2(tx, ty);
+  const palettes = [
+    ['#e0303a', '#f0a830'], ['#3a7ab0', '#e8e0d0'], ['#8a4ab0', '#4ecb6e'],
+    ['#f0d030', '#e0603a'], ['#2ecfcf', '#c93aa0'], ['#4ecb6e', '#e0303a'],
+  ];
+  const [c1, c2] = palettes[h % palettes.length];
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(px, py, TILE, TILE - 2);
+  ctx.clip();
+
+  // big jagged block, angled differently per tile
+  const jitter = h % 9;
+  ctx.fillStyle = c1;
+  ctx.beginPath();
+  ctx.moveTo(px - 2, py + 6 + jitter);
+  ctx.lineTo(px + 12 + (h % 6), py - 2);
+  ctx.lineTo(px + TILE - 6, py + 4 + (h % 5));
+  ctx.lineTo(px + TILE + 2, py + 14 - jitter);
+  ctx.lineTo(px + TILE - 4, py + TILE - 4);
+  ctx.lineTo(px + 6 - (h % 4), py + TILE + 2);
+  ctx.lineTo(px - 2, py + TILE - 10);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(10,8,6,0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // contrasting spike/arrow accent, position varies with hash
+  ctx.fillStyle = c2;
+  ctx.beginPath();
+  if (h % 2 === 0) {
+    ctx.moveTo(px + 4, py + TILE - 6);
+    ctx.lineTo(px + 16, py + 10);
+    ctx.lineTo(px + 22, py + TILE - 10);
+  } else {
+    ctx.moveTo(px + TILE - 4, py + 6);
+    ctx.lineTo(px + 14, py + 16);
+    ctx.lineTo(px + TILE - 8, py + TILE - 6);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(10,8,6,0.5)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // drips running down from the block
+  ctx.strokeStyle = 'rgba(0,0,0,0.28)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 2; i++) {
+    const dx = px + 6 + ((h * (i + 3)) % (TILE - 10));
+    const dripLen = 4 + ((h * (i + 1)) % 7);
+    ctx.beginPath();
+    ctx.moveTo(dx, py + 18 + i * 3);
+    ctx.lineTo(dx, py + 18 + i * 3 + dripLen);
+    ctx.stroke();
+  }
+
+  // spray-can highlight fleck
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.beginPath();
+  ctx.arc(px + 8 + (h % 14), py + 8 + (h % 9), 1.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
 }
 
 // A small couch cushion segment, meant to be placed a few tiles in a row
@@ -2250,6 +2366,140 @@ function drawCrate(px, py, data) {
     ctx.fillStyle = c;
     ctx.fillRect(px + 6 + i * 7, py + 2, 5, 8);
   });
+}
+
+// A standalone mic stand, left set up in the middle of the floor from the
+// last freestyle cypher — round weighted base, telescoping pole, boom arm,
+// and a mic head with a foam windscreen.
+function drawMicStand(px, py) {
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath();
+  ctx.ellipse(px + 16, py + TILE - 5, 10, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // tripod base legs
+  ctx.strokeStyle = '#2a2a2e';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(px + 16, py + TILE - 8);
+  ctx.lineTo(px + 7, py + TILE - 3);
+  ctx.moveTo(px + 16, py + TILE - 8);
+  ctx.lineTo(px + 25, py + TILE - 3);
+  ctx.moveTo(px + 16, py + TILE - 8);
+  ctx.lineTo(px + 16, py + TILE - 2);
+  ctx.stroke();
+  // pole
+  ctx.strokeStyle = '#3a3a3e';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(px + 16, py + TILE - 8);
+  ctx.lineTo(px + 16, py + 4);
+  ctx.stroke();
+  // boom arm angled up
+  ctx.beginPath();
+  ctx.moveTo(px + 16, py + 8);
+  ctx.lineTo(px + 24, py + 2);
+  ctx.stroke();
+  // mic body + windscreen
+  ctx.fillStyle = '#1c1c20';
+  ctx.fillRect(px + 22, py - 1, 3, 6);
+  ctx.fillStyle = '#8a8a92';
+  ctx.beginPath();
+  ctx.arc(px + 25, py - 1, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.beginPath();
+  ctx.arc(px + 24, py - 2.5, 1, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// One randomly-picked piece of hip hop gear per tile — boombox, snapback,
+// crossed spray cans, a kicked-off sneaker, or an empty bottle with a
+// smoldering ashtray — so a handful of these scattered around the floor
+// each read as distinct clutter rather than a repeated prop.
+function drawHipHopGear(px, py, tx, ty) {
+  const h = hash2(tx, ty);
+  const kind = h % 5;
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.beginPath();
+  ctx.ellipse(px + 16, py + TILE - 6, 10, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (kind === 0) {
+    // boombox
+    ctx.fillStyle = '#242226';
+    ctx.fillRect(px + 6, py + 12, 20, 12);
+    ctx.fillStyle = '#3a373e';
+    ctx.beginPath(); ctx.arc(px + 11, py + 18, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(px + 21, py + 18, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#8a8890';
+    ctx.beginPath(); ctx.arc(px + 11, py + 18, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(px + 21, py + 18, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#e0b030';
+    ctx.fillRect(px + 14, py + 9, 4, 4);
+    ctx.strokeStyle = '#5a5760';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(px + 16, py + 9, 9, Math.PI, 0); ctx.stroke();
+  } else if (kind === 1) {
+    // snapback cap, brim down
+    ctx.fillStyle = '#1f6a4a';
+    ctx.beginPath();
+    ctx.ellipse(px + 16, py + 20, 10, 5, 0, 0, Math.PI);
+    ctx.fill();
+    ctx.fillStyle = '#28855e';
+    ctx.beginPath();
+    ctx.arc(px + 16, py + 17, 8, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = '#e8e4dc';
+    ctx.beginPath(); ctx.arc(px + 16, py + 14, 2, 0, Math.PI * 2); ctx.fill();
+  } else if (kind === 2) {
+    // crossed spray cans
+    drawSprayCan(px + 8, py + 8, '#c0403a');
+    drawSprayCan(px + 18, py + 6, '#3a7ab0');
+  } else if (kind === 3) {
+    // kicked-off sneaker
+    ctx.fillStyle = '#e8e4dc';
+    ctx.beginPath();
+    ctx.moveTo(px + 6, py + 22);
+    ctx.quadraticCurveTo(px + 8, py + 12, px + 18, py + 12);
+    ctx.quadraticCurveTo(px + 26, py + 13, px + 26, py + 19);
+    ctx.quadraticCurveTo(px + 26, py + 23, px + 20, py + 23);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#c0403a';
+    ctx.fillRect(px + 6, py + 21, 20, 3);
+    ctx.strokeStyle = '#b8b2a4';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(px + 12 + i * 3, py + 14);
+      ctx.lineTo(px + 10 + i * 3, py + 19);
+      ctx.stroke();
+    }
+  } else {
+    // empty bottle + tipped ashtray with a couple of cigarettes
+    ctx.fillStyle = 'rgba(80,140,90,0.85)';
+    ctx.fillRect(px + 7, py + 8, 5, 14);
+    ctx.fillRect(px + 8, py + 5, 3, 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.fillRect(px + 7, py + 10, 1, 8);
+    ctx.fillStyle = '#8a8880';
+    ctx.beginPath();
+    ctx.ellipse(px + 21, py + 20, 6, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#6a6862';
+    ctx.beginPath();
+    ctx.ellipse(px + 21, py + 20, 3.5, 1.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#e8e4dc';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(px + 19, py + 19); ctx.lineTo(px + 15, py + 16); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px + 22, py + 18); ctx.lineTo(px + 26, py + 14); ctx.stroke();
+    ctx.fillStyle = '#c04030';
+    ctx.fillRect(px + 14, py + 15, 1.5, 1.5);
+    ctx.strokeStyle = 'rgba(180,180,180,0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(px + 26, py + 14); ctx.lineTo(px + 27, py + 11); ctx.stroke();
+  }
 }
 
 // ---------------------------------------------------------------- buildings
