@@ -745,13 +745,13 @@ const shops = {
     // Kanga on the turntables, posted up next to SK1's table; Truth holding
     // down the middle of the floor.
     npcs: [
-      { id: 'kanga', tx: 6, ty: 4, name: 'KANGA', sprite: 'kanga', spriteH: 64,
+      { id: 'kanga', tx: 6, ty: 4, name: 'KANGA', sprite: 'kanga',
         lines: [
           'Yo — Kanga on the ones and twos. Got a crate of dubs right here, all killer, no filler.',
           'That frog record on top? Don\'t ask, don\'t sleep on it either. Certified heat.',
           'Third Thursdays I run this booth till the breaker trips. Come through.',
         ] },
-      { id: 'truth', tx: 5, ty: 6, name: 'TRUTH', sprite: 'truth', spriteH: 64,
+      { id: 'truth', tx: 5, ty: 6, name: 'TRUTH', sprite: 'truth',
         lines: [
           'Truth, QSD, swamp life, all day. You already know.',
           'Cane\'s for style, not for support — don\'t get it twisted.',
@@ -781,7 +781,7 @@ const shops = {
     // "solid, image-drawn" treatment as Green Door Studio's npcs.
     extraTables: [[5, 6], [6, 6]],
     npcs: [
-      { id: 'actor', tx: 5, ty: 7, name: 'THE ACTOR', sprite: 'bill', spriteH: 64,
+      { id: 'actor', tx: 5, ty: 7, name: 'THE ACTOR', sprite: 'bill',
         lines: [
           'You know, the secret isn\'t finding meaning. It\'s finding a good cup of coffee and pretending you already have.',
           'Bruce Lee once said "be water." I say, be decaf. Fewer regrets.',
@@ -790,7 +790,7 @@ const shops = {
           'Half of wisdom is just showing up. The other half is not spilling your coffee.',
           'I\'ve seen every kung fu movie ever made. Twice. Cheaper than therapy, and the fight choreography\'s better.',
         ] },
-      { id: 'abbot', tx: 4, ty: 6, name: 'THE ABBOT', sprite: 'rza', spriteH: 64,
+      { id: 'abbot', tx: 4, ty: 6, name: 'THE ABBOT', sprite: 'rza',
         lines: [
           'Bong Bong. The knowledge of self is the beginning of all understanding — know that before you know anything else.',
           'Bong Bong. C.R.E.A.M. ain\'t just about the paper. It\'s about what controls you, and what you choose to control instead.',
@@ -799,7 +799,7 @@ const shops = {
           'Bong Bong. Peace is a discipline, not a mood. Some days you gotta build it brick by brick.',
           'Bong Bong. The wise man drinks his coffee slow and speaks slower. Rushing is the enemy of clarity.',
         ] },
-      { id: 'chessmaster', tx: 7, ty: 6, name: 'THE CHESSMASTER', sprite: 'gza', spriteH: 64,
+      { id: 'chessmaster', tx: 7, ty: 6, name: 'THE CHESSMASTER', sprite: 'gza',
         lines: [
           'Every game starts even. What separates the master from the amateur is what happens on move four.',
           'A pawn that reaches the other side of the board becomes a queen. Never underestimate small, steady movement.',
@@ -1025,23 +1025,46 @@ const music = {
   // longer there than indoors. If a stall outlasts this buffer, playback
   // runs dry and you hear a glitch/stutter — so this needs enough margin
   // to comfortably absorb outdoor-map frame spikes, not just indoor ones.
-  LOOKAHEAD: 0.9,
+  //
+  // This used to be 0.9s, which is plenty for a handful of slow frames but
+  // not for a sustained run of heavy outdoor frames (or a GC pause) — once
+  // real time ate into the buffer, `nextTime` could end up behind (or only
+  // just ahead of) ctx.currentTime. Web Audio clamps any start time that has
+  // already passed to "now", so several queued steps would all fire at once
+  // — that's the burst/glitch you hear right when you step outside. Bumping
+  // this up gives a much bigger cushion before that can happen at all.
+  LOOKAHEAD: 2.0,
+  // Minimum gap we insist a scheduled note sits ahead of real audio time.
+  // Even with a big LOOKAHEAD, the *last* step scheduled in a catch-up pass
+  // could still land within a few ms of "now" — this margin guarantees every
+  // note is genuinely in the future, so nothing gets clamped and doubled up.
+  MIN_MARGIN: 0.06,
 
   pump() {
     const stepDur = 60 / this.BPM / 4;
+    const now = this.ctx.currentTime;
     // If something stalled the main thread for a long stretch (tab backgrounded,
     // a very long GC pause, etc.), don't dump a burst of overdue notes all at
-    // once — just resync a beat ahead and carry on from there. This should only
-    // trigger for genuinely extreme stalls, well beyond LOOKAHEAD, so ordinary
-    // outdoor-map frame jank gets absorbed by the buffer instead of resyncing.
-    if (this.nextTime < this.ctx.currentTime - this.LOOKAHEAD * 2) {
-      this.nextTime = this.ctx.currentTime + 0.05;
+    // once — resync onto the next clean beat boundary and carry on from there,
+    // silently (no note is scheduled for the missed span, rather than cramming
+    // several into the same instant). This should only trigger for genuinely
+    // extreme stalls, well beyond LOOKAHEAD, so ordinary outdoor-map frame
+    // jank gets absorbed by the buffer instead of resyncing.
+    if (this.nextTime < now - this.LOOKAHEAD) {
+      const stepsPerBeat = 4;
+      const beatDur = stepDur * stepsPerBeat;
+      const beatsAhead = Math.ceil((now + this.MIN_MARGIN - this.nextTime) / beatDur);
+      this.step = (this.step + beatsAhead * stepsPerBeat) % 32;
+      this.nextTime += beatsAhead * beatDur;
     }
     // Scheduled well ahead of real time (not just ~1 frame) so a slow
     // render frame in the busy outdoor map can't cause the scheduler to
-    // fall behind and produce audible stutter/catch-up bursts.
-    while (this.nextTime < this.ctx.currentTime + this.LOOKAHEAD) {
-      this.schedule(this.step, this.nextTime, stepDur);
+    // fall behind and produce audible stutter/catch-up bursts. Every step
+    // is also clamped to MIN_MARGIN ahead of "now" so a long catch-up pass
+    // can never schedule two steps close enough together to sound doubled.
+    while (this.nextTime < now + this.LOOKAHEAD) {
+      const t = Math.max(this.nextTime, now + this.MIN_MARGIN);
+      this.schedule(this.step, t, stepDur);
       this.step = (this.step + 1) % 32;
       this.nextTime += stepDur;
     }
@@ -1837,13 +1860,17 @@ function drawMountainLayer(layer, camX) {
   }
 }
 
+// Hoisted out of drawMountains: this array is fully static, so allocating a
+// fresh copy of it (plus 3 fresh object literals) on every single outdoor
+// frame was pure churn — one more small source of GC pressure stacking on
+// top of everything else that redraws every frame outside.
+const MOUNTAIN_LAYERS = [
+  { color: '#241d38', speed: 0.05, baseY: 130, amp: 32, seed: 0,    snow: false },
+  { color: '#332a4c', speed: 0.10, baseY: 155, amp: 48, seed: 700,  snow: true },
+  { color: '#443860', speed: 0.18, baseY: 185, amp: 60, seed: 1500, snow: true },
+];
 function drawMountains(camX) {
-  const layers = [
-    { color: '#241d38', speed: 0.05, baseY: 130, amp: 32, seed: 0,    snow: false },
-    { color: '#332a4c', speed: 0.10, baseY: 155, amp: 48, seed: 700,  snow: true },
-    { color: '#443860', speed: 0.18, baseY: 185, amp: 60, seed: 1500, snow: true },
-  ];
-  for (const layer of layers) drawMountainLayer(layer, camX);
+  for (const layer of MOUNTAIN_LAYERS) drawMountainLayer(layer, camX);
 }
 
 function render(time) {
@@ -2953,14 +2980,20 @@ function drawBuildings(map) {
         // glowing red neon-tube look: a soft outer glow under a brighter
         // pink-white core, so the lettering reads like a lit neon sign
         // against the dark plate instead of flat printed text.
+        //
+        // This used to use ctx.shadowBlur, which is drawn every outdoor
+        // frame (this building's sign is on screen constantly while
+        // outside) and is one of the most expensive things you can ask
+        // Canvas2D to do per-pixel — on slower/mobile GPUs it can eat
+        // several ms every frame, all on the same main thread the music
+        // scheduler needs. A handful of cheap offset fillText passes gives
+        // a near-identical glow for a fraction of the cost.
         const tx2 = px + w / 2, ty2 = sy + sh / 2 + fsize * 0.36;
         ctx.save();
-        ctx.shadowColor = '#ff2a3c';
-        ctx.shadowBlur = 10;
+        ctx.fillStyle = 'rgba(255,42,60,0.35)';
+        for (const [ox, oy] of NEON_GLOW_OFFSETS) ctx.fillText(b.name, tx2 + ox, ty2 + oy);
         ctx.fillStyle = '#ff2a3c';
         ctx.fillText(b.name, tx2, ty2);
-        ctx.fillText(b.name, tx2, ty2); // second pass deepens the glow
-        ctx.shadowBlur = 0;
         ctx.fillStyle = '#ffc4cb';
         ctx.fillText(b.name, tx2, ty2);
         ctx.restore();
@@ -2971,6 +3004,12 @@ function drawBuildings(map) {
     }
   }
 }
+
+// Cheap stand-in for shadowBlur's glow on Henry's neon sign — see the call
+// site for why. A small fixed ring of offsets drawn at low opacity.
+const NEON_GLOW_OFFSETS = [
+  [-2, 0], [2, 0], [0, -2], [0, 2], [-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5],
+];
 
 function drawOpenDoorSign(doorX, doorY) {
   // "OPEN" sign with a glowing arrow above the Green Door Studio entrance.
@@ -4689,6 +4728,13 @@ function drawThursPoster(x, y) {
   ctx.fill();
 }
 
+// Cheap stand-in for shadowBlur's glow on the Nectar's sign — see the call
+// site for why. A wider ring than Henry's since this sign is bigger (32px).
+const NECTARS_GLOW_OFFSETS = [
+  [-4, 0], [4, 0], [0, -4], [0, 4], [-3, -3], [3, -3], [-3, 3], [3, 3],
+  [-2, 0], [2, 0], [0, -2], [0, 2],
+];
+
 function drawNectarsDecor(px, py, w, h) {
   ctx.save();
   
@@ -4705,32 +4751,29 @@ function drawNectarsDecor(px, py, w, h) {
   }
   
   // Neon script sign - "Nectar's"
+  //
+  // This used to stack three ctx.shadowBlur passes (20/15/10px) on a 32px
+  // strokeText/fillText, every single outdoor frame — this building's sign
+  // is on screen the whole time you're outside. shadowBlur is a per-pixel
+  // blur and one of the most expensive things Canvas2D can do; three passes
+  // of it running every frame was a steady drain on the same main thread
+  // the music scheduler needs to stay on time (see the LOOKAHEAD comment in
+  // the `music` object), which is what caused the outdoor audio glitches.
+  // A small ring of low-opacity offset copies reads as the same glow for a
+  // fraction of the cost, no shadowBlur required.
   const signX = px + w/2;
   const signY = py + 60;
-  
-  // Outer glow
-  ctx.shadowColor = '#ff2040';
-  ctx.shadowBlur = 20;
-  ctx.strokeStyle = '#ff2040';
-  ctx.lineWidth = 1;
   ctx.font = 'italic bold 32px cursive';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.strokeText("Nectar's", signX, signY);
-  
-  // Inner bright glow
-  ctx.shadowBlur = 15;
+
+  ctx.fillStyle = 'rgba(255,32,64,0.22)';
+  for (const [ox, oy] of NECTARS_GLOW_OFFSETS) ctx.fillText("Nectar's", signX + ox, signY + oy);
   ctx.strokeStyle = '#ff4060';
   ctx.lineWidth = 2;
   ctx.strokeText("Nectar's", signX, signY);
-  
-  // Bright core
-  ctx.shadowBlur = 10;
   ctx.fillStyle = '#ffe0e6';
   ctx.fillText("Nectar's", signX, signY);
-  
-  // Reset shadow
-  ctx.shadowBlur = 0;
   
   // Windows with warm glow
   ctx.fillStyle = '#ffe090';
