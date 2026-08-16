@@ -408,8 +408,17 @@ kangaImg.src = 'assets/kanga.png';
 const truthImg = new Image();
 truthImg.src = 'assets/truth.png';
 
+// Henry's Diner's coffee-table trio — same "pre-drawn, drawn as-is" approach
+// as the Green Door Studio npcs above.
+const billImg = new Image();
+billImg.src = 'assets/bill.png';
+const rzaImg = new Image();
+rzaImg.src = 'assets/rza.png';
+const gzaImg = new Image();
+gzaImg.src = 'assets/gza.png';
+
 // ---------------------------------------------------------------- maps
-const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J', 'S', 'A']);
+const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J', 'S', 'A', 'N']);
 
 function blankGrid(w, h, fill) {
   return Array.from({ length: h }, () => Array(w).fill(fill));
@@ -641,6 +650,12 @@ function makeShop(id, opts) {
   (opts.armchairTiles || []).forEach(([cx, cy]) => { g[cy][cx] = 'A'; });
   if (opts.micStand) { g[opts.micStand[1]][opts.micStand[0]] = 'Y'; }
   (opts.gearTiles || []).forEach(([gx, gy]) => { g[gy][gx] = 'G'; });
+  // Freestanding customer tables out on the floor (separate from the
+  // counter table above) — e.g. Henry's Diner's coffee-klatch table.
+  (opts.extraTables || []).forEach(([ex, ey]) => { g[ey][ex] = 'T'; });
+  // Shop npcs (e.g. Kanga & Truth in Green Door Studio) block movement just
+  // like the keeper does, so the player can't walk through them.
+  (opts.npcs || []).forEach((n) => { g[n.ty][n.tx] = 'N'; });
   const map = {
     id, world: opts.world || 'town', w: W, h: H, grid: g, outside: false,
     floor: opts.floor, plank: opts.plank, wallColor: opts.wallColor,
@@ -712,13 +727,13 @@ const shops = {
     // Kanga on the turntables, posted up next to SK1's table; Truth holding
     // down the middle of the floor.
     npcs: [
-      { id: 'kanga', tx: 6, ty: 4, name: 'KANGA', sprite: 'kanga', spriteH: 92,
+      { id: 'kanga', tx: 6, ty: 4, name: 'KANGA', sprite: 'kanga', spriteH: 64,
         lines: [
           'Yo — Kanga on the ones and twos. Got a crate of dubs right here, all killer, no filler.',
           'That frog record on top? Don\'t ask, don\'t sleep on it either. Certified heat.',
           'Third Thursdays I run this booth till the breaker trips. Come through.',
         ] },
-      { id: 'truth', tx: 5, ty: 6, name: 'TRUTH', sprite: 'truth', spriteH: 78,
+      { id: 'truth', tx: 5, ty: 6, name: 'TRUTH', sprite: 'truth', spriteH: 64,
         lines: [
           'Truth, QSD, swamp life, all day. You already know.',
           'Cane\'s for style, not for support — don\'t get it twisted.',
@@ -744,6 +759,38 @@ const shops = {
       foundLine: 'Well butter my biscuit — is that a record? Keep on truckin\', kid.' },
     crates: [],
     diner: true,
+    // Corner coffee table with three regulars posted up around it, same
+    // "solid, image-drawn" treatment as Green Door Studio's npcs.
+    extraTables: [[5, 6], [6, 6]],
+    npcs: [
+      { id: 'actor', tx: 5, ty: 7, name: 'THE ACTOR', sprite: 'bill', spriteH: 64,
+        lines: [
+          'You know, the secret isn\'t finding meaning. It\'s finding a good cup of coffee and pretending you already have.',
+          'Bruce Lee once said "be water." I say, be decaf. Fewer regrets.',
+          'Chess is just checkers for people who read too much. I respect that.',
+          'Somebody told me cash rules everything around me. I told them so does good posture.',
+          'Half of wisdom is just showing up. The other half is not spilling your coffee.',
+          'I\'ve seen every kung fu movie ever made. Twice. Cheaper than therapy, and the fight choreography\'s better.',
+        ] },
+      { id: 'abbot', tx: 4, ty: 6, name: 'THE ABBOT', sprite: 'rza', spriteH: 64,
+        lines: [
+          'Bong Bong. The knowledge of self is the beginning of all understanding — know that before you know anything else.',
+          'Bong Bong. C.R.E.A.M. ain\'t just about the paper. It\'s about what controls you, and what you choose to control instead.',
+          'Bong Bong. Every closed fist was once an open hand. Patience sharpens the blade more than anger ever could.',
+          'Bong Bong. Chess and kung fu teach the same lesson — see three moves ahead, but stay light on your feet.',
+          'Bong Bong. Peace is a discipline, not a mood. Some days you gotta build it brick by brick.',
+          'Bong Bong. The wise man drinks his coffee slow and speaks slower. Rushing is the enemy of clarity.',
+        ] },
+      { id: 'chessmaster', tx: 7, ty: 6, name: 'THE CHESSMASTER', sprite: 'gza', spriteH: 64,
+        lines: [
+          'Every game starts even. What separates the master from the amateur is what happens on move four.',
+          'A pawn that reaches the other side of the board becomes a queen. Never underestimate small, steady movement.',
+          'Liquid swords, wooden swords, chess pieces — it\'s all the same discipline. Precision over power.',
+          'You don\'t win by attacking everything. You win by controlling the center and waiting for your opponent to overextend.',
+          'Bruce Lee said absorb what is useful. On the chessboard, that means studying your losses harder than your wins.',
+          'Cash rules plenty, but calculation rules cash. Think three moves before you spend one dollar.',
+        ] },
+    ],
   }),
   diner: makeShop('diner', {
     floor: '#b8a08a', plank: '#a89078', wallColor: '#7a4a3a',
@@ -5319,7 +5366,7 @@ function drawKeeper(k) {
 // anchored to the tile's floor line — no procedural fallback, since there's
 // no simple shape that stands in for this art; it just waits for the image
 // to finish loading.
-const SHOP_NPC_IMAGES = { kanga: kangaImg, truth: truthImg };
+const SHOP_NPC_IMAGES = { kanga: kangaImg, truth: truthImg, bill: billImg, rza: rzaImg, gza: gzaImg };
 
 function drawShopImageNpcs(map) {
   if (!map.npcs) return;
