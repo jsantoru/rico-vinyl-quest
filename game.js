@@ -401,7 +401,7 @@ const fifaImg = new Image();
 fifaImg.src = 'assets/fifa.png';
 
 // ---------------------------------------------------------------- maps
-const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J']);
+const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J', 'S']);
 
 function blankGrid(w, h, fill) {
   return Array.from({ length: h }, () => Array(w).fill(fill));
@@ -619,13 +619,22 @@ function makeShop(id, opts) {
   const g = blankGrid(W, H, '=');
   for (let x = 0; x < W; x++) { g[0][x] = 'W'; g[H-1][x] = 'W'; }
   for (let y = 0; y < H; y++) { g[y][0] = 'W'; g[y][W-1] = 'W'; }
-  for (let x = 4; x <= 9; x++) g[2][x] = 'T';
-  g[1][6] = 'K';
+  // table footprint + keeper spot both default to the classic centered
+  // layout, but either can be overridden per-shop (e.g. Green Door Studio
+  // pushes both into the upper-right corner of the room).
+  const tableStart = opts.tableRange ? opts.tableRange.start : 4;
+  const tableEnd = opts.tableRange ? opts.tableRange.end : 9;
+  for (let x = tableStart; x <= tableEnd; x++) g[2][x] = 'T';
+  const keeperX = (opts.keeper && opts.keeper.x !== undefined) ? opts.keeper.x : 6;
+  const keeperY = (opts.keeper && opts.keeper.y !== undefined) ? opts.keeper.y : 1;
+  g[keeperY][keeperX] = 'K';
   g[H-1][6] = 'E';
+  (opts.couchTiles || []).forEach(([cx, cy]) => { g[cy][cx] = 'S'; });
   const map = {
     id, world: opts.world || 'town', w: W, h: H, grid: g, outside: false,
     floor: opts.floor, plank: opts.plank, wallColor: opts.wallColor,
-    keeper: { x: 6, y: 1, ...opts.keeper },
+    keeper: { x: keeperX, y: keeperY, ...opts.keeper },
+    artTable: opts.artTable || false,
     crates: {}, npcs: [],
     darkClub: opts.darkClub || false,
     pizzaShop: opts.pizzaShop || false,
@@ -647,7 +656,12 @@ const { map: town, doors } = makeOverworld();
 const shops = {
   groove: makeShop('groove', {
     floor: '#8a6a4a', plank: '#7a5a3c', wallColor: '#4a3a5f',
-    keeper: { name: 'SK1', shirt: '#1f1d26', skin: '#8a5a34',
+    // table + keeper pushed into the upper-right corner instead of centered
+    tableRange: { start: 8, end: 11 },
+    artTable: true,
+    // small couch along the left wall, tucked below the digging crates
+    couchTiles: [[1, 7], [1, 8]],
+    keeper: { name: 'SK1', shirt: '#1f1d26', skin: '#8a5a34', x: 9, y: 1,
       lines: ['Welcome to Green Door Studio — mind the wet paint by the door.',
               'You already know: Third Thursdays, the monthly hip hop night. The whole Anthill Collective moves when the bass drops.',
               'I\'m with The Anthill Collective — the crew keeps the color on the walls and the sessions open.',
@@ -783,13 +797,6 @@ function chooseCharacter(id) {
   selectedCharacter = id;
   state = 'play';
   music.setMenuBreak(false);
-  if (!music.muted) {
-    // Resetting currentTime before the clip has buffered any data can throw
-    // in some browsers (e.g. Safari), which would otherwise abort this whole
-    // block and skip play() entirely — so it's wrapped separately.
-    try { letsDoThisSfx.currentTime = 0; } catch (e) {}
-    letsDoThisSfx.play().catch(() => {}); // ignore autoplay-blocked / missing-file errors
-  }
 }
 
 function toggleSkate() {
@@ -1837,6 +1844,10 @@ function drawTiles(map, time, camX = 0, camY = 0) {
           break;
         }
         case 'T': {
+          if (map.artTable) {
+            drawArtTable(px, py, tx);
+            break;
+          }
           ctx.fillStyle = '#2a1c10';
           ctx.fillRect(px, py + 5, TILE, TILE - 5);
           ctx.fillStyle = '#6a4a2a';
@@ -1847,6 +1858,7 @@ function drawTiles(map, time, camX = 0, camY = 0) {
           ctx.fillRect(px, py, TILE, 2);
           break;
         }
+        case 'S': drawCouch(px, py); break;
         case 'J': {
           ctx.fillStyle = '#1c140f';
           ctx.fillRect(px + 3, py - 1, TILE - 6, TILE + 1);
@@ -1998,6 +2010,93 @@ function drawSwampDecorations(time, map, camX, camY) {
         ctx.fillRect(px + 4, py + 8, 6, 9);
       }
     }
+}
+
+// Green Door Studio's keeper table, dressed up like a real working art
+// table: same wood apron as the classic table, but a paint-spattered
+// canvas top, a rotating studio prop (brush jar / palette) peeking above
+// it, and a stack of records leaned against the base.
+function drawArtTable(px, py, tx) {
+  // apron + legs, same footprint as the classic table
+  ctx.fillStyle = '#2a1c10';
+  ctx.fillRect(px, py + 5, TILE, TILE - 5);
+  ctx.fillStyle = '#7a5a38';
+  ctx.fillRect(px + 1, py + 6, TILE - 2, TILE - 7);
+
+  // canvas-cloth tabletop, spattered with paint
+  ctx.fillStyle = '#d8cdb0';
+  ctx.fillRect(px, py, TILE, 10);
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillRect(px, py, TILE, 2);
+  const splatters = [
+    ['#c04030', 4, 2, 3], ['#3a7ab0', 12, 5, 2], ['#e0b030', 20, 3, 3],
+    ['#4a8a4a', 8, 7, 2], ['#8a4ab0', 25, 6, 2],
+  ];
+  splatters.forEach(([color, dx, dy, r]) => {
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(px + dx, py + dy, r, 0, Math.PI * 2); ctx.fill();
+  });
+
+  // alternating studio props sitting up on the table surface
+  if (tx % 2 === 0) {
+    // jar of brushes
+    ctx.fillStyle = '#6a6a72';
+    ctx.fillRect(px + 12, py - 8, 7, 9);
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.fillRect(px + 13, py - 7, 1, 7);
+    ctx.fillStyle = '#8a5a34';
+    ctx.fillRect(px + 13, py - 14, 1, 7);
+    ctx.fillRect(px + 15, py - 16, 1, 9);
+    ctx.fillRect(px + 17, py - 12, 1, 5);
+  } else {
+    // wooden palette with dabs of paint
+    ctx.fillStyle = '#a87c48';
+    ctx.beginPath();
+    ctx.ellipse(px + 21, py - 3, 7, 5, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#e0b030';
+    ctx.beginPath(); ctx.arc(px + 18, py - 4, 1.4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#c04030';
+    ctx.beginPath(); ctx.arc(px + 22, py - 2, 1.4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#3a7ab0';
+    ctx.beginPath(); ctx.arc(px + 24, py - 5, 1.4, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // stack of records leaned against the base of the table
+  const recColors = ['#c04030', '#3a7ab0', '#e0b030'];
+  for (let i = 0; i < 3; i++) {
+    ctx.fillStyle = shadeColor(recColors[i % recColors.length], -10);
+    ctx.fillRect(px + 3, py + TILE - 10 + i * 3, TILE - 7, 3);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.arc(px + 3 + (TILE - 7) / 2, py + TILE - 8.5 + i * 3, 1, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+// A small couch cushion segment, meant to be placed a few tiles in a row
+// against a wall so it reads as one loveseat/couch.
+function drawCouch(px, py) {
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(px + 2, py + TILE - 6, TILE - 4, 4);
+  // wooden feet
+  ctx.fillStyle = '#3a2818';
+  ctx.fillRect(px + 4, py + TILE - 5, 3, 4);
+  ctx.fillRect(px + TILE - 7, py + TILE - 5, 3, 4);
+  // backrest along the wall side
+  ctx.fillStyle = '#7a3a3a';
+  ctx.fillRect(px + 2, py + 4, TILE - 4, 10);
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.fillRect(px + 2, py + 4, TILE - 4, 2);
+  // seat cushion
+  ctx.fillStyle = '#9a5050';
+  ctx.fillRect(px + 2, py + 13, TILE - 4, 12);
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillRect(px + 2, py + 13, TILE - 4, 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  ctx.fillRect(px + TILE / 2 - 1, py + 13, 2, 12);
+  // armrests
+  ctx.fillStyle = '#6a3232';
+  ctx.fillRect(px + 1, py + 6, 4, 19);
+  ctx.fillRect(px + TILE - 5, py + 6, 4, 19);
 }
 
 function drawCrate(px, py, data) {
@@ -2853,13 +2952,14 @@ function drawCobblePath(tx, ty, w, h) {
 }
 
 function drawChurch() {
-  // Moved to the top-center of the map, at the head of Main Street (the
-  // vertical road), so the road now leads straight up to the church steps.
+  // Positioned so its front steps sit right at the Main Street crossroads
+  // (the vertical road meets the horizontal road here), so the road leads
+  // straight up to the church door.
   // Styled after a New England red-brick meetinghouse: brick facade, a
   // tall white tiered steeple (louvered belfry + open colonnade + lantern),
   // a weathered green conical spire with weathervane, a tower clock, an
   // arched window, and a white pedimented entrance porch.
-  const px = 18 * TILE, py = 3 * TILE;
+  const px = 18 * TILE, py = 6 * TILE;
   const w = 3 * TILE, h = 3 * TILE;
   const cx = px + w / 2;
 
@@ -3144,14 +3244,13 @@ function drawCenterStretch() {
   drawChurch();
   // cobblestone strip leading away from the church door (south), down to
   // where it meets the main road at the crossroads
-  drawCobblePath(19, 6, 1, 3);
+  drawCobblePath(19, 9, 1, 3);
 
   // small row of food stands / shops running along the center road
   drawStand(21 * TILE, 4 * TILE + 6,   { top: '#d84030', top2: '#f4efe3', body: '#8a5a32', a: '#e06a38', b: '#c8d84a' });
   drawStand(21 * TILE, 8 * TILE + 6,   { top: '#d0a02c', top2: '#f4efe3', body: '#4a7ab0', a: '#c8443c', b: '#9ac84a' });
   drawStand(21 * TILE, 16 * TILE + 6,  { top: '#7a5a92', top2: '#f4efe3', body: '#b89878', a: '#d8b050', b: '#c8785a' });
   drawStand(21 * TILE, 19 * TILE + 6,  { top: '#3f6fb0', top2: '#f4efe3', body: '#e8e0d0', a: '#7a4a2a', b: '#d0c06a' });
-  drawStand(18 * TILE, 6 * TILE + 6,   { top: '#b8508a', top2: '#f4efe3', body: '#6a9a4a', a: '#e0609a', b: '#4a8a5a' });
 }
 
 // A banner strung between two poles across the main crossroads, announcing
