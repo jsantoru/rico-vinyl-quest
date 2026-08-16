@@ -400,8 +400,16 @@ portalClosedImg.src = 'assets/closed_for_now.png';
 const fifaImg = new Image();
 fifaImg.src = 'assets/fifa.png';
 
+// Green Door Studio's two extra characters — Kanga on the turntables and
+// Truth posted up nearby. Full pre-drawn scenes rather than the sheet-based
+// player art, so they're just drawn as-is, feet anchored to the floor line.
+const kangaImg = new Image();
+kangaImg.src = 'assets/kanga.png';
+const truthImg = new Image();
+truthImg.src = 'assets/truth.png';
+
 // ---------------------------------------------------------------- maps
-const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J', 'S']);
+const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J', 'S', 'A']);
 
 function blankGrid(w, h, fill) {
   return Array.from({ length: h }, () => Array(w).fill(fill));
@@ -630,12 +638,17 @@ function makeShop(id, opts) {
   g[keeperY][keeperX] = 'K';
   g[H-1][6] = 'E';
   (opts.couchTiles || []).forEach(([cx, cy]) => { g[cy][cx] = 'S'; });
+  (opts.armchairTiles || []).forEach(([cx, cy]) => { g[cy][cx] = 'A'; });
   const map = {
     id, world: opts.world || 'town', w: W, h: H, grid: g, outside: false,
     floor: opts.floor, plank: opts.plank, wallColor: opts.wallColor,
     keeper: { x: keeperX, y: keeperY, ...opts.keeper },
     artTable: opts.artTable || false,
-    crates: {}, npcs: [],
+    paintings: opts.paintings || null,
+    muralWall: opts.muralWall || false,
+    paintFloor: opts.paintFloor || false,
+    couchPillow: opts.couchPillow || null,
+    crates: {}, npcs: opts.npcs || [],
     darkClub: opts.darkClub || false,
     pizzaShop: opts.pizzaShop || false,
     diner: opts.diner || false,
@@ -655,12 +668,26 @@ const { map: town, doors } = makeOverworld();
 
 const shops = {
   groove: makeShop('groove', {
-    floor: '#8a6a4a', plank: '#7a5a3c', wallColor: '#4a3a5f',
+    // dark, paint-scuffed concrete-studio look, matching the reference photo
+    floor: '#5c5a5e', plank: '#4c4a4e', wallColor: '#19171d',
+    paintFloor: true,
     // table + keeper pushed into the upper-right corner instead of centered
     tableRange: { start: 8, end: 11 },
     artTable: true,
-    // small couch along the left wall, tucked below the digging crates
-    couchTiles: [[1, 7], [1, 8]],
+    // colorful gallery paintings along the left wall, above the dig crates
+    paintings: {
+      '0,2': { base: '#e0a030', a: '#c04070', b: '#4870d0' },
+      '0,3': { base: '#4870d0', a: '#e0a030', b: '#4a8a4a' },
+      '0,5': { base: '#c04070', a: '#4870d0', b: '#e0a030' },
+      '0,7': { base: '#4a8a4a', a: '#e0603a', b: '#e0e0dc' },
+    },
+    // big abstract mural across the back wall behind the keeper
+    muralWall: true,
+    // dark couch along the right wall (with a throw pillow) plus a gold
+    // armchair pulled up near the table, mirroring the photo's seating nook
+    couchTiles: [[12, 7], [12, 8]],
+    couchPillow: { x: 12, y: 7 },
+    armchairTiles: [[9, 4]],
     keeper: { name: 'SK1', shirt: '#1f1d26', skin: '#8a5a34', x: 9, y: 1,
       lines: ['Welcome to Green Door Studio — mind the wet paint by the door.',
               'You already know: Third Thursdays, the monthly hip hop night. The whole Anthill Collective moves when the bass drops.',
@@ -670,6 +697,22 @@ const shops = {
               'Try digging through the crates against the LEFT wall — should still be under some old spray cans.'],
       foundLine: 'Elm Street Funk?! I thought that tape got lost under the primer. Go make some noise with it.' },
     crates: [ { record: 'elm' }, { junkSeed: 0 }, { junkSeed: 1 }, { junkSeed: 2 } ],
+    // Kanga on the turntables, posted up next to SK1's table; Truth holding
+    // down the middle of the floor.
+    npcs: [
+      { id: 'kanga', tx: 6, ty: 1, name: 'KANGA', sprite: 'kanga', spriteH: 92,
+        lines: [
+          'Yo — Kanga on the ones and twos. Got a crate of dubs right here, all killer, no filler.',
+          'That frog record on top? Don\'t ask, don\'t sleep on it either. Certified heat.',
+          'Third Thursdays I run this booth till the breaker trips. Come through.',
+        ] },
+      { id: 'truth', tx: 5, ty: 6, name: 'TRUTH', sprite: 'truth', spriteH: 78,
+        lines: [
+          'Truth, BSD, swamp life, all day. You already know.',
+          'Cane\'s for style, not for support — don\'t get it twisted.',
+          'Green Door\'s family. Anybody good with you is good with me.',
+        ] },
+    ],
   }),
   wax: makeShop('wax', {
     floor: '#5f4a6a', plank: '#4f3c58', wallColor: '#3a2a44',
@@ -1726,6 +1769,7 @@ function render(time) {
   if (map.diner) drawHenrysInterior(time);
   if (map.comedyClub) drawComedyClubInterior(time);
   if (map.keeper) drawKeeper(map.keeper);
+  drawShopImageNpcs(map);
   drawPlayer(time);
 
   ctx.restore();
@@ -1779,6 +1823,15 @@ function drawTiles(map, time, camX = 0, camY = 0) {
         ctx.fillStyle = map.plank;
         ctx.fillRect(px, py + 11, TILE, 1);
         ctx.fillRect(px, py + 25, TILE, 1);
+        if (map.paintFloor && (ch === '=') && h % 4 === 0) {
+          const drips = ['#c0403a', '#3a7ab0', '#e0b030', '#4a8a4a'];
+          ctx.fillStyle = drips[h % drips.length];
+          ctx.globalAlpha = 0.5;
+          ctx.beginPath();
+          ctx.arc(px + 6 + (h % 18), py + 6 + ((h * 3) % 18), 1 + (h % 3), 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
       }
       switch (ch) {
         case 'r': {
@@ -1841,6 +1894,11 @@ function drawTiles(map, time, camX = 0, camY = 0) {
           ctx.fillStyle = 'rgba(0,0,0,0.18)';
           ctx.fillRect(px, py + 14, TILE, 2);
           ctx.fillRect(px + (ty % 2 === 0 ? 8 : 20), py, 2, 14);
+          if (map.paintings && map.paintings[key(tx, ty)]) {
+            drawWallPainting(px, py, map.paintings[key(tx, ty)]);
+          } else if (map.muralWall && ty === 0) {
+            drawMuralSwatch(px, py, tx);
+          }
           break;
         }
         case 'T': {
@@ -1858,7 +1916,8 @@ function drawTiles(map, time, camX = 0, camY = 0) {
           ctx.fillRect(px, py, TILE, 2);
           break;
         }
-        case 'S': drawCouch(px, py); break;
+        case 'S': drawCouch(px, py, !!(map.couchPillow && map.couchPillow.x === tx && map.couchPillow.y === ty)); break;
+        case 'A': drawArmchair(px, py); break;
         case 'J': {
           ctx.fillStyle = '#1c140f';
           ctx.fillRect(px + 3, py - 1, TILE - 6, TILE + 1);
@@ -2012,42 +2071,39 @@ function drawSwampDecorations(time, map, camX, camY) {
     }
 }
 
-// Green Door Studio's keeper table, dressed up like a real working art
-// table: same wood apron as the classic table, but a paint-spattered
-// canvas top, a rotating studio prop (brush jar / palette) peeking above
-// it, and a stack of records leaned against the base.
+// Green Door Studio's keeper table, styled after the reference photo: a
+// deep red velvet cloth draped over a plain wood table, a small caddy of
+// art supplies sitting on top, and a stack of records leaned against the
+// base.
 function drawArtTable(px, py, tx) {
-  // apron + legs, same footprint as the classic table
+  // wood legs, same footprint as the classic table
   ctx.fillStyle = '#2a1c10';
   ctx.fillRect(px, py + 5, TILE, TILE - 5);
-  ctx.fillStyle = '#7a5a38';
+  ctx.fillStyle = '#5a3d22';
   ctx.fillRect(px + 1, py + 6, TILE - 2, TILE - 7);
 
-  // canvas-cloth tabletop, spattered with paint
-  ctx.fillStyle = '#d8cdb0';
-  ctx.fillRect(px, py, TILE, 10);
-  ctx.fillStyle = 'rgba(255,255,255,0.15)';
-  ctx.fillRect(px, py, TILE, 2);
-  const splatters = [
-    ['#c04030', 4, 2, 3], ['#3a7ab0', 12, 5, 2], ['#e0b030', 20, 3, 3],
-    ['#4a8a4a', 8, 7, 2], ['#8a4ab0', 25, 6, 2],
-  ];
-  splatters.forEach(([color, dx, dy, r]) => {
-    ctx.fillStyle = color;
-    ctx.beginPath(); ctx.arc(px + dx, py + dy, r, 0, Math.PI * 2); ctx.fill();
-  });
+  // red velvet drape over the top, hanging past the table edge a touch
+  ctx.fillStyle = '#7a1a22';
+  ctx.fillRect(px - 1, py, TILE + 2, 12);
+  ctx.fillStyle = '#921f2a';
+  ctx.fillRect(px - 1, py, TILE + 2, 6);
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.fillRect(px - 1, py, TILE + 2, 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  for (let fx = 3; fx < TILE; fx += 6) ctx.fillRect(px + fx, py, 1, 12); // cloth folds
 
-  // alternating studio props sitting up on the table surface
+  // alternating studio props sitting on the cloth
   if (tx % 2 === 0) {
-    // jar of brushes
-    ctx.fillStyle = '#6a6a72';
-    ctx.fillRect(px + 12, py - 8, 7, 9);
-    ctx.fillStyle = 'rgba(255,255,255,0.2)';
-    ctx.fillRect(px + 13, py - 7, 1, 7);
-    ctx.fillStyle = '#8a5a34';
-    ctx.fillRect(px + 13, py - 14, 1, 7);
-    ctx.fillRect(px + 15, py - 16, 1, 9);
-    ctx.fillRect(px + 17, py - 12, 1, 5);
+    // caddy box of art supplies (brushes + pencils poking out)
+    ctx.fillStyle = '#3a2c1c';
+    ctx.fillRect(px + 10, py - 8, 12, 9);
+    ctx.fillStyle = '#5a4530';
+    ctx.fillRect(px + 11, py - 7, 10, 7);
+    const toolColors = ['#c04030', '#3a7ab0', '#e0b030', '#4a8a4a'];
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = toolColors[i];
+      ctx.fillRect(px + 12 + i * 2, py - 14, 1, 7);
+    }
   } else {
     // wooden palette with dabs of paint
     ctx.fillStyle = '#a87c48';
@@ -2072,9 +2128,50 @@ function drawArtTable(px, py, tx) {
   }
 }
 
+// A small framed painting hung on a wall tile — bold blocky "abstract art"
+// built from a base color plus a couple of contrasting accent shapes, so
+// each one reads as distinct art rather than a repeated decal.
+function drawWallPainting(px, py, palette) {
+  ctx.fillStyle = '#1c1a20';
+  ctx.fillRect(px + 4, py + 2, TILE - 8, 20);
+  ctx.fillStyle = palette.base;
+  ctx.fillRect(px + 6, py + 4, TILE - 12, 16);
+  ctx.fillStyle = palette.a;
+  ctx.fillRect(px + 7, py + 5, 7, 6);
+  ctx.fillStyle = palette.b;
+  ctx.beginPath();
+  ctx.arc(px + TILE - 12, py + 14, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.fillRect(px + 6, py + 4, TILE - 12, 2);
+}
+
+// One swatch of the big abstract mural covering the back wall — colorful,
+// loose, spray-paint style shapes rather than a tidy picture frame.
+function drawMuralSwatch(px, py, tx) {
+  const palettes = [
+    ['#c0403a', '#e0b030'], ['#3a7ab0', '#4a8a4a'], ['#8a4ab0', '#e0603a'],
+  ];
+  const [c1, c2] = palettes[tx % palettes.length];
+  ctx.fillStyle = c1;
+  ctx.beginPath();
+  ctx.arc(px + 10, py + 16, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = c2;
+  ctx.beginPath();
+  ctx.arc(px + TILE - 10, py + 20, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(px + 2, py + 28);
+  ctx.lineTo(px + TILE - 2, py + 6);
+  ctx.stroke();
+}
+
 // A small couch cushion segment, meant to be placed a few tiles in a row
 // against a wall so it reads as one loveseat/couch.
-function drawCouch(px, py) {
+function drawCouch(px, py, withPillow) {
   ctx.fillStyle = 'rgba(0,0,0,0.2)';
   ctx.fillRect(px + 2, py + TILE - 6, TILE - 4, 4);
   // wooden feet
@@ -2097,6 +2194,48 @@ function drawCouch(px, py) {
   ctx.fillStyle = '#6a3232';
   ctx.fillRect(px + 1, py + 6, 4, 19);
   ctx.fillRect(px + TILE - 5, py + 6, 4, 19);
+  if (withPillow) {
+    ctx.fillStyle = '#e8e4dc';
+    ctx.fillRect(px + 9, py + 15, 14, 12);
+    ctx.strokeStyle = '#8a8478';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(px + 9, py + 15, 14, 12);
+    ctx.fillStyle = '#3a3a3e';
+    ctx.beginPath(); ctx.arc(px + 13, py + 19, 1.6, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(px + 19, py + 23, 1.6, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+// The mustard-gold armchair from the reference photo, with a small
+// checkered throw draped over its back.
+function drawArmchair(px, py) {
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(px + 3, py + TILE - 5, TILE - 6, 4);
+  ctx.fillStyle = '#3a2818';
+  ctx.fillRect(px + 5, py + TILE - 4, 3, 4);
+  ctx.fillRect(px + TILE - 8, py + TILE - 4, 3, 4);
+  // body
+  ctx.fillStyle = '#c8962e';
+  ctx.fillRect(px + 4, py + 8, TILE - 8, TILE - 12);
+  ctx.fillStyle = shadeColor('#c8962e', -20);
+  ctx.fillRect(px + 4, py + 8, 5, TILE - 12);
+  ctx.fillStyle = shadeColor('#c8962e', 25);
+  ctx.fillRect(px + TILE - 9, py + 8, 4, 8);
+  // rolled arms
+  ctx.fillStyle = '#b3822a';
+  ctx.fillRect(px + 2, py + 12, 5, 14);
+  ctx.fillRect(px + TILE - 7, py + 12, 5, 14);
+  // checkered throw over the back
+  ctx.fillStyle = '#2a2a30';
+  ctx.fillRect(px + 6, py + 3, TILE - 12, 8);
+  for (let cy = 0; cy < 2; cy++) {
+    for (let cx = 0; cx < 3; cx++) {
+      if ((cx + cy) % 2 === 0) {
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fillRect(px + 6 + cx * ((TILE - 12) / 3), py + 3 + cy * 4, (TILE - 12) / 3, 4);
+      }
+    }
+  }
 }
 
 function drawCrate(px, py, data) {
@@ -4922,6 +5061,28 @@ function drawKeeper(k) {
     ctx.fillRect(px + 9, py - 1, 14, 5);
     ctx.fillStyle = hairDark;
     ctx.fillRect(px + 9, py - 1, 14, 2);
+  }
+}
+
+// Registry of full pre-drawn character images usable as shop npcs (see
+// map.npcs[i].sprite). Each is drawn as-is, scaled to spriteH with feet
+// anchored to the tile's floor line — no procedural fallback, since there's
+// no simple shape that stands in for this art; it just waits for the image
+// to finish loading.
+const SHOP_NPC_IMAGES = { kanga: kangaImg, truth: truthImg };
+
+function drawShopImageNpcs(map) {
+  if (!map.npcs) return;
+  for (const n of map.npcs) {
+    if (!n.sprite) continue;
+    const img = SHOP_NPC_IMAGES[n.sprite];
+    if (!img || !img.complete || !img.naturalWidth) continue;
+    const px = n.tx * TILE, py = n.ty * TILE;
+    const kh = n.spriteH || 80;
+    const kw = Math.round(kh * img.naturalWidth / img.naturalHeight);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(px + 16 - kw * 0.3, py + 27, kw * 0.6, 4);
+    ctx.drawImage(img, Math.round(px + 16 - kw / 2), Math.round(py + 30 - kh), kw, kh);
   }
 }
 
