@@ -429,7 +429,7 @@ const humbleImg = new Image();
 humbleImg.src = 'assets/humble.png';
 
 // ---------------------------------------------------------------- maps
-const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J', 'S', 'A', 'N', 'F', 'R']);
+const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J', 'S', 'A', 'N', 'F']);
 
 function blankGrid(w, h, fill) {
   return Array.from({ length: h }, () => Array(w).fill(fill));
@@ -673,15 +673,6 @@ function makeShop(id, opts) {
   (opts.armchairTiles || []).forEach(([cx, cy]) => { g[cy][cx] = 'A'; });
   if (opts.micStand) { g[opts.micStand[1]][opts.micStand[0]] = 'Y'; }
   (opts.gearTiles || []).forEach(([gx, gy]) => { g[gy][gx] = 'G'; });
-  // Two-tile-wide recording desk (studio monitors + gear), with a hanging
-  // neon sign above it — e.g. Zach's "SKYLAB" workstation in Green Door
-  // Studio. opts.recordingDesk is [x, y] for the LEFT tile; the desk always
-  // occupies that tile and the one directly to its right.
-  if (opts.recordingDesk) {
-    const [dx, dy] = opts.recordingDesk;
-    g[dy][dx] = 'R';
-    g[dy][dx + 1] = 'R';
-  }
   // Freestanding customer tables out on the floor (separate from the
   // counter table above) — e.g. Henry's Diner's coffee-klatch table.
   (opts.extraTables || []).forEach(([ex, ey]) => { g[ey][ex] = 'T'; });
@@ -710,9 +701,6 @@ function makeShop(id, opts) {
     pizzaShop: opts.pizzaShop || false,
     diner: opts.diner || false,
     comedyClub: opts.comedyClub || false,
-    recordingDesk: opts.recordingDesk
-      ? { x: opts.recordingDesk[0], y: opts.recordingDesk[1], sign: opts.recordingDeskSign || 'SKYLAB' }
-      : null,
   };
   const spots = [[1,4],[1,6],[12,4],[12,6],[2,8],[11,8]];
   opts.crates.forEach((c, i) => {
@@ -751,10 +739,6 @@ const shops = {
     cypherVibe: true,
     micStand: [7, 5],
     gearTiles: [[3, 3], [8, 3], [4, 7], [10, 7], [2, 5]],
-    // Zach's "SKYLAB" workstation — a two-tile recording desk with studio
-    // monitors, tucked into the back left corner of the room, with a
-    // glowing neon sign hanging above it.
-    recordingDesk: [1, 2],
     // dark couch along the right wall (with a throw pillow) plus a gold
     // armchair pulled up near the table, mirroring the photo's seating nook
     couchTiles: [[12, 7], [12, 8]],
@@ -778,9 +762,8 @@ const shops = {
           'That frog record on top? Don\'t ask, don\'t sleep on it either. Certified heat.',
           'Third Thursdays I run this booth till the breaker trips. Come through.',
         ] },
-      { id: 'zach', tx: 2, ty: 3, name: 'SKYSPLITTERINK', sprite: 'zach',
+      { id: 'zach', tx: 10, ty: 6, name: 'SKYSPLITTERINK', sprite: 'zach',
         lines: [
-          'This corner\'s mine — SKYLAB. Desk, monitors, the whole rig. Come check what I\'m cooking up.',
           'Zach — but around here everybody just says SkySplitterInk. Sound engineer, producer, full-time studio rat.',
           'I\'ve had a hand in more Vermont hip hop than I can count. If it came out of this scene, chances are it passed through these speakers.',
           'People call me a magician with sound. I just call it paying attention — EQ, levels, the pocket. It all matters.',
@@ -2110,7 +2093,6 @@ function drawTiles(map, time, camX = 0, camY = 0) {
         case 'A': drawArmchair(px, py); break;
         case 'Y': drawMicStand(px, py); break;
         case 'G': drawHipHopGear(px, py, tx, ty); break;
-        case 'R': drawRecordingDesk(px, py, tx, ty, map.recordingDesk); break;
         case 'F': drawCarnivalProp(px, py, tx, ty); break;
         case 'J': {
           ctx.fillStyle = '#1c140f';
@@ -2679,120 +2661,6 @@ function drawHipHopGear(px, py, tx, ty) {
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(px + 26, py + 14); ctx.lineTo(px + 27, py + 11); ctx.stroke();
   }
-}
-
-// A two-tile-wide hip hop recording workstation — big studio monitor
-// speakers flanking a laptop/DAW rig, a small mixer with an audio
-// interface, and a mini keyboard controller. Drawn one tile at a time (the
-// left tile gets the laptop + left monitor, the right tile gets the mixer +
-// right monitor) so it reads as one continuous desk across both tiles. The
-// left tile also hangs the neon sign above it (see drawSkylabSign).
-function drawRecordingDesk(px, py, tx, ty, desk) {
-  const isLeft = desk && tx === desk.x;
-
-  // shared ground shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.22)';
-  ctx.beginPath();
-  ctx.ellipse(px + 16, py + TILE - 5, 15, 4, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // desk carcass (front + top), same footprint on both tiles so it reads
-  // as one continuous slab
-  ctx.fillStyle = '#1c1518';
-  ctx.fillRect(px, py + 20, TILE, TILE - 20);
-  ctx.fillStyle = '#3a2e32';
-  ctx.fillRect(px, py + 14, TILE, 8);
-  ctx.fillStyle = '#5a4a50';
-  ctx.fillRect(px, py + 10, TILE, 5);
-  ctx.fillStyle = 'rgba(255,255,255,0.1)';
-  ctx.fillRect(px, py + 10, TILE, 1);
-
-  if (isLeft) {
-    // big studio monitor speaker, left side
-    ctx.fillStyle = '#17151a';
-    ctx.fillRect(px + 1, py - 8, 11, 19);
-    ctx.fillStyle = '#403f46';
-    ctx.beginPath(); ctx.arc(px + 6.5, py + 3, 4, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#0e0d10';
-    ctx.beginPath(); ctx.arc(px + 6.5, py + 3, 2, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#5c5b62';
-    ctx.beginPath(); ctx.arc(px + 6.5, py - 3, 2, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
-    ctx.beginPath(); ctx.arc(px + 5.5, py - 3.7, 0.6, 0, Math.PI * 2); ctx.fill();
-
-    // open laptop running the DAW
-    ctx.fillStyle = '#8a888e';
-    ctx.fillRect(px + 14, py + 7, 15, 3);
-    ctx.fillStyle = '#cac8ce';
-    ctx.fillRect(px + 14, py - 7, 15, 14);
-    ctx.fillStyle = '#1c2a34';
-    ctx.fillRect(px + 15, py - 6, 13, 12);
-    // little waveform bars glowing on the screen
-    ctx.fillStyle = '#3ce0c8';
-    const bars = [3, 6, 2, 8, 4, 6, 3];
-    bars.forEach((h, i) => ctx.fillRect(px + 17 + i * 1.6, py + 4 - h, 1, h));
-  } else {
-    // big studio monitor speaker, right side
-    ctx.fillStyle = '#17151a';
-    ctx.fillRect(px + 20, py - 8, 11, 19);
-    ctx.fillStyle = '#403f46';
-    ctx.beginPath(); ctx.arc(px + 25.5, py + 3, 4, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#0e0d10';
-    ctx.beginPath(); ctx.arc(px + 25.5, py + 3, 2, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#5c5b62';
-    ctx.beginPath(); ctx.arc(px + 25.5, py - 3, 2, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
-    ctx.beginPath(); ctx.arc(px + 24.5, py - 3.7, 0.6, 0, Math.PI * 2); ctx.fill();
-
-    // small mixer / audio interface with glowing knobs
-    ctx.fillStyle = '#1c1c22';
-    ctx.fillRect(px + 2, py + 3, 15, 7);
-    ctx.fillStyle = '#e0a030';
-    for (let i = 0; i < 4; i++) {
-      ctx.beginPath(); ctx.arc(px + 5 + i * 3.2, py + 6.5, 1.2, 0, Math.PI * 2); ctx.fill();
-    }
-    // mini keyboard controller in front
-    ctx.fillStyle = '#e8e4dc';
-    ctx.fillRect(px + 1, py + 12, 17, 5);
-    ctx.fillStyle = '#201f22';
-    for (let i = 0; i < 6; i++) ctx.fillRect(px + 2 + i * 2.8, py + 12, 1.6, 3.5);
-  }
-
-  if (isLeft) drawSkylabSign(px, py, desk && desk.sign);
-}
-
-// Hanging neon-plaque sign above the recording desk, spanning both of its
-// tiles (mounted on the wall behind/above the setup). Purple glow to match
-// the hip hop / studio vibe.
-function drawSkylabSign(px, py, label) {
-  const cx = px + TILE; // midpoint between the desk's two tiles
-  const sw = 66, sh = 17;
-  const signY = py - 32;
-
-  // soft glow behind the plaque
-  ctx.fillStyle = 'rgba(150,90,230,0.32)';
-  ctx.fillRect(cx - sw / 2 - 5, signY - 4, sw + 10, sh + 10);
-
-  // mount bracket down to the desk
-  ctx.fillStyle = '#241c28';
-  ctx.fillRect(cx - 2, signY + sh, 4, py - (signY + sh) - 10);
-
-  // plaque
-  ctx.fillStyle = '#18121e';
-  ctx.fillRect(cx - sw / 2, signY, sw, sh);
-  ctx.strokeStyle = '#b87cff';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(cx - sw / 2, signY, sw, sh);
-
-  ctx.fillStyle = '#c896ff';
-  ctx.font = 'bold 12px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(label || 'SKYLAB', cx, signY + sh - 5);
-
-  // little corner bulbs for a neon-tube feel
-  ctx.fillStyle = '#e8d0ff';
-  ctx.beginPath(); ctx.arc(cx - sw / 2 + 3, signY + 3, 1.3, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(cx + sw / 2 - 3, signY + 3, 1.3, 0, Math.PI * 2); ctx.fill();
 }
 
 // Candy-stripe "big top" tent wall — a translucent vertical stripe laid over
