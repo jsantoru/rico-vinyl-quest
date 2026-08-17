@@ -423,6 +423,11 @@ gzaImg.src = 'assets/gza.png';
 const zachImg = new Image();
 zachImg.src = 'assets/zach.png';
 
+// Truth & Humble — grabbing a quick slice at Nectars before the freestyle
+// cypher later at Green Door Studio. Same pre-drawn treatment as the rest.
+const humbleImg = new Image();
+humbleImg.src = 'assets/humble.png';
+
 // ---------------------------------------------------------------- maps
 const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J', 'S', 'A', 'N', 'F']);
 
@@ -757,12 +762,6 @@ const shops = {
           'That frog record on top? Don\'t ask, don\'t sleep on it either. Certified heat.',
           'Third Thursdays I run this booth till the breaker trips. Come through.',
         ] },
-      { id: 'truth', tx: 5, ty: 6, name: 'TRUTH', sprite: 'truth',
-        lines: [
-          'Truth, QSD, swamp life, all day. You already know.',
-          'Cane\'s for style, not for support — don\'t get it twisted.',
-          'Green Door\'s family. Anybody good with you is good with me.',
-        ] },
       { id: 'zach', tx: 10, ty: 6, name: 'SKYSPLITTERINK', sprite: 'zach',
         lines: [
           'Zach — but around here everybody just says SkySplitterInk. Sound engineer, producer, full-time studio rat.',
@@ -853,6 +852,22 @@ const shops = {
       foundLine: 'Enjoy the show! Those fries are legendary.' },
     crates: [],
     darkClub: true,
+    // Truth & Humble, grabbing a quick slice before the freestyle cypher
+    // later tonight at Green Door Studio.
+    npcs: [
+      { id: 'truth', tx: 4, ty: 6, name: 'TRUTH', sprite: 'truth',
+        lines: [
+          'Truth, QSD, swamp life, all day. You already know.',
+          'Cane\'s for style, not for support — don\'t get it twisted.',
+          'Grabbing a quick slice before the cypher — Green Door\'s gonna be packed tonight.',
+        ] },
+      { id: 'humble', tx: 9, ty: 6, name: 'HUMBLE', sprite: 'humble',
+        lines: [
+          'Humble — staff in one hand, mic in the other. Come as you are.',
+          'Fuel up now, save the energy for the cypher. Green Door gets loud once the bass drops.',
+          'Third Thursdays hit different. See you over there in a bit.',
+        ] },
+    ],
   }),
   juniors: makeShop('juniors', {
     floor: '#c8a898', plank: '#b89888', wallColor: '#e8d8c8',
@@ -868,12 +883,14 @@ const shops = {
   comedy: makeShop('comedy', {
     world: 'town',
     floor: '#241830', plank: '#1a1224', wallColor: '#3a1a52',
-    keeper: { name: 'MOOZY', shirt: '#e0b040', skin: '#c89a72',
-      lines: ['Welcome to the VT COMEDY CLUB — smallest room in town, biggest laughs.',
-              'Open mic every night. Sign-up sheet\'s by the door, no cover charge.',
-              'Records? Nah, we don\'t spin vinyl in here — just bad puns and worse timing.',
-              'Try Pure Pop Records down the street if you\'re digging for tunes.'],
-      foundLine: 'Ha! Save that energy for the mic, we could use it.' },
+    keeper: { name: 'MITCH', shirt: '#3a4a2a', skin: '#c89a72',
+      lines: ['A ghost is running the VT COMEDY CLUB tonight. Nobody\'s asked why. Seems rude to ask.',
+              'He says the mic doesn\'t even need to be plugged in. "I\'m already not really here," he shrugs, "so it evens out."',
+              'He says he used to alphabetize his record collection, but then he thought — why not just get rid of the ones that come first?',
+              'He\'s pretty sure he sold a signed vinyl to Pure Pop Records once. Or maybe he just haunts the bargain bin there. Hard to say.',
+              'He orders a drink he can\'t drink, just to hold it. Says the ice cubes are the only ones in the room with a real future.',
+              'He tells the same joke twice, forgets he already told it, and it\'s funnier the second time. Ghost logic.'],
+      foundLine: 'Ha — nice one. I\'d write that down, but ghosts don\'t carry pens.' },
     crates: [],
     comedyClub: true,
   }),
@@ -5430,15 +5447,19 @@ function drawDeliSeatingArea() {
 }
 
 // ---------------------------------------------------------------- keeper
-const KEEPER_HAIR = { DEE: '#5a2e1c', ROSIE: '#c8c0b0', ZEKE: '#241a12', JADE: '#141014', TONY: '#2a2018', LANNY: '#3a1a5c' };
+const KEEPER_HAIR = { DEE: '#5a2e1c', ROSIE: '#c8c0b0', ZEKE: '#241a12', JADE: '#141014', TONY: '#2a2018', LANNY: '#3a1a5c', MITCH: '#5a3a1c' };
 
 // Optional per-keeper artwork. Drop a PNG at assets/keepers/<name>.png (any
 // size — it's scaled to KEEPER_SPR_H, feet anchored at the same floor line
 // the procedural sprite uses) and it's picked up automatically. Until a file
 // exists (or while it's still loading), drawKeeper falls back to the shaded
 // procedural sprite below, so nothing ever renders blank.
-const KEEPER_NAMES = ['SK1', 'DEE', 'ROSIE', 'ZEKE', 'JADE', 'TONY', 'LANNY'];
-const KEEPER_SPR_H = 64;
+const KEEPER_NAMES = ['SK1', 'DEE', 'ROSIE', 'ZEKE', 'JADE', 'TONY', 'LANNY', 'MITCH'];
+// Matches the 80px height used for Green Door Studio's image-based npcs
+// (truth.png, zach.png, kanga.png — see SHOP_NPC_IMAGES/drawShopImageNpcs'
+// `n.spriteH || 80` default), so every keeper — current and future — reads
+// at the same scale as those three.
+const KEEPER_SPR_H = 80;
 const keeperImgs = {};
 KEEPER_NAMES.forEach((name) => {
   const img = new Image();
@@ -5561,7 +5582,7 @@ function drawKeeper(k) {
 // anchored to the tile's floor line — no procedural fallback, since there's
 // no simple shape that stands in for this art; it just waits for the image
 // to finish loading.
-const SHOP_NPC_IMAGES = { kanga: kangaImg, truth: truthImg, bill: billImg, rza: rzaImg, gza: gzaImg, zach: zachImg };
+const SHOP_NPC_IMAGES = { kanga: kangaImg, truth: truthImg, bill: billImg, rza: rzaImg, gza: gzaImg, zach: zachImg, humble: humbleImg };
 
 function drawShopImageNpcs(map) {
   if (!map.npcs) return;
