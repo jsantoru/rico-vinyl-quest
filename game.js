@@ -373,6 +373,21 @@ const CHARACTERS = {
 };
 let selectedCharacter = 'rico';
 
+// Beat-complete splash art — one per playable character, shown on the
+// "BEAT COMPLETE!" screen once all 5 records for a world are collected.
+// Keyed by the same character ids as CHARACTERS above.
+const santosCheersImg = new Image();
+santosCheersImg.src = 'assets/santos_cheers.png';
+const ricoYanksCheersImg = new Image();
+ricoYanksCheersImg.src = 'assets/rico_yanks_cheers.png';
+const ricoHeiroCheersImg = new Image();
+ricoHeiroCheersImg.src = 'assets/rico_heiro_cheers.png';
+const CHARACTER_CHEERS_IMG = {
+  santos:  santosCheersImg,
+  ricoAlt: ricoYanksCheersImg,
+  rico:    ricoHeiroCheersImg,
+};
+
 const characterSelectImg = new Image();
 characterSelectImg.src = 'assets/character_select.png';
 // Left-to-right order the character-select portraits appear in the art
@@ -7130,31 +7145,50 @@ function drawCharacterSelect(time) {
 function drawWin() {
   ctx.fillStyle = 'rgba(8,6,12,0.88)';
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+  // Character-specific cheers splash: santos -> santos_cheers, ricoAlt (Yanks
+  // outfit) -> rico_yanks_cheers, rico (classic/Hiero) -> rico_heiro_cheers.
+  const cheersImg = CHARACTER_CHEERS_IMG[selectedCharacter] || santosCheersImg;
+  let dh = 0, dy = 10;
+  if (cheersImg.complete && cheersImg.naturalWidth) {
+    const iw = cheersImg.naturalWidth, ih = cheersImg.naturalHeight;
+    const scale = Math.min(300 / iw, 380 / ih);
+    const dw = iw * scale;
+    dh = ih * scale;
+    const dx = (VIEW_W - dw) / 2;
+    ctx.drawImage(cheersImg, dx, dy, dw, dh);
+  }
+
+  // Same text/copy as the original popup, now laid out under the splash art.
   ctx.textAlign = 'center';
   ctx.fillStyle = '#e0b040';
-  ctx.font = 'bold 40px monospace';
-  ctx.fillText('BEAT COMPLETE!', VIEW_W / 2, 120);
+  ctx.font = 'bold 26px monospace';
+  const titleY = dy + dh + 32;
+  ctx.fillText('BEAT COMPLETE!', VIEW_W / 2, titleY);
+
   ctx.fillStyle = '#f4ecd8';
-  ctx.font = '15px monospace';
-  ctx.fillText('All five samples on the pads. The whole town is bumping your track.', VIEW_W / 2, 165);
+  ctx.font = '13px monospace';
+  ctx.fillText('All five samples on the pads. The whole town is bumping your track.', VIEW_W / 2, titleY + 22);
+
+  const gridY = titleY + 36, sq = 34, gap = 10;
+  const totalW = sq * 5 + gap * 4;
   worldPadOrder().forEach((id, i) => {
     const r = worldRecords()[id];
-    const x = VIEW_W / 2 - 230 + i * 92, y = 210;
+    const x = VIEW_W / 2 - totalW / 2 + i * (sq + gap);
     ctx.fillStyle = r.color;
-    ctx.fillRect(x, y, 76, 76);
+    ctx.fillRect(x, gridY, sq, sq);
     ctx.fillStyle = '#181418';
-    ctx.font = 'bold 13px monospace';
-    ctx.fillText(r.pad, x + 38, y + 44);
-    ctx.fillStyle = '#c8c0d8';
-    ctx.font = '10px monospace';
-    ctx.fillText(r.sample, x + 38, y + 96);
+    ctx.font = 'bold 10px monospace';
+    ctx.fillText(r.pad, x + sq / 2, gridY + sq / 2 + 4);
   });
+
   ctx.fillStyle = '#9a90a8';
-  ctx.font = '13px monospace';
-  ctx.fillText('Rico’s next beat tape: certified classic.', VIEW_W / 2, 360);
+  ctx.font = '12px monospace';
+  ctx.fillText('Rico’s next beat tape: certified classic.', VIEW_W / 2, gridY + sq + 24);
+
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
   ctx.font = 'bold 15px monospace';
-  ctx.fillText('- PRESS E TO KEEP CRUISING -', VIEW_W / 2, 420);
+  ctx.fillText('- PRESS E TO KEEP CRUISING -', VIEW_W / 2, VIEW_H - 18);
 }
 
 requestAnimationFrame(frame);
