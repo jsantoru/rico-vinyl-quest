@@ -231,6 +231,17 @@ const JUNK = [
   'A bagpipe Christmas album. Some things can’t be sampled.',
 ];
 
+// Classic comedy album junk finds — used for comedy-club dig crates that
+// aren't hiding one of the 5 collectible records, just old stand-up vinyl.
+const COMEDY_JUNK = [
+  'A scratchy "Live at the Chuckle Hut" LP — the laugh track sounds suspiciously canned.',
+  '"Knock Knock, Vol. 3" — ninety minutes of knock-knock jokes. Still not funny.',
+  'A ventriloquist album. On vinyl. You can somehow still hear the guy\'s lips move.',
+  'Some open-mic tape scrawled "DO NOT RELEASE" in shaky marker. Released anyway.',
+  'A one-liner record so old the jokes have their own jokes about them being old.',
+  'A heckler-response album — just forty minutes of comebacks with no setup jokes.',
+];
+
 // Fake front-page stories for the town's newspaper stands. Onion/Daily Show
 // style Vermont satire — one random headline+body pops up each time a stand
 // is read. Keep these silly and harmless, no real people, just generic
@@ -427,6 +438,9 @@ zachImg.src = 'assets/zach.png';
 // cypher later at Green Door Studio. Same pre-drawn treatment as the rest.
 const humbleImg = new Image();
 humbleImg.src = 'assets/humble.png';
+
+const hicksImg = new Image();
+hicksImg.src = 'assets/hicks.png';
 
 // ---------------------------------------------------------------- maps
 const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J', 'S', 'A', 'N', 'F', 'R']);
@@ -797,9 +811,14 @@ const shops = {
     ],
   }),
   wax: makeShop('wax', {
-    floor: '#5f4a6a', plank: '#4f3c58', wallColor: '#3a2a44',
+    // Exotic-plant-shop redesign: sage-green walls, warm wood-toned floor
+    // planking — a jungly, sunlit greenhouse feel instead of the old
+    // nightclub purple. drawHeyBudInterior() below adds the hanging
+    // plants, book/tee shelving, street-art prints, and the "99" poster.
+    floor: '#e4dcc0', plank: '#cfc29a', wallColor: '#3c5c40',
+    plantShop: true,
     keeper: { name: 'DEE', shirt: '#d05a8a', skin: '#c89a72',
-      lines: ['Welcome to Hey Bud — water your soul, or just browse.',
+      lines: ['Welcome to Hey Bud — exotic plants, street art, books, tees. Water your soul, or just browse.',
               'Funny enough, a Velvet Horns pressing came in tangled up with a shipment of hanging planters.',
               'Should still be in a crate on the RIGHT side, behind the ferns.'],
       foundLine: 'Midnight Stab, right here at Hey Bud? Those horns are gonna grow on you.' },
@@ -876,7 +895,7 @@ const shops = {
               'Try Pure Pop Records for rare finds, or Hey Bud — they get weird stuff with plant shipments.',
               'Green Door Studio might have some old session reels too.'],
       foundLine: 'Big tune! That\'s the kind of find that makes Reggae Night legendary.' },
-    crates: [],
+    crates: [ { junkSeed: 5 }, { junkSeed: 6 } ],
     darkClub: true,
     // Truth & Humble, grabbing a quick slice before the freestyle cypher
     // later tonight at Green Door Studio.
@@ -910,15 +929,30 @@ const shops = {
     world: 'town',
     floor: '#241830', plank: '#1a1224', wallColor: '#3a1a52',
     keeper: { name: 'MITCH', shirt: '#3a4a2a', skin: '#c89a72',
-      lines: ['A ghost is running the VT COMEDY CLUB tonight. Nobody\'s asked why. Seems rude to ask.',
-              'He says the mic doesn\'t even need to be plugged in. "I\'m already not really here," he shrugs, "so it evens out."',
-              'He says he used to alphabetize his record collection, but then he thought — why not just get rid of the ones that come first?',
-              'He\'s pretty sure he sold a signed vinyl to Pure Pop Records once. Or maybe he just haunts the bargain bin there. Hard to say.',
-              'He orders a drink he can\'t drink, just to hold it. Says the ice cubes are the only ones in the room with a real future.',
-              'He tells the same joke twice, forgets he already told it, and it\'s funnier the second time. Ghost logic.'],
-      foundLine: 'Ha — nice one. I\'d write that down, but ghosts don\'t carry pens.' },
-    crates: [],
+      lines: ['I used to be a person. Now I\'m a bit. Same amount of people laughing, honestly.',
+              'The mic doesn\'t need to be plugged in tonight. I\'m already not really here, so it evens out.',
+              'I used to alphabetize my records. Then I died, and now I just get rid of the ones that come first. Efficient.',
+              'I ordered a drink I can\'t drink. Just to hold it. The ice has a better future than I do, and it\'s made of water.',
+              'I walked through a wall earlier. Didn\'t even do it on purpose, that\'s just Tuesday now.',
+              'I sold a signed vinyl to Pure Pop Records once. Or I haunt their bargain bin. One of those. Both, maybe. Time\'s a weird thing for me now.',
+              'I tell the same joke twice. I forget I already told it. It\'s funnier the second time — I really committed to the bit, apparently.',
+              'Somebody asked if I have a shadow. No. But I still won\'t stand in the light. Habit, I guess.'],
+      foundLine: 'Ha — that\'s a good one. I\'d write it down, but ghosts don\'t carry pens. Or pockets. Or hands, really.' },
+    crates: [ { comedySeed: 0 } ],
     comedyClub: true,
+    // Waiting on the corner stool for his set — sharp, skeptical,
+    // no-patience-for-nonsense energy. A cigarette he never quite lights.
+    npcs: [
+      { id: 'skeptic', tx: 10, ty: 6, name: 'THE SKEPTIC', sprite: 'hicks',
+        lines: [
+          'You ever notice the news tells you what to be afraid of right before the commercial for the thing that fixes it? Funny how that works.',
+          'They keep saying "think for yourself" on a t-shirt they sold you. Read that back.',
+          'I\'m not cynical. Cynical implies I expected better. I read the fine print, that\'s all.',
+          'Every generation thinks they invented questioning authority. No — authority just keeps counting on you forgetting.',
+          'The smartest thing you can say in a room full of certainty is "wait, why though." Watch how fast people get uncomfortable.',
+          'I quit trying to be liked by everybody. Turns out that\'s also when people started actually listening.',
+        ] },
+    ],
   }),
   church: makeShop('church', {
     world: 'town',
@@ -953,7 +987,7 @@ const shops = {
         'Somewhere between a whisper and a wail, she works through "Uninvited." Nobody invited this. Here we are anyway.',
         'Big finish: she closes it out on "Thank U," bowing so low her sequined cape nearly hits the floor.',
       ] },
-    crates: [],
+    crates: [ { junkSeed: 3 }, { junkSeed: 7 } ],
   }),
 };
 
@@ -1333,6 +1367,9 @@ function doInteract() {
       state = 'record';
     } else if (c.record) {
       dialog = { name: 'CRATE', lines: ['Nothing left in here but dust and old sleeves.'], i: 0 };
+      state = 'dialog';
+    } else if (c.comedySeed !== undefined) {
+      dialog = { name: 'CRATE', lines: [COMEDY_JUNK[c.comedySeed % COMEDY_JUNK.length], 'Keep digging...'], i: 0 };
       state = 'dialog';
     } else {
       dialog = { name: 'CRATE', lines: [JUNK[c.junkSeed % JUNK.length], 'Keep digging...'], i: 0 };
@@ -1964,6 +2001,7 @@ function render(time) {
   if (map.pizzaShop) drawJuniorsInterior(time);
   if (map.diner) drawHenrysInterior(time);
   if (map.comedyClub) drawComedyClubInterior(time);
+  if (map.plantShop) drawHeyBudInterior(time);
   if (map.keeper) drawKeeper(map.keeper);
   drawShopImageNpcs(map);
   drawPlayer(time);
@@ -5307,6 +5345,168 @@ function drawComedyClubInterior(time) {
   ctx.beginPath(); ctx.arc(ccx + 2, ccy - 1, 1, 0, Math.PI * 2); ctx.fill();
 }
 
+// Vermont-silhouette poster with a huge "99" on it — hung behind the
+// counter at Hey Bud. Purely original pixel art, not a real logo/brand.
+function drawHeyBudPoster(x, y) {
+  const pw = 46, ph = 62;
+  // wood frame
+  ctx.fillStyle = '#2a2016';
+  ctx.fillRect(x - 3, y - 3, pw + 6, ph + 6);
+  ctx.fillStyle = '#4a3a24';
+  ctx.fillRect(x - 1, y - 1, pw + 2, ph + 2);
+  // sun-faded mustard paper background
+  ctx.fillStyle = '#e8b84a';
+  ctx.fillRect(x, y, pw, ph);
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.fillRect(x, y, pw, 6);
+
+  // stylized Vermont state silhouette (narrow north, wider south, slanted
+  // western border) filling most of the poster
+  ctx.fillStyle = '#2f6a3a';
+  ctx.beginPath();
+  ctx.moveTo(x + pw * 0.60, y + 5);
+  ctx.lineTo(x + pw * 0.40, y + 5);
+  ctx.lineTo(x + pw * 0.32, y + ph * 0.30);
+  ctx.lineTo(x + pw * 0.22, y + ph * 0.55);
+  ctx.lineTo(x + pw * 0.28, y + ph * 0.78);
+  ctx.lineTo(x + pw * 0.34, y + ph - 6);
+  ctx.lineTo(x + pw * 0.72, y + ph - 6);
+  ctx.lineTo(x + pw * 0.66, y + ph * 0.60);
+  ctx.lineTo(x + pw * 0.70, y + ph * 0.28);
+  ctx.closePath();
+  ctx.fill();
+  // tiny star marking a "capital" for flavor
+  ctx.fillStyle = '#e8b84a';
+  ctx.beginPath();
+  ctx.arc(x + pw * 0.48, y + ph * 0.42, 1.4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // huge "99" stamped across the poster
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 30px monospace';
+  ctx.strokeStyle = '#241a10';
+  ctx.lineWidth = 2.5;
+  ctx.strokeText('99', x + pw / 2, y + ph * 0.62);
+  ctx.fillStyle = '#f4ecd8';
+  ctx.fillText('99', x + pw / 2, y + ph * 0.62);
+}
+
+// Small framed street-art print (flat, hung — not on an easel) for the
+// gallery wall inside Hey Bud.
+function drawStreetArtPrint(x, y, w, h, style) {
+  ctx.fillStyle = '#241a14';
+  ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
+  ctx.fillStyle = '#efe6cf';
+  ctx.fillRect(x, y, w, h);
+  if (style === 0) {
+    // spray-paint drip tag
+    ctx.fillStyle = '#d94f9a';
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('VT', x + 4, y + h * 0.5);
+    ctx.fillStyle = '#3fa8d4';
+    ctx.fillRect(x + 4, y + h * 0.55, w - 8, 2);
+  } else if (style === 1) {
+    // abstract mountain-line print
+    ctx.strokeStyle = '#3f8a44';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + 3, y + h - 5);
+    ctx.lineTo(x + w * 0.35, y + 6);
+    ctx.lineTo(x + w * 0.6, y + h * 0.5);
+    ctx.lineTo(x + w - 3, y + h - 5);
+    ctx.stroke();
+    ctx.fillStyle = '#e0a030';
+    ctx.beginPath();
+    ctx.arc(x + w - 10, y + 10, 4, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    // wheatpaste-style stencil face/leaf motif
+    ctx.fillStyle = '#5fa862';
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2, y + h / 2, w * 0.28, h * 0.34, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#2a2016';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x + w / 2, y + h * 0.2);
+    ctx.lineTo(x + w / 2, y + h * 0.8);
+    ctx.stroke();
+  }
+}
+
+function drawHeyBudInterior(time) {
+  // Exotic-plant-shop redesign: hanging macrame planters up top, big
+  // tropical potted plants flanking the entrance, a wooden shelf stocked
+  // with books and folded tees, a couple of street-art prints on the
+  // wall, and the "99" Vermont-silhouette poster behind the counter.
+
+  // --- hanging macrame plant pots, gently swaying from the rafters ---
+  const hangs = [[2 * TILE + 16, 0.3], [5 * TILE + 16, 1.4], [10 * TILE + 16, 0.7], [12 * TILE + 16, 2.1]];
+  hangs.forEach(([hx, seed]) => {
+    const sway = Math.sin(time * 1.1 + seed) * 2;
+    ctx.strokeStyle = '#8a7a5a';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(hx, 3); ctx.lineTo(hx + sway, 32); ctx.stroke();
+    ctx.fillStyle = '#c9a876';
+    ctx.beginPath();
+    ctx.moveTo(hx + sway - 8, 32); ctx.lineTo(hx + sway + 8, 32);
+    ctx.lineTo(hx + sway + 5, 44); ctx.lineTo(hx + sway - 5, 44);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#5fb862';
+    ctx.beginPath(); ctx.ellipse(hx + sway, 38, 8, 6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#4f9a52';
+    for (let j = -1; j <= 1; j += 2) {
+      ctx.beginPath();
+      ctx.ellipse(hx + sway + j * 6, 48 + Math.abs(j), 3, 8, j * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+
+  // --- big tropical potted plants flanking the doorway ---
+  [[4 * TILE, 8 * TILE + 10], [9 * TILE, 8 * TILE + 10]].forEach(([bx, by]) => {
+    drawPlantPot(bx, by);
+    ctx.fillStyle = '#3f8a44';
+    ctx.beginPath(); ctx.ellipse(bx + 6, by - 22, 10, 5, 0.6, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bx + 6, by - 30, 9, 4, -0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#57a85c';
+    ctx.beginPath(); ctx.ellipse(bx + 2, by - 26, 7, 3.5, 0.2, 0, Math.PI * 2); ctx.fill();
+  });
+
+  // --- wooden shelving unit: books up top, folded tees on the lower shelf ---
+  const shelfX = 2 * TILE, shelfY = 5 * TILE, shelfW = 2 * TILE + 12, shelfH = 2 * TILE - 4;
+  ctx.fillStyle = '#6a4a2c';
+  ctx.fillRect(shelfX, shelfY, shelfW, shelfH);
+  ctx.fillStyle = '#8a6438';
+  ctx.fillRect(shelfX + 3, shelfY + 3, shelfW - 6, shelfH - 6);
+  ctx.fillStyle = '#5a3d22';
+  ctx.fillRect(shelfX, shelfY + shelfH / 2 - 1, shelfW, 3);
+  const bookColors = ['#c0392b', '#2980b9', '#27ae60', '#e0a030', '#8e44ad'];
+  let bkx = shelfX + 6;
+  bookColors.forEach((c, i) => {
+    const bw = 6, bh = 18 - (i % 3) * 3;
+    ctx.fillStyle = c;
+    ctx.fillRect(bkx, shelfY + shelfH / 2 - 3 - bh, bw, bh);
+    bkx += bw + 1;
+  });
+  const teeColors = ['#e8e4dc', '#3a4a6a', '#c0392b'];
+  let tly = shelfY + shelfH / 2 + 4;
+  teeColors.forEach((c) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(shelfX + 6, tly, shelfW - 16, 6);
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(shelfX + 6, tly + 5, shelfW - 16, 1);
+    tly += 8;
+  });
+
+  // --- street-art prints on the right-hand wall ---
+  drawStreetArtPrint(10 * TILE + 4, 5 * TILE + 6, 26, 30, 1);
+  drawStreetArtPrint(10 * TILE + 4, 6 * TILE + 10, 26, 26, 2);
+
+  // --- the "99" Vermont poster, front and center behind the counter ---
+  drawHeyBudPoster(9 * TILE + 2, 1 * TILE + 2);
+}
+
 function drawHenrysInterior(time) {
   // Classic old-school diner: black & white checker floor, long red-topped
   // counter with chrome stools, a soda fountain, and a corner jukebox.
@@ -5723,7 +5923,7 @@ function drawKeeper(k) {
 // anchored to the tile's floor line — no procedural fallback, since there's
 // no simple shape that stands in for this art; it just waits for the image
 // to finish loading.
-const SHOP_NPC_IMAGES = { kanga: kangaImg, truth: truthImg, bill: billImg, rza: rzaImg, gza: gzaImg, zach: zachImg, humble: humbleImg };
+const SHOP_NPC_IMAGES = { kanga: kangaImg, truth: truthImg, bill: billImg, rza: rzaImg, gza: gzaImg, zach: zachImg, humble: humbleImg, hicks: hicksImg };
 
 function drawShopImageNpcs(map) {
   if (!map.npcs) return;
