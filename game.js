@@ -417,6 +417,12 @@ rzaImg.src = 'assets/rza.png';
 const gzaImg = new Image();
 gzaImg.src = 'assets/gza.png';
 
+// Zach "SkySplitterInk" — Green Door Studio's resident sound engineer,
+// posted up with his MPC and notebook. Same pre-drawn treatment as the rest
+// of the shop npcs above.
+const zachImg = new Image();
+zachImg.src = 'assets/zach.png';
+
 // ---------------------------------------------------------------- maps
 const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J', 'S', 'A', 'N', 'F']);
 
@@ -756,6 +762,14 @@ const shops = {
           'Truth, QSD, swamp life, all day. You already know.',
           'Cane\'s for style, not for support — don\'t get it twisted.',
           'Green Door\'s family. Anybody good with you is good with me.',
+        ] },
+      { id: 'zach', tx: 10, ty: 6, name: 'SKYSPLITTERINK', sprite: 'zach',
+        lines: [
+          'Zach — but around here everybody just says SkySplitterInk. Sound engineer, producer, full-time studio rat.',
+          'I\'ve had a hand in more Vermont hip hop than I can count. If it came out of this scene, chances are it passed through these speakers.',
+          'People call me a magician with sound. I just call it paying attention — EQ, levels, the pocket. It all matters.',
+          'This whole independent scene runs on people showing up for each other. I just try to make everybody\'s stuff sound as good as it deserves to.',
+          'Got the MPC, got the notebook, got the headphones warmed up. Always cooking something back here.',
         ] },
     ],
   }),
@@ -5547,7 +5561,7 @@ function drawKeeper(k) {
 // anchored to the tile's floor line — no procedural fallback, since there's
 // no simple shape that stands in for this art; it just waits for the image
 // to finish loading.
-const SHOP_NPC_IMAGES = { kanga: kangaImg, truth: truthImg, bill: billImg, rza: rzaImg, gza: gzaImg };
+const SHOP_NPC_IMAGES = { kanga: kangaImg, truth: truthImg, bill: billImg, rza: rzaImg, gza: gzaImg, zach: zachImg };
 
 function drawShopImageNpcs(map) {
   if (!map.npcs) return;
