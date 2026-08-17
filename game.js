@@ -458,7 +458,7 @@ const hicksImg = new Image();
 hicksImg.src = 'assets/hicks.png';
 
 // ---------------------------------------------------------------- maps
-const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J', 'S', 'A', 'N', 'F', 'R', 'V']);
+const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J', 'S', 'A', 'N', 'F', 'R', 'V', 'Z']);
 
 function blankGrid(w, h, fill) {
   return Array.from({ length: h }, () => Array(w).fill(fill));
@@ -541,6 +541,20 @@ function makeOverworld() {
   const trees = [[3,20],[5,22],[7,19],[13,21],[15,23],[3,23],[10,23],[36,20],[34,23],[9,12],[14,13],[25,12],[36,12],[2,12],[37,7],[2,7],[24,23],[13,6],[26,6]];
   for (const [tx, ty] of trees) if (g[ty][tx] === '.') g[ty][tx] = '#';
 
+  // A haphazard tower of different-colored filing cabinets, stacked four
+  // tiles high in the far northwest corner. Its top tile sits directly
+  // beneath the tree bordering the map's north edge (row 0 is all trees),
+  // so the stack reads as if it's been piled up right against that tree.
+  // Solid landmark, talkable — no door, nothing inside, just a bit at
+  // interact time.
+  const FILING_CABINETS_X = 1, FILING_CABINETS_TOP_Y = 1, FILING_CABINETS_H = 4;
+  const filingCabinets = [];
+  for (let i = 0; i < FILING_CABINETS_H; i++) {
+    const ty = FILING_CABINETS_TOP_Y + i;
+    g[ty][FILING_CABINETS_X] = 'Z';
+    filingCabinets.push({ tx: FILING_CABINETS_X, ty });
+  }
+
   // Vermont Green FC soccer stadium — a big solid outdoor structure with no
   // door; the player just walks around it like a landmark, never inside it.
   // Only the top 3/4 of the stadium bowl lives on this map (drawStadium()
@@ -569,7 +583,7 @@ function makeOverworld() {
 
   const map = {
     id: 'town', world: 'town', w: W, h: H, grid: g, outside: true, buildings,
-    doors: {}, crates: {}, npcs: [], riverTiles,
+    doors: {}, crates: {}, npcs: [], riverTiles, filingCabinets,
     // ambient life lanes for this map (which road rows each spawns on)
     // dogRow moved off 23 -> 6: the new stadium footprint (rows 17-23) now
     // sits on top of the old dog lane.
@@ -682,6 +696,33 @@ function makeSwamp() {
 }
 
 function key(x, y) { return x + ',' + y; }
+
+// One unit of the filing-cabinet tower (see FILING_CABINETS_* in
+// makeOverworld). Each tile in the stack gets its own color off this list,
+// keyed by its row so the four units read as a mismatched, haphazard pile
+// rather than a single repeated block.
+const FILING_CABINET_COLORS = ['#c0392b', '#2f7dc4', '#e0a030', '#4a9e4a'];
+function drawFilingCabinet(px, py, ty) {
+  const color = FILING_CABINET_COLORS[(ty - 1) % FILING_CABINET_COLORS.length];
+  // ground shadow so the stack reads as sitting on the grass, not floating
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.fillRect(px + 2, py + TILE - 4, TILE - 4, 4);
+  // cabinet body
+  ctx.fillStyle = shadeColor(color, -30);
+  ctx.fillRect(px + 3, py + 1, TILE - 6, TILE - 3);
+  ctx.fillStyle = color;
+  ctx.fillRect(px + 4, py + 2, TILE - 8, TILE - 5);
+  // drawer split line through the middle
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.fillRect(px + 4, py + Math.round(TILE / 2), TILE - 8, 1);
+  // two drawer handles
+  ctx.fillStyle = '#d8d0b8';
+  ctx.fillRect(px + TILE / 2 - 5, py + 8, 10, 2);
+  ctx.fillRect(px + TILE / 2 - 5, py + TILE - 11, 10, 2);
+  // top highlight edge
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillRect(px + 4, py + 2, TILE - 8, 2);
+}
 
 function makeShop(id, opts) {
   const W = 14, H = 10;
@@ -1358,6 +1399,7 @@ function facingTarget() {
     if (ch === 'T' && map.keeper && Math.abs(tx - map.keeper.x) <= 2 && ty === map.keeper.y + 1)
       return { type: 'keeper', data: map.keeper };
     if (ch === 'J') return { type: 'jukebox' };
+    if (ch === 'Z') return { type: 'filingCabinets' };
     if (map.npcs) {
       const np = map.npcs.find(n => n.tx === tx && n.ty === ty);
       if (np) return { type: 'npc', data: np };
@@ -1403,6 +1445,14 @@ function doInteract() {
     }
   } else if (target.type === 'jukebox') {
     dialog = { name: 'JUKEBOX', lines: ['B7: "Cherry Cola Bounce". The button is worn smooth from decades of plays.'], i: 0 };
+    state = 'dialog';
+  } else if (target.type === 'filingCabinets') {
+    dialog = { name: 'FILING CABINETS', lines: [
+      'A lopsided tower of filing cabinets, every drawer a different color, stacked four high right up against the tree line.',
+      'Of course the files you actually need are jammed in the very top drawer.',
+      'No ladder. No stairs. Not even a stray milk crate to stand on. How is anybody supposed to get up there?',
+      'You circle the whole stack twice and come away no closer to an answer.'
+    ], i: 0 };
     state = 'dialog';
   } else if (target.type === 'npc') {
     const n = target.data;
@@ -2187,6 +2237,7 @@ function drawTiles(map, time, camX = 0, camY = 0) {
         case 'G': drawHipHopGear(px, py, tx, ty); break;
         case 'R': drawRecordingDesk(px, py, tx, ty, map.recordingDesk); break;
         case 'F': drawCarnivalProp(px, py, tx, ty); break;
+        case 'Z': drawFilingCabinet(px, py, ty); break;
         case 'J': {
           ctx.fillStyle = '#1c140f';
           ctx.fillRect(px + 3, py - 1, TILE - 6, TILE + 1);
@@ -6471,7 +6522,7 @@ function drawHUD() {
     const target = facingTarget();
     if (target) {
       const label = target.type === 'crate' ? '[E] DIG CRATE'
-                  : (target.type === 'keeper' || target.type === 'npc') ? '[E] TALK'
+                  : (target.type === 'keeper' || target.type === 'npc' || target.type === 'filingCabinets') ? '[E] TALK'
                   : target.type === 'newspaper' ? '[E] READ'
                   : target.type === 'cart' ? `[X] ${target.data.label}`
                   : '[E] LOOK';
