@@ -733,6 +733,7 @@ function makeShop(id, opts) {
     pizzaShop: opts.pizzaShop || false,
     diner: opts.diner || false,
     comedyClub: opts.comedyClub || false,
+    circusInterior: opts.circusInterior || false,
     recordingDesk: opts.recordingDesk
       ? { x: opts.recordingDesk[0], y: opts.recordingDesk[1], sign: opts.recordingDeskSign || 'SKYLAB' }
       : null,
@@ -965,12 +966,16 @@ const shops = {
     // Candy-pink floor, deep violet walls, big-top candy stripes, bunting
     // pennants along the ceiling line, rainbow confetti underfoot — the
     // sedate red-brick meetinghouse outside gives zero warning for this.
+    // Full Ringling Bros. and Barnum & Bailey treatment: a trapeze flyer
+    // swinging from the rafters, an elephant and lion flanking the ring,
+    // and a pair of juggling clowns working the floor.
     floor: '#ffe1f2', plank: '#ffc4e0', wallColor: '#4a1268',
     paintFloor: true,
     confettiColors: ['#ff5fa2', '#5fd0ff', '#ffe14d', '#8cff5f', '#c85fff'],
     bigTopWalls: true,
     buntingFlags: true,
     muralWall: true,
+    circusInterior: true,
     paintings: {
       '0,2': { base: '#ff5fa2', a: '#5fd0ff', b: '#ffe14d' },
       '0,3': { base: '#5fd0ff', a: '#ff5fa2', b: '#8cff5f' },
@@ -2007,6 +2012,7 @@ function render(time) {
   if (map.pizzaShop) drawJuniorsInterior(time);
   if (map.diner) drawHenrysInterior(time);
   if (map.comedyClub) drawComedyClubInterior(time);
+  if (map.circusInterior) drawChurchCircusInterior(time);
   if (map.plantShop) drawHeyBudInterior(time);
   if (map.keeper) drawKeeper(map.keeper);
   drawShopImageNpcs(map);
@@ -5405,6 +5411,190 @@ function drawComedyClubInterior(time) {
   ctx.fillStyle = '#1c1414';
   ctx.beginPath(); ctx.arc(ccx - 2, ccy - 1, 1, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc(ccx + 2, ccy - 1, 1, 0, Math.PI * 2); ctx.fill();
+}
+
+// ------------------------------------------------------- church "big top"
+// The church interior masquerades as a full Ringling Bros. and Barnum &
+// Bailey style big top: a trapeze flyer swinging from the rafters, an
+// elephant and lion flanking the ring, and a pair of juggling clowns
+// working the floor. Purely original pixel art — no real circus branding.
+
+// A trapeze artist mid-swing above the ring: two rigging ropes from the
+// rafters down to a swinging bar, with a tiny sequined flyer riding it.
+// The swing angle oscillates with `time` so it reads as motion overhead
+// rather than a static prop.
+function drawTrapezeArtist(time) {
+  const anchorX = 7 * TILE, anchorY = 2;
+  const swing = Math.sin(time * 1.6) * 46;
+  const barY = 1.3 * TILE;
+  const barX = anchorX + swing;
+
+  // rigging ropes down from the rafters
+  ctx.strokeStyle = '#c8b088';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(anchorX - 30, anchorY); ctx.lineTo(barX - 12, barY);
+  ctx.moveTo(anchorX + 30, anchorY); ctx.lineTo(barX + 12, barY);
+  ctx.stroke();
+
+  // trapeze bar
+  ctx.strokeStyle = '#3a2c18';
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(barX - 12, barY); ctx.lineTo(barX + 12, barY); ctx.stroke();
+
+  // flyer: sequined performer hooked over the bar by the knees, arms flung
+  // out mid-trick
+  const flip = Math.sin(time * 1.6 + 1) * 0.3;
+  ctx.save();
+  ctx.translate(barX, barY);
+  ctx.rotate(flip);
+  ctx.fillStyle = '#ffd23f';
+  ctx.fillRect(-3, -4, 6, 10);
+  ctx.fillStyle = '#ff3b5c';
+  ctx.fillRect(-4, 6, 8, 12);
+  ctx.strokeStyle = '#f0c8a0';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(-4, 10); ctx.lineTo(-16, 4);
+  ctx.moveTo(4, 10); ctx.lineTo(16, 4);
+  ctx.stroke();
+  ctx.fillStyle = '#f0c8a0';
+  ctx.beginPath(); ctx.arc(0, 20, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// Gray circus elephant, trunk raised in a showy curl, plumed headdress and
+// all — a nod to the classic Ringling Bros. menagerie acts.
+function drawCircusElephant(px, py) {
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath(); ctx.ellipse(px, py + 30, 26, 6, 0, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#7a828a';
+  [[-10, 12], [6, 12], [-14, 10], [12, 10]].forEach(([dx, dy]) => {
+    ctx.fillRect(px + dx, py + dy, 6, 14);
+  });
+
+  ctx.fillStyle = '#9098a0';
+  ctx.beginPath(); ctx.ellipse(px, py, 24, 18, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(px - 22, py - 6, 14, 13, 0, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#7a828a';
+  ctx.beginPath(); ctx.ellipse(px - 24, py - 14, 11, 13, -0.3, 0, Math.PI * 2); ctx.fill();
+
+  ctx.strokeStyle = '#9098a0';
+  ctx.lineWidth = 7;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(px - 34, py - 2);
+  ctx.quadraticCurveTo(px - 44, py - 18, px - 34, py - 26);
+  ctx.stroke();
+  ctx.lineCap = 'butt';
+
+  // showgirl-style plume headdress
+  ctx.fillStyle = '#ff3b5c';
+  ctx.beginPath();
+  ctx.moveTo(px - 22, py - 20); ctx.lineTo(px - 26, py - 32); ctx.lineTo(px - 18, py - 30);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ffe14d';
+  ctx.beginPath(); ctx.arc(px - 22, py - 20, 3, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#1c1a1e';
+  ctx.beginPath(); ctx.arc(px - 26, py - 8, 1.6, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#f4ecd8';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(px - 30, py); ctx.lineTo(px - 34, py + 6); ctx.stroke();
+}
+
+// Circus lion perched on a striped pedestal stool, mane framing its face —
+// paired with the elephant to flank the ring.
+function drawCircusLion(px, py) {
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath(); ctx.ellipse(px, py + 22, 20, 5, 0, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#ff3b5c';
+  ctx.fillRect(px - 16, py + 6, 32, 14);
+  ctx.fillStyle = '#fff6f0';
+  ctx.fillRect(px - 16, py + 6, 32, 4);
+
+  ctx.fillStyle = '#e0a850';
+  ctx.beginPath(); ctx.ellipse(px, py - 2, 16, 14, 0, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#a85a20';
+  ctx.beginPath(); ctx.arc(px, py - 10, 15, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#e8c078';
+  ctx.beginPath(); ctx.arc(px, py - 10, 9, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#a85a20';
+  ctx.beginPath(); ctx.arc(px - 8, py - 20, 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(px + 8, py - 20, 3.5, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#1c1a1e';
+  ctx.beginPath(); ctx.arc(px - 3, py - 11, 1.3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(px + 3, py - 11, 1.3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(px - 2, py - 6); ctx.lineTo(px + 2, py - 6); ctx.lineTo(px, py - 3);
+  ctx.closePath(); ctx.fill();
+
+  ctx.strokeStyle = '#e0a850';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(px + 14, py); ctx.quadraticCurveTo(px + 26, py + 4, px + 24, py - 8);
+  ctx.stroke();
+  ctx.fillStyle = '#a85a20';
+  ctx.beginPath(); ctx.arc(px + 24, py - 8, 3, 0, Math.PI * 2); ctx.fill();
+}
+
+// A juggling clown, tossing three balls in a looping arc timed to `time` —
+// `phase` offsets each clown so a pair of them don't juggle in lockstep.
+function drawJugglingClown(px, py, time, phase) {
+  const t = time * 3 + phase;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath(); ctx.ellipse(px, py + 26, 12, 4, 0, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = '#ffe14d';
+  ctx.fillRect(px - 7, py + 10, 5, 14);
+  ctx.fillRect(px + 2, py + 10, 5, 14);
+  ctx.fillStyle = '#241a1a';
+  ctx.fillRect(px - 9, py + 22, 8, 4);
+  ctx.fillRect(px + 1, py + 22, 8, 4);
+
+  ctx.fillStyle = '#5fd0ff';
+  ctx.beginPath(); ctx.ellipse(px, py, 11, 13, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff6f0';
+  for (let i = -2; i <= 2; i++) {
+    ctx.beginPath(); ctx.arc(px + i * 4.5, py - 10, 3, 0, Math.PI * 2); ctx.fill();
+  }
+
+  ctx.fillStyle = '#f0c8a0';
+  ctx.beginPath(); ctx.arc(px, py - 20, 8, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ff5fa2';
+  ctx.beginPath(); ctx.arc(px - 9, py - 20, 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(px + 9, py - 20, 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ff3b5c';
+  ctx.beginPath(); ctx.arc(px, py - 18, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#1c1a1e';
+  ctx.beginPath(); ctx.arc(px - 3, py - 22, 1, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(px + 3, py - 22, 1, 0, Math.PI * 2); ctx.fill();
+
+  // three juggling balls looping overhead, 120 degrees apart
+  const ballColors = ['#ff5fa2', '#5fd0ff', '#ffe14d'];
+  for (let i = 0; i < 3; i++) {
+    const a = t + (i * Math.PI * 2) / 3;
+    const bx = px + Math.cos(a) * 12;
+    const by = py - 34 + Math.sin(a) * 10;
+    ctx.fillStyle = ballColors[i];
+    ctx.beginPath(); ctx.arc(bx, by, 3, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function drawChurchCircusInterior(time) {
+  drawTrapezeArtist(time);
+  drawCircusElephant(3.4 * TILE, 8.2 * TILE);
+  drawCircusLion(10.6 * TILE, 8.2 * TILE);
+  drawJugglingClown(5.1 * TILE, 8.5 * TILE, time, 0);
+  drawJugglingClown(8.9 * TILE, 8.5 * TILE, time, 2.1);
 }
 
 // Vermont-silhouette poster with a huge "99" on it — hung behind the
