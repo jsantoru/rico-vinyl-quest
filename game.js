@@ -443,7 +443,7 @@ const hicksImg = new Image();
 hicksImg.src = 'assets/hicks.png';
 
 // ---------------------------------------------------------------- maps
-const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J', 'S', 'A', 'N', 'F', 'R']);
+const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J', 'S', 'A', 'N', 'F', 'R', 'V']);
 
 function blankGrid(w, h, fill) {
   return Array.from({ length: h }, () => Array(w).fill(fill));
@@ -693,6 +693,8 @@ function makeShop(id, opts) {
   (opts.couchTiles || []).forEach(([cx, cy]) => { g[cy][cx] = 'S'; });
   (opts.armchairTiles || []).forEach(([cx, cy]) => { g[cy][cx] = 'A'; });
   if (opts.micStand) { g[opts.micStand[1]][opts.micStand[0]] = 'Y'; }
+  // A standee cow prop — e.g. VT Comedy Club's mascot parked in a corner.
+  if (opts.cowTile) { g[opts.cowTile[1]][opts.cowTile[0]] = 'V'; }
   (opts.gearTiles || []).forEach(([gx, gy]) => { g[gy][gx] = 'G'; });
   // Two-tile-wide recording desk (studio monitors + gear), with a hanging
   // neon sign above it — e.g. Zach's "SKYLAB" workstation in Green Door
@@ -777,8 +779,10 @@ const shops = {
     // glowing neon sign hanging above it.
     recordingDesk: [1, 2],
     // dark couch along the right wall (with a throw pillow) plus a gold
-    // armchair pulled up near the table, mirroring the photo's seating nook
-    couchTiles: [[12, 7], [12, 8]],
+    // armchair pulled up near the table, mirroring the photo's seating nook.
+    // A second, longer couch runs along the bottom wall to the left of the
+    // entrance (the door sits at tile x=6), so it doesn't block the doorway.
+    couchTiles: [[12, 7], [12, 8], [1, 8], [2, 8], [3, 8]],
     couchPillow: { x: 12, y: 7 },
     armchairTiles: [[9, 4]],
     keeper: { name: 'SK1', shirt: '#1f1d26', skin: '#8a5a34', x: 9, y: 2,
@@ -940,6 +944,8 @@ const shops = {
       foundLine: 'Ha — that\'s a good one. I\'d write it down, but ghosts don\'t carry pens. Or pockets. Or hands, really.' },
     crates: [ { comedySeed: 0 } ],
     comedyClub: true,
+    // A standee cow — the club's mascot — parked in the bottom-left corner.
+    cowTile: [1, 8],
     // Waiting on the corner stool for his set — sharp, skeptical,
     // no-patience-for-nonsense energy. A cigarette he never quite lights.
     npcs: [
@@ -2155,6 +2161,7 @@ function drawTiles(map, time, camX = 0, camY = 0) {
         }
         case 'S': drawCouch(px, py, !!(map.couchPillow && map.couchPillow.x === tx && map.couchPillow.y === ty)); break;
         case 'A': drawArmchair(px, py); break;
+        case 'V': drawCow(px, py); break;
         case 'Y': drawMicStand(px, py); break;
         case 'G': drawHipHopGear(px, py, tx, ty); break;
         case 'R': drawRecordingDesk(px, py, tx, ty, map.recordingDesk); break;
@@ -2578,6 +2585,61 @@ function drawArmchair(px, py) {
       }
     }
   }
+}
+
+// A standee cow prop — a full-body callback to VT Comedy Club's round
+// cow-face mascot/logo, parked in a corner of the room. Same white/black
+// patch/pink snout palette as drawComedyClubDecor's wall plaque.
+function drawCow(px, py) {
+  // ground shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  ctx.beginPath(); ctx.ellipse(px + 16, py + 29, 12, 3, 0, 0, Math.PI * 2); ctx.fill();
+
+  // legs + hooves
+  ctx.fillStyle = '#f4ecd8';
+  [7, 13, 19, 24].forEach((lx, i) => {
+    ctx.fillRect(px + lx, py + 20 + (i % 3 === 0 ? 0 : 1), 3, 9 - (i % 3 === 0 ? 0 : 1));
+  });
+  ctx.fillStyle = '#3a2222';
+  [7, 13, 19, 24].forEach((lx) => ctx.fillRect(px + lx, py + 27, 3, 2));
+
+  // body
+  ctx.fillStyle = '#f4ecd8';
+  ctx.beginPath(); ctx.ellipse(px + 16, py + 17, 13, 9, 0, 0, Math.PI * 2); ctx.fill();
+
+  // black patches on the body
+  ctx.fillStyle = '#241a1a';
+  ctx.beginPath(); ctx.ellipse(px + 10, py + 13, 4, 5, 0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(px + 21, py + 19, 4, 4, -0.4, 0, Math.PI * 2); ctx.fill();
+
+  // tail with a little tuft
+  ctx.strokeStyle = '#f4ecd8';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(px + 28, py + 15); ctx.quadraticCurveTo(px + 33, py + 18, px + 31, py + 24); ctx.stroke();
+  ctx.fillStyle = '#241a1a';
+  ctx.beginPath(); ctx.arc(px + 31, py + 24, 2, 0, Math.PI * 2); ctx.fill();
+
+  // head, facing left, with ears
+  const hx = px + 5, hy = py + 8;
+  ctx.fillStyle = '#f4ecd8';
+  ctx.beginPath(); ctx.arc(hx, hy, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(hx - 6, hy - 4, 3, 4, 0.6, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(hx + 2, hy - 7, 3, 4, -0.6, 0, Math.PI * 2); ctx.fill();
+
+  // patch on the head
+  ctx.fillStyle = '#241a1a';
+  ctx.beginPath(); ctx.ellipse(hx + 3, hy - 2, 3, 3, 0.2, 0, Math.PI * 2); ctx.fill();
+
+  // pink snout with nostrils
+  ctx.fillStyle = '#f0b8c8';
+  ctx.beginPath(); ctx.ellipse(hx - 2, hy + 4, 5, 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#3a2222';
+  ctx.beginPath(); ctx.ellipse(hx - 4, hy + 4, 1, 1.3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(hx, hy + 4, 1, 1.3, 0, 0, Math.PI * 2); ctx.fill();
+
+  // eye
+  ctx.fillStyle = '#1c1414';
+  ctx.beginPath(); ctx.arc(hx - 1, hy - 1, 1.4, 0, Math.PI * 2); ctx.fill();
 }
 
 function drawCrate(px, py, data) {
@@ -5391,6 +5453,68 @@ function drawHeyBudPoster(x, y) {
   ctx.fillText('99', x + pw / 2, y + ph * 0.62);
 }
 
+// A big hand-painted "99" poster — a sheet of paper pinned to the wall
+// with a giant, roller-painted "99" filling almost the entire sheet, nap
+// texture and drips included. Purely original pixel art, not a real logo.
+function drawRollerNinetyNinePoster(x, y, w, h) {
+  ctx.save();
+
+  // slightly weathered paper backing, pinned up at the corners
+  ctx.fillStyle = '#efe6cf';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = '#c8bc9c';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  ctx.fillStyle = '#8a3838';
+  ctx.beginPath(); ctx.arc(x + 5, y + 5, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + w - 5, y + 5, 2, 0, Math.PI * 2); ctx.fill();
+
+  // giant "99" sized to fill nearly the whole sheet
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `900 ${Math.floor(h * 0.82)}px Impact, "Arial Black", sans-serif`;
+  const cx = x + w / 2, cy = y + h / 2 + h * 0.02;
+
+  // a couple of slightly offset base passes, like an uneven first roller
+  // coat that didn't line up perfectly
+  ctx.fillStyle = '#d9481f';
+  ctx.fillText('99', cx - 1, cy + 1);
+  ctx.fillStyle = '#c93f19';
+  ctx.fillText('99', cx, cy);
+
+  // roller-nap streak texture, masked to just the painted glyph via
+  // source-atop so the streaks never spill onto the paper around it
+  ctx.globalCompositeOperation = 'source-atop';
+  for (let i = 0; i < 12; i++) {
+    const sy = y + (i / 12) * h;
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.14)';
+    ctx.fillRect(x, sy, w, 2 + (i % 3));
+  }
+  ctx.strokeStyle = 'rgba(255,210,160,0.2)';
+  ctx.lineWidth = 3;
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath();
+    ctx.moveTo(x - 10, y + i * (h / 4));
+    ctx.lineTo(x + w + 10, y + i * (h / 4) - h * 0.18);
+    ctx.stroke();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+
+  // paint drips running down off the bottoms of the numerals
+  ctx.strokeStyle = '#c93f19';
+  ctx.lineWidth = 2;
+  [0.2, 0.38, 0.62, 0.8].forEach((f, i) => {
+    const dx = x + w * f;
+    const dripLen = 5 + (i % 3) * 4;
+    ctx.beginPath();
+    ctx.moveTo(dx, y + h * 0.88);
+    ctx.lineTo(dx + (i % 2 ? 1 : -1), y + h * 0.88 + dripLen);
+    ctx.stroke();
+  });
+
+  ctx.restore();
+}
+
 // Small framed street-art print (flat, hung — not on an easel) for the
 // gallery wall inside Hey Bud.
 function drawStreetArtPrint(x, y, w, h, style) {
@@ -5505,6 +5629,10 @@ function drawHeyBudInterior(time) {
 
   // --- the "99" Vermont poster, front and center behind the counter ---
   drawHeyBudPoster(9 * TILE + 2, 1 * TILE + 2);
+
+  // --- a second, bigger roller-painted "99" poster, filling the open wall
+  // gap between the two hanging planters above the shelf ---
+  drawRollerNinetyNinePoster(98, 34, 60, 58);
 }
 
 function drawHenrysInterior(time) {
@@ -5633,6 +5761,10 @@ function drawBench(x, y, w) {
 
 function drawNectarsInterior(time) {
   // Dark rock club atmosphere with stage, bar, and gravy fries station
+
+  // "METAL MONDAY" flyer, up on the open wall to the right, above the
+  // Gravy Fries station and clear of the stage below it
+  drawMetalMondayPoster(9 * TILE + 6, 1 * TILE + 2, 66, 56);
   
   // Stage area (top center with small platform)
   const stageX = 5 * TILE;
@@ -5749,6 +5881,65 @@ function drawNectarsInterior(time) {
     ctx.fillStyle = '#4a2a1a';
     ctx.fillRect(sx + 2, sy - 8, 4, 8);
   }
+}
+
+// A dark, spiky flyer advertising Nectar's weekly "METAL MONDAY" night —
+// jagged torn-edge top, a lightning bolt through the middle, hung on the
+// club wall. Purely original pixel art, not a real logo/brand.
+function drawMetalMondayPoster(x, y, w, h) {
+  ctx.save();
+
+  // dark poster backing with a thin violet border
+  ctx.fillStyle = '#15101a';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = '#4a2a5a';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+
+  // jagged torn-paper spikes along the top edge
+  ctx.fillStyle = '#8a2040';
+  const spikes = 6;
+  for (let i = 0; i < spikes; i++) {
+    const sx0 = x + (i * w) / spikes;
+    ctx.beginPath();
+    ctx.moveTo(sx0, y);
+    ctx.lineTo(sx0 + w / (spikes * 2), y - 5);
+    ctx.lineTo(sx0 + w / spikes, y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // lightning bolt through the middle
+  ctx.fillStyle = '#e0b040';
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.54, y + h * 0.34);
+  ctx.lineTo(x + w * 0.40, y + h * 0.58);
+  ctx.lineTo(x + w * 0.49, y + h * 0.58);
+  ctx.lineTo(x + w * 0.38, y + h * 0.82);
+  ctx.lineTo(x + w * 0.63, y + h * 0.52);
+  ctx.lineTo(x + w * 0.53, y + h * 0.52);
+  ctx.lineTo(x + w * 0.62, y + h * 0.34);
+  ctx.closePath();
+  ctx.fill();
+
+  // "METAL" up top, spiky and bold
+  ctx.textAlign = 'center';
+  ctx.font = `900 ${Math.floor(w * 0.22)}px Impact, "Arial Black", sans-serif`;
+  ctx.strokeStyle = '#8a2040';
+  ctx.lineWidth = 2;
+  ctx.strokeText('METAL', x + w / 2, y + h * 0.28);
+  ctx.fillStyle = '#f4ecd8';
+  ctx.fillText('METAL', x + w / 2, y + h * 0.28);
+
+  // "MONDAY" underneath, smaller
+  ctx.font = `900 ${Math.floor(w * 0.16)}px Impact, "Arial Black", sans-serif`;
+  ctx.strokeStyle = '#8a2040';
+  ctx.lineWidth = 1.5;
+  ctx.strokeText('MONDAY', x + w / 2, y + h * 0.95);
+  ctx.fillStyle = '#f4ecd8';
+  ctx.fillText('MONDAY', x + w / 2, y + h * 0.95);
+
+  ctx.restore();
 }
 
 function drawDeliSeatingArea() {
