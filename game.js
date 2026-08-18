@@ -331,6 +331,17 @@ function exitMinigame() {
   activeMinigame = null;
 }
 
+// Maps a mini-game's `id` (as listed in a map's `minigames` array) to the
+// function that launches it. Both the "[E]" interact prompt and the tap-the-
+// sign shortcut read from this same table, so adding a future mini-game is
+// just: add its tx/ty/id/label to the map's `minigames` list, then add one
+// line here. The floating callout sign (drawMinigameCalloutSign) and its tap
+// hitbox pick up every entry in a map's `minigames` list automatically -- no
+// per-game wiring needed anywhere else.
+const MINIGAME_ACTIONS = {
+  darts: () => enterMinigame(createDartsGame()),
+};
+
 // Darts: a two-tap power/accuracy throw, same trick classic golf games use.
 // Tap 1 (E) locks the power while a needle sweeps left-right. Tap 2 (E)
 // locks the accuracy while a second needle sweeps across the dartboard's
@@ -1889,7 +1900,8 @@ function doInteract() {
     dialog = { name: VERMONT_NEWS_PAPER, lines: [story.headline, story.body], i: 0 };
     state = 'dialog';
   } else if (target.type === 'minigame') {
-    if (target.data.id === 'darts') enterMinigame(createDartsGame());
+    const start = MINIGAME_ACTIONS[target.data.id];
+    if (start) start();
   }
 }
 
@@ -2319,7 +2331,20 @@ canvas.addEventListener('pointerdown', (e) => {
     const vx = (e.clientX - rect.left) * (canvas.width / rect.width);
     const vy = (e.clientY - rect.top) * (canvas.height / rect.height);
     handleCharacterTap(vx, vy);
-  } else if (state !== 'play') {
+  } else if (state === 'play') {
+    // Tapping directly on a "TAP HERE TO PLAY AROUND" sign jumps straight
+    // into that mini-game -- no need to walk up and face the exact tile.
+    const rect = canvas.getBoundingClientRect();
+    const vx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const vy = (e.clientY - rect.top) * (canvas.height / rect.height);
+    const w = viewToWorld(vx, vy);
+    const hit = minigameSignHitboxes.find(h => h.map === player.map &&
+      Math.abs(w.x - h.cx) < h.hw && Math.abs(w.y - h.cy) < h.hh);
+    if (hit) {
+      const start = MINIGAME_ACTIONS[hit.id];
+      if (start) start();
+    }
+  } else {
     interactPressed = true;
   }
 });
@@ -2497,6 +2522,72 @@ function drawMountains(camX) {
   for (const layer of MOUNTAIN_LAYERS) drawMountainLayer(layer, camX);
 }
 
+// ---------------------------------------------------------------- mini-game callout signs
+// Every mini-game gets one of these floating over its tile automatically --
+// driven entirely by each map's `minigames` list, so a future mini-game only
+// needs an entry there (plus one line in MINIGAME_ACTIONS) and this sign
+// shows up and becomes tappable for free. Bright arcade yellow/red on
+// purpose so it reads as a different *kind* of interactable at a glance,
+// never blending into ordinary shop/decoration signage like drawSkylabSign.
+let minigameSignHitboxes = []; // world-space rects, rebuilt every render() frame
+let lastCam = { outside: true, camX: 0, camY: 0, zoom: 1, dx: 0, dy: 0 };
+
+function drawMinigameCalloutSign(wx, wy, time, seed) {
+  const bob = Math.sin(time * 0.003 + seed) * 4;
+  const cx = wx + 14, cy = wy - 40 + bob;
+  const sw = 116, sh = 30;
+
+  // soft glow so it pops against dark interiors
+  ctx.fillStyle = 'rgba(255,210,60,0.30)';
+  ctx.fillRect(cx - sw / 2 - 6, cy - sh / 2 - 6, sw + 12, sh + 12);
+
+  // post connecting the sign down to the mini-game tile itself
+  ctx.strokeStyle = '#241c28';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(wx, cy + sh / 2);
+  ctx.lineTo(wx, wy - 4);
+  ctx.stroke();
+
+  // plaque -- arcade-cabinet red/yellow, distinct from every other sign
+  ctx.fillStyle = '#1c1420';
+  ctx.fillRect(cx - sw / 2, cy - sh / 2, sw, sh);
+  ctx.strokeStyle = '#ffd23c';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(cx - sw / 2, cy - sh / 2, sw, sh);
+
+  // little arcade-cabinet icon: cabinet body, two buttons, a joystick
+  const ix = cx - sw / 2 + 13, iy = cy;
+  ctx.fillStyle = '#e04858';
+  ctx.fillRect(ix - 6, iy - 7, 12, 14);
+  ctx.fillStyle = '#3a2c1a';
+  ctx.fillRect(ix - 6, iy - 7, 12, 4);
+  ctx.fillStyle = '#ffd23c';
+  ctx.beginPath(); ctx.arc(ix - 2.5, iy - 2, 1.6, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(ix + 2.5, iy - 2, 1.6, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#f4ecd8';
+  ctx.fillRect(ix - 1, iy + 2, 2, 5);
+  ctx.beginPath(); ctx.arc(ix, iy + 2, 1.8, 0, Math.PI * 2); ctx.fill();
+
+  // text
+  ctx.fillStyle = '#ffd23c';
+  ctx.font = 'bold 8px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('TAP HERE TO', cx + 12, cy - 3);
+  ctx.fillText('PLAY AROUND', cx + 12, cy + 7);
+
+  return { cx, cy, hw: sw / 2 + 6, hh: sh / 2 + 6 };
+}
+
+// Converts a tap already in 960x600 view-space (same space VIEW_W/VIEW_H
+// describe) into world coordinates, using whichever camera transform the
+// most recent render() frame actually drew with. Mirrors the inverse of the
+// ctx.translate/scale calls made at the top of render().
+function viewToWorld(vx, vy) {
+  if (lastCam.outside) return { x: vx + lastCam.camX, y: vy + lastCam.camY };
+  return { x: (vx - lastCam.dx) / lastCam.zoom, y: (vy - lastCam.dy) / lastCam.zoom };
+}
+
 function render(time) {
   const map = maps[player.map];
   ctx.fillStyle = '#120e18';
@@ -2511,6 +2602,7 @@ function render(time) {
   ctx.save();
   if (map.outside) {
     ctx.translate(-camX, -camY);
+    lastCam = { outside: true, camX, camY, zoom: 1, dx: 0, dy: 0 };
   } else {
     const worldW = map.w * TILE, worldH = map.h * TILE;
     const zoom = Math.min(VIEW_W / worldW, VIEW_H / worldH);
@@ -2518,6 +2610,7 @@ function render(time) {
     const dy = (VIEW_H - worldH * zoom) / 2;
     ctx.translate(dx, dy);
     ctx.scale(zoom, zoom);
+    lastCam = { outside: false, camX: 0, camY: 0, zoom, dx, dy };
   }
 
   drawTiles(map, time, camX, camY);
@@ -2536,6 +2629,18 @@ function render(time) {
   if (map.keeper) drawKeeper(map.keeper);
   drawShopImageNpcs(map);
   drawPlayer(time);
+
+  // Floating callout signs for every mini-game on this map -- drawn last
+  // (on top of everything) so they're always readable, and their hitboxes
+  // rebuilt fresh each frame for the tap-the-sign shortcut below.
+  minigameSignHitboxes = [];
+  if (map.minigames) {
+    map.minigames.forEach((mg, i) => {
+      const wx = mg.tx * TILE + TILE / 2, wy = mg.ty * TILE + TILE / 2;
+      const rect = drawMinigameCalloutSign(wx, wy, time, i * 1.7);
+      minigameSignHitboxes.push({ map: player.map, id: mg.id, ...rect });
+    });
+  }
 
   ctx.restore();
   if (state !== 'splash') drawHUD();
@@ -7276,6 +7381,7 @@ function drawHUD() {
                   : (target.type === 'keeper' || target.type === 'npc' || target.type === 'filingCabinets') ? '[E] TALK'
                   : target.type === 'newspaper' ? '[E] READ'
                   : target.type === 'cart' ? `[X] ${target.data.label}`
+                  : target.type === 'minigame' ? `[E] ${target.data.label || 'PLAY'}`
                   : '[E] LOOK';
       pill(label, VIEW_W / 2, VIEW_H - 34);
     }
