@@ -291,8 +291,8 @@ const VERMONT_NEWS = [
 // ---------------------------------------------------------------- input
 const keys = {};
 let interactPressed = false;
-let buyPressed = false;
-let newGamePressed = false; // 'N' on the title screen -- starts fresh even if a save exists
+let buyPressed = false; // also doubles as "back" (X) on the dig-choice/slot-choose menus
+let menuMove = 0; // edge-triggered -1/0/1 from up/down arrows, consumed by the dig-choice/slot-choose menus
 
 // ---- "fifa" keyword easter egg -------------------------------------------
 // Typing the word "fifa" on a physical keyboard (any time, in any state)
@@ -321,9 +321,11 @@ window.addEventListener('keydown', (e) => {
     if (k === 'c') toggleCoffee();
     if (k === 'y') toggleTea();
     if (k === 'k') saveGame(true);
-    if (k === 'n' && state === 'title') newGamePressed = true;
+    if (k === 'n' && (state === 'title' || state === 'play')) openDigChoice();
     if (k === 'arrowleft') selectMove = -1;
     if (k === 'arrowright') selectMove = 1;
+    if (k === 'arrowup') menuMove = -1;
+    if (k === 'arrowdown') menuMove = 1;
 
     // track typed letters for the "fifa" easter egg, keeping only the last
     // 4 characters typed so it works no matter what came before
@@ -400,6 +402,65 @@ characterSelectImg.src = 'assets/character_select.png';
 const SELECT_ORDER = ['santos', 'ricoAlt', 'rico'];
 let selectIndex = 2; // highlighted portrait for keyboard/E users; defaults to classic Rico
 let selectMove = 0;  // edge-triggered -1/0/1 from arrow keys, consumed in update()
+
+// ---- title menu: START DIGGING / CONTINUE DIGGING -> slot chooser --------
+// digChoice: 0 = START DIGGING, 1 = CONTINUE DIGGING.
+const DIG_CHOICES = ['START DIGGING', 'CONTINUE DIGGING'];
+let digChoiceIndex = 0;
+// pendingMode carries the player's dig-choice pick through the slot
+// chooser and into the character-select screen, where it decides whether
+// choosing a character starts fresh or loads a save.
+let pendingMode = 'new';   // 'new' | 'continue'
+let pendingSlot = 1;       // slot (1-3) chosen on the slot-chooser screen
+let slotChoiceIndex = 0;
+// When picking START DIGGING on a slot that already has a save, the player
+// has to confirm the overwrite -- pressing E once "arms" that slot, and a
+// second E on the SAME slot confirms it. Moving the selection or backing
+// out clears the arm.
+let armedOverwriteSlot = null;
+
+// Opens the START/CONTINUE popup fresh -- used by the title screen's [E]
+// prompt and by the 'N' key / NEW button as a way back into it mid-game.
+function openDigChoice() {
+  state = 'digChoice';
+  digChoiceIndex = 0;
+  armedOverwriteSlot = null;
+  music.setMenuBreak(true);
+}
+
+function openSlotChoose(mode) {
+  state = 'slotChoose';
+  pendingMode = mode;
+  slotChoiceIndex = 0;
+  armedOverwriteSlot = null;
+}
+
+// Confirms whichever slot is currently highlighted on the slot-chooser
+// screen, per pendingMode. Always ends by moving to the character-select
+// screen; chooseCharacter() finishes the job (fresh start vs. load) once
+// the player also picks a character.
+function confirmSlotChoice() {
+  const slot = slotChoiceIndex + 1;
+  if (pendingMode === 'new') {
+    if (hasSave(slot) && armedOverwriteSlot !== slot) {
+      armedOverwriteSlot = slot; // first press just arms the overwrite
+      return;
+    }
+    armedOverwriteSlot = null;
+    pendingSlot = slot;
+    newGame(slot); // wipes the slot, resets progress, state -> 'select'
+  } else {
+    // continue: an empty slot behaves just like starting fresh in it
+    if (!hasSave(slot)) {
+      pendingSlot = slot;
+      newGame(slot);
+    } else {
+      pendingSlot = slot;
+      state = 'select'; // actual loadGame() happens once a character is chosen
+      music.setMenuBreak(true);
+    }
+  }
+}
 let selectLayout = null; // { originX, originY, scale } of the drawn select-screen art, set each frame it's drawn
 
 const splashImg = new Image();
@@ -1076,7 +1137,7 @@ const player = {
   tempItem: null, tempItemTimer: 0,
 };
 const collected = new Set();
-let state = 'splash'; // splash | title | select | play | dialog | record | win | portal | fifa
+let state = 'splash'; // splash | title | digChoice | slotChoose | select | play | dialog | record | win | portal | fifa
 let dialog = null;   // { name, lines, i }
 let shownRecord = null;
 let activePortal = null; // { x, y } tile the player walked into to open the portal popup
@@ -1088,17 +1149,68 @@ let toast = null;    // { text, t }
 // frame), so this has zero effect on gameplay performance or loading times.
 // The payload is a tiny JSON object (well under 1KB), and localStorage
 // read/write for something that size is effectively instant.
-const SAVE_KEY = 'ricoVinylQuest_save_v1';
+//
+// Three independent save slots (1-3) let a player keep multiple digs going
+// at once. `currentSlot` is whichever slot the *active* playthrough reads
+// from/writes to; it's set the moment a slot is chosen (fresh or continued)
+// and every autosave/manual save from then on goes to that slot only.
+const SAVE_KEY_PREFIX = 'ricoVinylQuest_save_v1_slot';
+const LEGACY_SAVE_KEY = 'ricoVinylQuest_save_v1'; // pre-slots single save
+const SAVE_SLOTS = [1, 2, 3];
+let currentSlot = 1;
 
-function hasSave() {
-  try { return !!localStorage.getItem(SAVE_KEY); }
+function slotKey(slot) { return SAVE_KEY_PREFIX + slot; }
+
+function hasSave(slot) {
+  try { return !!localStorage.getItem(slotKey(slot)); }
   catch { return false; }
 }
 
-// Writes the current progress to localStorage. Called silently at natural
-// checkpoints (record found, world completed, room change) plus on demand
-// from the SAVE button / 'K' key, where showToast lets the player know it
-// actually happened.
+// A save exists in ANY slot -- used only for one-time migration below.
+function hasAnySave() { return SAVE_SLOTS.some(hasSave); }
+
+// One-time migration: if this is a returning player with the old
+// single-save format and slot 1 is empty, move it into slot 1 so nobody's
+// progress disappears when this update ships.
+(function migrateLegacySave() {
+  try {
+    const legacy = localStorage.getItem(LEGACY_SAVE_KEY);
+    if (legacy && !hasSave(1)) {
+      localStorage.setItem(slotKey(1), legacy);
+      localStorage.removeItem(LEGACY_SAVE_KEY);
+    }
+  } catch (err) { console.warn('save migration failed:', err); }
+})();
+
+// Reads and validates a slot's save data without applying it to the live
+// game state. Returns null for an empty, corrupt, or outdated slot.
+function readSlot(slot) {
+  try {
+    const raw = localStorage.getItem(slotKey(slot));
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || !CHARACTERS[data.character] || !maps[data.map]) return null;
+    return data;
+  } catch (err) {
+    return null;
+  }
+}
+
+// Short "SANTOS - Burlington" style summary for a slot chooser row, or null
+// if the slot is empty/unreadable.
+function slotSummary(slot) {
+  const data = readSlot(slot);
+  if (!data) return null;
+  const label = (CHARACTERS[data.character] || {}).label || '???';
+  const worldId = (maps[data.map] || {}).world;
+  const place = (WORLD_DEFS[worldId] || {}).name || data.map;
+  return `${label} \u2014 ${place}`;
+}
+
+// Writes the current progress to localStorage under currentSlot. Called
+// silently at natural checkpoints (record found, world completed, room
+// change) plus on demand from the SAVE button / 'K' key, where showToast
+// lets the player know it actually happened.
 function saveGame(showToast) {
   try {
     const data = {
@@ -1111,7 +1223,7 @@ function saveGame(showToast) {
       collected: [...collected],
       completedWorlds: [...completedWorlds],
     };
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    localStorage.setItem(slotKey(currentSlot), JSON.stringify(data));
     if (showToast) toast = { text: 'Game Saved', t: 1.2 };
   } catch (err) {
     // Private browsing, full storage, disabled storage, etc. -- never let a
@@ -1121,47 +1233,43 @@ function saveGame(showToast) {
   }
 }
 
-// Restores progress from localStorage and drops the player straight into
+// Restores progress from the given slot and drops the player straight into
 // 'play' at their last position. Returns false (and leaves the game state
-// untouched) if there's no save or it's corrupt/outdated.
-function loadGame() {
-  try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return false;
-    const data = JSON.parse(raw);
-    if (!data || !CHARACTERS[data.character] || !maps[data.map]) return false;
+// untouched) if the slot is empty or corrupt/outdated.
+function loadGame(slot) {
+  const data = readSlot(slot);
+  if (!data) return false;
 
-    selectedCharacter = data.character;
-    player.map = data.map;
-    player.x = data.x;
-    player.y = data.y;
-    player.dir = data.dir || 'down';
-    player.moving = false;
-    player.skating = false;
-    player.holdingCoffee = false;
-    player.holdingTea = false;
-    player.tempItem = null;
-    player.tempItemTimer = 0;
+  currentSlot = slot;
+  selectedCharacter = data.character;
+  player.map = data.map;
+  player.x = data.x;
+  player.y = data.y;
+  player.dir = data.dir || 'down';
+  player.moving = false;
+  player.skating = false;
+  player.holdingCoffee = false;
+  player.holdingTea = false;
+  player.tempItem = null;
+  player.tempItemTimer = 0;
 
-    collected.clear();
-    (data.collected || []).forEach((id) => collected.add(id));
-    completedWorlds.clear();
-    (data.completedWorlds || []).forEach((id) => completedWorlds.add(id));
+  collected.clear();
+  (data.collected || []).forEach((id) => collected.add(id));
+  completedWorlds.clear();
+  (data.completedWorlds || []).forEach((id) => completedWorlds.add(id));
 
-    state = 'play';
-    music.setMenuBreak(false);
-    toast = { text: 'Game Loaded', t: 1.2 };
-    return true;
-  } catch (err) {
-    console.warn('loadGame failed:', err);
-    return false;
-  }
+  state = 'play';
+  music.setMenuBreak(false);
+  toast = { text: 'Game Loaded', t: 1.2 };
+  return true;
 }
 
-// Wipes any existing save and resets progress, then sends the player to the
-// character-select screen just like a first-time launch.
-function newGame() {
-  try { localStorage.removeItem(SAVE_KEY); } catch (err) { console.warn('newGame clear failed:', err); }
+// Wipes the given slot and resets progress, then sends the player to the
+// character-select screen just like a first-time launch. currentSlot is
+// updated so the checkpoint autosaves that follow land in this slot.
+function newGame(slot) {
+  currentSlot = slot;
+  try { localStorage.removeItem(slotKey(slot)); } catch (err) { console.warn('newGame clear failed:', err); }
   collected.clear();
   completedWorlds.clear();
   player.map = 'town';
@@ -1200,12 +1308,34 @@ function loadSfx(basePath) {
 }
 
 // Locks in a playable character and boots straight into the game with them.
+// Behavior depends on how the player got here (see pendingMode, set by the
+// START DIGGING / CONTINUE DIGGING -> slot-chooser flow):
+//  - 'new':      fresh save in pendingSlot (already reset by newGame()).
+//  - 'continue': loads pendingSlot's save, but the character picked HERE
+//                (not the one stored in the save) is who you play as --
+//                lets a player reskin a save without losing progress.
 function chooseCharacter(id) {
   if (!CHARACTERS[id]) return;
-  selectedCharacter = id;
-  state = 'play';
-  music.setMenuBreak(false);
-  saveGame(); // silent autosave checkpoint -- a save exists from the moment play begins
+  if (pendingMode === 'continue') {
+    if (loadGame(pendingSlot)) {
+      selectedCharacter = id;
+      saveGame(); // keep the slot's stored character in sync with the pick
+    } else {
+      // slot vanished/corrupted between selection and now -- fail soft into
+      // a fresh start rather than getting stuck.
+      newGame(pendingSlot);
+      selectedCharacter = id;
+      state = 'play';
+      music.setMenuBreak(false);
+      saveGame();
+    }
+  } else {
+    currentSlot = pendingSlot;
+    selectedCharacter = id;
+    state = 'play';
+    music.setMenuBreak(false);
+    saveGame(); // silent autosave checkpoint -- a save exists from the moment play begins
+  }
 }
 
 function toggleSkate() {
@@ -1953,6 +2083,10 @@ function createTouchControls() {
         if (k === 'arrowleft') selectMove = -1;
         if (k === 'arrowright') selectMove = 1;
       }
+      if (state === 'digChoice' || state === 'slotChoose') {
+        if (k === 'arrowup') menuMove = -1;
+        if (k === 'arrowdown') menuMove = 1;
+      }
       music.start();
     }, () => { keys[k] = false; });
     wrap.appendChild(btn);
@@ -1993,7 +2127,7 @@ function createTouchControls() {
     ['BREW',  () => toggleCoffee(),     () => player.holdingCoffee],
     ['YERBA', () => toggleTea(),        () => player.holdingTea],
     ['SAVE',  () => saveGame(true),     () => false],
-    ['NEW',   () => { newGamePressed = true; }, () => false],
+    ['NEW',   () => { openDigChoice(); },       () => false],
   ];
   extras.forEach(([label, action, isOn]) => {
     const btn = document.createElement('div');
@@ -2063,11 +2197,23 @@ function update(dt) {
   if (state === 'splash') {
     if (interactPressed) { state = 'title'; music.setMenuBreak(true); }
   } else if (state === 'title') {
-    if (newGamePressed) {
-      newGame();
-    } else if (interactPressed) {
-      if (!hasSave() || !loadGame()) { state = 'select'; music.setMenuBreak(true); }
+    if (interactPressed) openDigChoice();
+  } else if (state === 'digChoice') {
+    if (menuMove) {
+      digChoiceIndex = Math.max(0, Math.min(DIG_CHOICES.length - 1, digChoiceIndex + menuMove));
+      menuMove = 0;
     }
+    if (interactPressed) openSlotChoose(digChoiceIndex === 0 ? 'new' : 'continue');
+    else if (buyPressed) { state = 'title'; music.setMenuBreak(true); } // X = back
+  } else if (state === 'slotChoose') {
+    if (menuMove) {
+      const newIndex = Math.max(0, Math.min(SAVE_SLOTS.length - 1, slotChoiceIndex + menuMove));
+      if (newIndex !== slotChoiceIndex) armedOverwriteSlot = null; // moving cancels an overwrite arm
+      slotChoiceIndex = newIndex;
+      menuMove = 0;
+    }
+    if (interactPressed) confirmSlotChoice();
+    else if (buyPressed) openDigChoice(); // X = back
   } else if (state === 'select') {
     if (selectMove) {
       selectIndex = Math.max(0, Math.min(SELECT_ORDER.length - 1, selectIndex + selectMove));
@@ -2125,7 +2271,7 @@ function update(dt) {
   }
   interactPressed = false;
   buyPressed = false;
-  newGamePressed = false;
+  menuMove = 0;
 }
 
 // ---------------------------------------------------------------- render
@@ -2232,6 +2378,8 @@ function render(time) {
   if (state !== 'splash') drawHUD();
   if (state === 'splash') drawSplash();
   if (state === 'title') drawTitle(time);
+  if (state === 'digChoice') drawDigChoice(time);
+  if (state === 'slotChoose') drawSlotChoose(time);
   if (state === 'select') drawCharacterSelect(time);
   if (state === 'dialog') drawDialog();
   if (state === 'record') drawRecordCard();
@@ -7477,18 +7625,82 @@ function drawTitle(time) {
   controls.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, 320 + i * 20));
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
   ctx.font = 'bold 18px monospace';
-  ctx.fillText(hasSave() ? '- PRESS E TO CONTINUE -' : '- PRESS E TO START -', VIEW_W / 2, 500);
+  ctx.fillText('- PRESS E TO CONTINUE -', VIEW_W / 2, 500);
   drawTitleSaveHint();
 }
 
 // Small persistent reminder, shown under the main prompt on the title
-// screen only, that a save exists and can be abandoned for a new one.
+// screen only, that at least one save exists.
 function drawTitleSaveHint() {
-  if (!hasSave()) return;
+  if (!hasAnySave()) return;
   ctx.textAlign = 'center';
   ctx.fillStyle = 'rgba(244,236,216,0.75)';
   ctx.font = '12px monospace';
-  ctx.fillText('N, or NEW in the \u2630 menu, to start fresh', VIEW_W / 2, VIEW_H - 10);
+  ctx.fillText('[E] to dig for gold, choose a slot', VIEW_W / 2, VIEW_H - 10);
+}
+
+// ---------------------------------------------------------------- dig-choice / slot-choose popups
+// Shared "retro menu box" look for the two title-flow popups below --
+// mirrors the dark box + cream border used by drawDialog()/drawPortalPopup()
+// so these feel native rather than bolted on.
+function drawMenuBox(title, hint) {
+  ctx.fillStyle = 'rgba(8,6,12,0.72)';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+  const boxW = 420, boxH = 260, boxX = (VIEW_W - boxW) / 2, boxY = (VIEW_H - boxH) / 2;
+  ctx.fillStyle = 'rgba(10,8,14,0.95)';
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+  ctx.strokeStyle = '#f4ecd8';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(boxX + 2, boxY + 2, boxW - 4, boxH - 4);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#e0b040';
+  ctx.font = 'bold 18px monospace';
+  ctx.fillText(title, VIEW_W / 2, boxY + 34);
+
+  if (hint) {
+    ctx.fillStyle = '#9a90a8';
+    ctx.font = '12px monospace';
+    ctx.fillText(hint, VIEW_W / 2, boxY + boxH - 16);
+  }
+
+  return { boxX, boxY, boxW, boxH };
+}
+
+// Draws one selectable row inside a menu box: highlighted (gold + arrows)
+// when `active`, plain cream otherwise. `subtext`, if given, renders smaller
+// and dimmer just under the main label (used for slot summaries).
+function drawMenuRow(label, cy, active, subtext) {
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 20px monospace';
+  ctx.fillStyle = active ? '#e0b040' : '#f4ecd8';
+  ctx.fillText((active ? '\u25B8 ' : '') + label + (active ? ' \u25C2' : ''), VIEW_W / 2, cy);
+  if (subtext) {
+    ctx.font = '13px monospace';
+    ctx.fillStyle = active ? 'rgba(224,176,64,0.85)' : 'rgba(244,236,216,0.6)';
+    ctx.fillText(subtext, VIEW_W / 2, cy + 20);
+  }
+}
+
+function drawDigChoice() {
+  const { boxY } = drawMenuBox("WHAT'S THE MOVE?", '[\u2191\u2193] choose   [E] select   [X] back');
+  const rowY = [boxY + 110, boxY + 170];
+  DIG_CHOICES.forEach((label, i) => drawMenuRow(label, rowY[i], i === digChoiceIndex));
+}
+
+function drawSlotChoose() {
+  const title = pendingMode === 'new' ? 'START DIGGING \u2014 PICK A SLOT' : 'CONTINUE DIGGING \u2014 PICK A SLOT';
+  const { boxY } = drawMenuBox(title, '[\u2191\u2193] choose   [E] select   [X] back');
+  const rowY = [boxY + 90, boxY + 140, boxY + 190];
+  SAVE_SLOTS.forEach((slot, i) => {
+    const active = i === slotChoiceIndex;
+    const summary = slotSummary(slot);
+    let label = `SLOT ${slot}`;
+    let subtext = summary || 'EMPTY';
+    if (active && armedOverwriteSlot === slot) subtext = 'PRESS [E] AGAIN TO OVERWRITE';
+    drawMenuRow(label, rowY[i], active, subtext);
+  });
 }
 
 // Portrait centers, as fractions of the character_select art's own
