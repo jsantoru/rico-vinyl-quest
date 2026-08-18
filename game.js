@@ -5721,89 +5721,76 @@ function drawChurchCircusInterior(time) {
   drawJugglingClown(8.9 * TILE, 8.5 * TILE, time, 2.1);
 }
 
-// Vermont-silhouette poster with a huge "99" on it — hung behind the
-// counter at Hey Bud. Purely original pixel art, not a real logo/brand.
-function drawHeyBudPoster(x, y) {
-  const pw = 46, ph = 62;
-  // wood frame
-  ctx.fillStyle = '#2a2016';
-  ctx.fillRect(x - 3, y - 3, pw + 6, ph + 6);
-  ctx.fillStyle = '#4a3a24';
-  ctx.fillRect(x - 1, y - 1, pw + 2, ph + 2);
-  // sun-faded mustard paper background
-  ctx.fillStyle = '#e8b84a';
-  ctx.fillRect(x, y, pw, ph);
-  ctx.fillStyle = 'rgba(255,255,255,0.08)';
-  ctx.fillRect(x, y, pw, 6);
-
-  // stylized Vermont state silhouette (narrow north, wider south, slanted
-  // western border) filling most of the poster
-  ctx.fillStyle = '#2f6a3a';
-  ctx.beginPath();
-  ctx.moveTo(x + pw * 0.60, y + 5);
-  ctx.lineTo(x + pw * 0.40, y + 5);
-  ctx.lineTo(x + pw * 0.32, y + ph * 0.30);
-  ctx.lineTo(x + pw * 0.22, y + ph * 0.55);
-  ctx.lineTo(x + pw * 0.28, y + ph * 0.78);
-  ctx.lineTo(x + pw * 0.34, y + ph - 6);
-  ctx.lineTo(x + pw * 0.72, y + ph - 6);
-  ctx.lineTo(x + pw * 0.66, y + ph * 0.60);
-  ctx.lineTo(x + pw * 0.70, y + ph * 0.28);
-  ctx.closePath();
-  ctx.fill();
-  // tiny star marking a "capital" for flavor
-  ctx.fillStyle = '#e8b84a';
-  ctx.beginPath();
-  ctx.arc(x + pw * 0.48, y + ph * 0.42, 1.4, 0, Math.PI * 2);
-  ctx.fill();
-
-  // huge "99" stamped across the poster
-  ctx.textAlign = 'center';
-  ctx.font = 'bold 30px monospace';
-  ctx.strokeStyle = '#241a10';
-  ctx.lineWidth = 2.5;
-  ctx.strokeText('99', x + pw / 2, y + ph * 0.62);
-  ctx.fillStyle = '#f4ecd8';
-  ctx.fillText('99', x + pw / 2, y + ph * 0.62);
-}
-
-// A giant neon-pink "99" sign glowing on the wall — dark backing, thick
-// tubes of hot-pink light with a soft bloom, like a bar's neon marquee.
-// Purely original pixel art, not a real logo/brand.
-function drawNeonNinetyNinePoster(x, y, w, h) {
+// The big poster hanging on the wall behind Hey Bud's counter — a large
+// hand-rolled "99" in hot neon pink, painted with a real paint roller
+// rather than printed: streaky uneven bands of coverage, visible roller-
+// nap texture, a soft bleedy edge where the roller overshot the letter
+// shapes, and a few drips running down where the paint pooled before it
+// dried. Purely original pixel art, not a real logo/brand.
+function drawHeyBudRollerPoster(x, y, w, h) {
   ctx.save();
 
-  // dark backing panel so the glow reads clearly
-  ctx.fillStyle = '#120e18';
+  // dark backing shadow + cream canvas/paper the "99" is rolled onto
+  ctx.fillStyle = '#241f2c';
+  ctx.fillRect(x - 3, y - 3, w + 6, h + 6);
+  ctx.fillStyle = '#efe8d6';
   ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = '#2a2032';
+  ctx.fillStyle = 'rgba(0,0,0,0.06)';
+  ctx.fillRect(x, y, w, 4);
+  ctx.fillRect(x, y + h - 4, w, 4);
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)';
   ctx.lineWidth = 1;
   ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = `900 ${Math.floor(h * 0.72)}px Impact, "Arial Black", sans-serif`;
-  const cx = x + w / 2, cy = y + h / 2 + h * 0.02;
+  ctx.font = `900 ${Math.floor(h * 0.74)}px Impact, "Arial Black", sans-serif`;
+  const cx = x + w / 2, cy = y + h / 2 + h * 0.03;
 
-  // layered soft bloom passes, widest/dimmest first, building up to a
-  // bright hot-pink core — the classic neon-glow trick
-  const glowLayers = [
-    { blur: 22, alpha: 0.30 },
-    { blur: 14, alpha: 0.45 },
-    { blur: 7,  alpha: 0.75 },
-  ];
-  for (const g of glowLayers) {
-    ctx.shadowColor = '#ff2ea6';
-    ctx.shadowBlur = g.blur;
-    ctx.fillStyle = `rgba(255,46,166,${g.alpha})`;
-    ctx.fillText('99', cx, cy);
-  }
-  // bright white-hot tube core so it doesn't read muddy
-  ctx.shadowColor = '#ff8ecb';
-  ctx.shadowBlur = 4;
-  ctx.fillStyle = '#ffe6f4';
+  // soft bleedy underlay so the roller reads as having overshot the
+  // letterforms slightly, like real paint spreading on paper
+  ctx.save();
+  ctx.shadowColor = 'rgba(255,40,160,0.5)';
+  ctx.shadowBlur = 5;
+  ctx.fillStyle = 'rgba(255,60,170,0.85)';
   ctx.fillText('99', cx, cy);
-  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  // solid hot-pink base coat for the numerals
+  ctx.fillStyle = '#ff2ea6';
+  ctx.fillText('99', cx, cy);
+
+  // roller streaks + nap texture, clipped to only the painted numerals
+  // (source-atop only draws over existing opaque pixels)
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-atop';
+  const bandH = Math.max(3, h * 0.055);
+  let by = y - h * 0.1, i = 0;
+  while (by < y + h * 1.1) {
+    const wobble = Math.sin(i * 1.7) * 2;
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(255,150,205,0.35)' : 'rgba(190,10,105,0.30)';
+    ctx.fillRect(x - 4, by + wobble, w + 8, bandH);
+    by += bandH * 1.6;
+    i++;
+  }
+  ctx.fillStyle = 'rgba(255,255,255,0.10)';
+  for (let ny = y; ny < y + h; ny += 2.4) ctx.fillRect(x, ny, w, 0.8);
+  ctx.restore();
+
+  // a few drips trailing down from the bottom of the numerals, like
+  // excess roller paint that ran before it dried
+  ctx.fillStyle = '#ff2ea6';
+  [{ fx: 0.28, len: 12 }, { fx: 0.45, len: 7 }, { fx: 0.63, len: 16 }, { fx: 0.80, len: 6 }]
+    .forEach((d) => {
+      const dx = x + w * d.fx, dy0 = y + h * 0.87;
+      ctx.beginPath();
+      ctx.moveTo(dx - 2, dy0);
+      ctx.lineTo(dx + 2, dy0);
+      ctx.lineTo(dx + 1.3, dy0 + d.len);
+      ctx.quadraticCurveTo(dx, dy0 + d.len + 3, dx - 1.3, dy0 + d.len);
+      ctx.closePath();
+      ctx.fill();
+    });
 
   ctx.restore();
 }
@@ -5978,7 +5965,7 @@ function drawHeyBudInterior(time) {
   // wall, and the "99" Vermont-silhouette poster behind the counter.
 
   // --- hanging macrame plant pots, gently swaying from the rafters ---
-  const hangs = [[2 * TILE + 16, 0.3], [5 * TILE + 16, 1.4], [10 * TILE + 16, 0.7], [12 * TILE + 16, 2.1]];
+  const hangs = [[2 * TILE + 16, 0.3], [4 * TILE + 8, 1.4], [10 * TILE + 16, 0.7], [12 * TILE + 16, 2.1]];
   hangs.forEach(([hx, seed]) => {
     const sway = Math.sin(time * 1.1 + seed) * 2;
     ctx.strokeStyle = '#8a7a5a';
@@ -6062,12 +6049,11 @@ function drawHeyBudInterior(time) {
   // the street-art wall ---
   drawGlassPlantCase(10 * TILE, 7 * TILE + 2, 3 * TILE, 2 * TILE - 10);
 
-  // --- the "99" Vermont poster, front and center behind the counter ---
-  drawHeyBudPoster(9 * TILE + 2, 1 * TILE + 2);
-
-  // --- a giant glowing neon-pink "99" sign, filling the open wall gap
-  // between the two hanging planters above the shelf ---
-  drawNeonNinetyNinePoster(98, 34, 60, 58);
+  // --- the big roller-painted neon-pink "99" poster, centered on the wall
+  // directly behind the keeper (keeper sits at tile 6,2) ---
+  const posterW = 76, posterH = 72;
+  const posterX = (6 * TILE + TILE / 2) - posterW / 2;
+  drawHeyBudRollerPoster(posterX, 6, posterW, posterH);
 }
 
 // A wire newsstand rack, angled shelves stacked with colorful magazine
