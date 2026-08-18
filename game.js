@@ -1152,7 +1152,46 @@ const music = {
     const d = this.noiseBuf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     this.nextTime = this.ctx.currentTime + 0.1;
-    setInterval(() => this.pump(), 25);
+    this.startTicker();
+    this.installResumeGuards();
+  },
+
+  // The scheduler only works if `pump()` actually gets called on a steady
+  // cadence. A plain main-thread setInterval shares its queue with every
+  // synchronous bit of canvas drawing the game does each frame — the
+  // outdoor map redraws a lot more per frame than an interior (see the
+  // LOOKAHEAD comment below) — and on iPad Safari in particular, timer
+  // callbacks queued behind that work fire far less consistently than on
+  // desktop. A Worker's timers run on their own OS thread with their own
+  // event loop, so they keep firing on schedule no matter how busy the
+  // main thread's render work is; the worker just pings us and the actual
+  // (cheap) scheduling call still happens here. This is the standard fix
+  // for Web-Audio-timing-vs-busy-main-thread jank (see Chris Wilson's "A
+  // Tale of Two Clocks"). If Workers/Blobs aren't available for some
+  // reason, we fall back to the old plain setInterval so nothing breaks.
+  startTicker() {
+    try {
+      const workerSrc = 'setInterval(() => postMessage(1), 25);';
+      const blob = new Blob([workerSrc], { type: 'application/javascript' });
+      const worker = new Worker(URL.createObjectURL(blob));
+      worker.onmessage = () => this.pump();
+      this._tickWorker = worker;
+    } catch (e) {
+      setInterval(() => this.pump(), 25);
+    }
+  },
+
+  // iPadOS/iOS Safari will silently drop an AudioContext into 'suspended'
+  // (backgrounding, multitasking transitions, some low-power situations)
+  // without the game doing anything to cause it. A suspended context just
+  // stops producing sound entirely rather than glitching, but resuming
+  // proactively whenever the tab/page becomes active again means the
+  // player never has to notice or work around it.
+  installResumeGuards() {
+    const tryResume = () => { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); };
+    document.addEventListener('visibilitychange', tryResume);
+    window.addEventListener('focus', tryResume);
+    window.addEventListener('pageshow', tryResume);
   },
   toggleMute() {
     if (!this.ctx) return;
@@ -1197,6 +1236,7 @@ const music = {
   MIN_MARGIN: 0.06,
 
   pump() {
+    if (this.ctx.state === 'suspended') this.ctx.resume();
     const stepDur = 60 / this.BPM / 4;
     const now = this.ctx.currentTime;
     // If something stalled the main thread for a long stretch (tab backgrounded,
