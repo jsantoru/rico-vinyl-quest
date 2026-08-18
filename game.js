@@ -292,6 +292,7 @@ const VERMONT_NEWS = [
 const keys = {};
 let interactPressed = false;
 let buyPressed = false;
+let newGamePressed = false; // 'N' on the title screen -- starts fresh even if a save exists
 
 // ---- "fifa" keyword easter egg -------------------------------------------
 // Typing the word "fifa" on a physical keyboard (any time, in any state)
@@ -319,6 +320,8 @@ window.addEventListener('keydown', (e) => {
     if (k === 'm') music.toggleMute();
     if (k === 'c') toggleCoffee();
     if (k === 'y') toggleTea();
+    if (k === 'k') saveGame(true);
+    if (k === 'n' && state === 'title') newGamePressed = true;
     if (k === 'arrowleft') selectMove = -1;
     if (k === 'arrowright') selectMove = 1;
 
@@ -1080,6 +1083,100 @@ let activePortal = null; // { x, y } tile the player walked into to open the por
 const completedWorlds = new Set(); // worlds whose 5 records have all been found
 let toast = null;    // { text, t }
 
+// ---------------------------------------------------------------- save / load
+// Save/load only ever run on explicit checkpoints below (never once per
+// frame), so this has zero effect on gameplay performance or loading times.
+// The payload is a tiny JSON object (well under 1KB), and localStorage
+// read/write for something that size is effectively instant.
+const SAVE_KEY = 'ricoVinylQuest_save_v1';
+
+function hasSave() {
+  try { return !!localStorage.getItem(SAVE_KEY); }
+  catch { return false; }
+}
+
+// Writes the current progress to localStorage. Called silently at natural
+// checkpoints (record found, world completed, room change) plus on demand
+// from the SAVE button / 'K' key, where showToast lets the player know it
+// actually happened.
+function saveGame(showToast) {
+  try {
+    const data = {
+      v: 1,
+      character: selectedCharacter,
+      map: player.map,
+      x: player.x,
+      y: player.y,
+      dir: player.dir,
+      collected: [...collected],
+      completedWorlds: [...completedWorlds],
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    if (showToast) toast = { text: 'Game Saved', t: 1.2 };
+  } catch (err) {
+    // Private browsing, full storage, disabled storage, etc. -- never let a
+    // save failure crash or interrupt the game.
+    if (showToast) toast = { text: 'Save failed', t: 1.2 };
+    console.warn('saveGame failed:', err);
+  }
+}
+
+// Restores progress from localStorage and drops the player straight into
+// 'play' at their last position. Returns false (and leaves the game state
+// untouched) if there's no save or it's corrupt/outdated.
+function loadGame() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!data || !CHARACTERS[data.character] || !maps[data.map]) return false;
+
+    selectedCharacter = data.character;
+    player.map = data.map;
+    player.x = data.x;
+    player.y = data.y;
+    player.dir = data.dir || 'down';
+    player.moving = false;
+    player.skating = false;
+    player.holdingCoffee = false;
+    player.holdingTea = false;
+    player.tempItem = null;
+    player.tempItemTimer = 0;
+
+    collected.clear();
+    (data.collected || []).forEach((id) => collected.add(id));
+    completedWorlds.clear();
+    (data.completedWorlds || []).forEach((id) => completedWorlds.add(id));
+
+    state = 'play';
+    music.setMenuBreak(false);
+    toast = { text: 'Game Loaded', t: 1.2 };
+    return true;
+  } catch (err) {
+    console.warn('loadGame failed:', err);
+    return false;
+  }
+}
+
+// Wipes any existing save and resets progress, then sends the player to the
+// character-select screen just like a first-time launch.
+function newGame() {
+  try { localStorage.removeItem(SAVE_KEY); } catch (err) { console.warn('newGame clear failed:', err); }
+  collected.clear();
+  completedWorlds.clear();
+  player.map = 'town';
+  player.x = 19.5 * TILE;
+  player.y = 12.5 * TILE;
+  player.dir = 'down';
+  player.skating = false;
+  player.holdingCoffee = false;
+  player.holdingTea = false;
+  player.tempItem = null;
+  player.tempItemTimer = 0;
+  state = 'select';
+  music.setMenuBreak(true);
+}
+
 // Voice line played the instant a character is locked in at the select
 // screen — drop a short vocal clip at assets/lets_do_this.mp3 (or .ogg/.wav,
 // see loadSfx below) to hear it. Until that file exists the browser just
@@ -1108,6 +1205,7 @@ function chooseCharacter(id) {
   selectedCharacter = id;
   state = 'play';
   music.setMenuBreak(false);
+  saveGame(); // silent autosave checkpoint -- a save exists from the moment play begins
 }
 
 function toggleSkate() {
@@ -1393,6 +1491,7 @@ function movePlayer(dt) {
     player.x = tr.x * TILE;
     player.y = tr.y * TILE;
     if (!maps[tr.map].outside) player.skating = false;
+    saveGame(); // silent autosave checkpoint -- keeps "Continue" accurate to the room the player is in
   }
 
   checkPortal(map);
@@ -1471,6 +1570,7 @@ function doInteract() {
       music.sting();
       shownRecord = c.record;
       state = 'record';
+      saveGame(); // silent autosave checkpoint
     } else if (c.record) {
       dialog = { name: 'CRATE', lines: ['Nothing left in here but dust and old sleeves.'], i: 0 };
       state = 'dialog';
@@ -1892,6 +1992,8 @@ function createTouchControls() {
   const extras = [
     ['BREW',  () => toggleCoffee(),     () => player.holdingCoffee],
     ['YERBA', () => toggleTea(),        () => player.holdingTea],
+    ['SAVE',  () => saveGame(true),     () => false],
+    ['NEW',   () => { newGamePressed = true; }, () => false],
   ];
   extras.forEach(([label, action, isOn]) => {
     const btn = document.createElement('div');
@@ -1961,7 +2063,11 @@ function update(dt) {
   if (state === 'splash') {
     if (interactPressed) { state = 'title'; music.setMenuBreak(true); }
   } else if (state === 'title') {
-    if (interactPressed) { state = 'select'; music.setMenuBreak(true); }
+    if (newGamePressed) {
+      newGame();
+    } else if (interactPressed) {
+      if (!hasSave() || !loadGame()) { state = 'select'; music.setMenuBreak(true); }
+    }
   } else if (state === 'select') {
     if (selectMove) {
       selectIndex = Math.max(0, Math.min(SELECT_ORDER.length - 1, selectIndex + selectMove));
@@ -1987,6 +2093,7 @@ function update(dt) {
       if (worldComplete() && !completedWorlds.has(currentWorldId())) {
         completedWorlds.add(currentWorldId());
         state = 'win';
+        saveGame(); // silent autosave checkpoint
       }
       else state = 'play';
     }
@@ -2018,6 +2125,7 @@ function update(dt) {
   }
   interactPressed = false;
   buyPressed = false;
+  newGamePressed = false;
 }
 
 // ---------------------------------------------------------------- render
@@ -7335,6 +7443,7 @@ function drawTitle(time) {
     const s = Math.min(VIEW_W / mw, VIEW_H / mh);
     const dw = mw * s, dh = mh * s;
     ctx.drawImage(titleMenuKeyed, (VIEW_W - dw) / 2, (VIEW_H - dh) / 2, dw, dh);
+    drawTitleSaveHint();
     return;
   }
 
@@ -7368,7 +7477,18 @@ function drawTitle(time) {
   controls.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, 320 + i * 20));
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
   ctx.font = 'bold 18px monospace';
-  ctx.fillText('- PRESS E TO START -', VIEW_W / 2, 500);
+  ctx.fillText(hasSave() ? '- PRESS E TO CONTINUE -' : '- PRESS E TO START -', VIEW_W / 2, 500);
+  drawTitleSaveHint();
+}
+
+// Small persistent reminder, shown under the main prompt on the title
+// screen only, that a save exists and can be abandoned for a new one.
+function drawTitleSaveHint() {
+  if (!hasSave()) return;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(244,236,216,0.75)';
+  ctx.font = '12px monospace';
+  ctx.fillText('N, or NEW in the \u2630 menu, to start fresh', VIEW_W / 2, VIEW_H - 10);
 }
 
 // Portrait centers, as fractions of the character_select art's own
