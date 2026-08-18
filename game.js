@@ -310,6 +310,156 @@ function triggerFifaEasterEgg() {
   fifaStartTime = performance.now();
 }
 
+// ---- mini-games -----------------------------------------------------------
+// One shared entry point for any mini-game: `state` flips to 'minigame' and
+// `activeMinigame` holds a plain object with update(dt)/draw()/onExit(). The
+// mini-game owns all of its own state in a closure, runs on the exact same
+// rAF loop as everything else (no timers, no extra assets), and exits by
+// calling exitMinigame() itself once it's done. This mirrors the 'fifa'
+// easter egg above, just player-controlled instead of a fixed countdown.
+let activeMinigame = null;
+let minigameReturnState = 'play';
+
+function enterMinigame(game) {
+  minigameReturnState = state;
+  activeMinigame = game;
+  state = 'minigame';
+}
+
+function exitMinigame() {
+  state = minigameReturnState;
+  activeMinigame = null;
+}
+
+// Darts: a two-tap power/accuracy throw, same trick classic golf games use.
+// Tap 1 (E) locks the power while a needle sweeps left-right. Tap 2 (E)
+// locks the accuracy while a second needle sweeps across the dartboard's
+// width. Three throws, score totalled, then auto-exits back to 'play'.
+// Everything drawn with canvas primitives -- no images, no new assets.
+function createDartsGame() {
+  const ROUNDS = 3;
+  let phase = 'power';       // 'power' | 'aim' | 'result' | 'done'
+  let power = 0, powerDir = 1;
+  let aim = 0, aimDir = 1;
+  let lockedPower = 0;
+  let throwsLeft = ROUNDS;
+  let score = 0;
+  let lastScoreLabel = '';
+  let resultTimer = 0;
+
+  const cx = VIEW_W / 2, cy = 230, boardR = 120;
+  const RINGS = [
+    { r: 1.00, pts: 0,  color: '#241a2a' },
+    { r: 0.78, pts: 5,  color: '#3a2840' },
+    { r: 0.55, pts: 15, color: '#c04070' },
+    { r: 0.32, pts: 30, color: '#e0a030' },
+    { r: 0.12, pts: 50, color: '#f4ecd8' },
+  ];
+
+  function scoreForAim(a) {
+    // a is -1..1 offset from dead center; power accuracy shrinks the
+    // effective miss distance, so a well-timed power tap still helps even
+    // on an imperfect aim tap.
+    const powerAccuracy = 1 - Math.abs(power - 0.5) * 2 * 0.4; // 0.6..1
+    const dist = Math.abs(a) * powerAccuracy;
+    for (const ring of RINGS) if (dist <= ring.r) return ring.pts;
+    return 0;
+  }
+
+  return {
+    update(dt) {
+      if (phase === 'power') {
+        power += powerDir * dt * 0.9;
+        if (power >= 1) { power = 1; powerDir = -1; }
+        if (power <= 0) { power = 0; powerDir = 1; }
+        if (interactPressed) { lockedPower = power; phase = 'aim'; aim = -1; aimDir = 1; }
+      } else if (phase === 'aim') {
+        aim += aimDir * dt * 1.3;
+        if (aim >= 1) { aim = 1; aimDir = -1; }
+        if (aim <= -1) { aim = -1; aimDir = 1; }
+        if (interactPressed) {
+          power = lockedPower;
+          const pts = scoreForAim(aim);
+          score += pts;
+          lastScoreLabel = pts > 0 ? `+${pts}` : 'MISS';
+          throwsLeft--;
+          phase = 'result';
+          resultTimer = 0.9;
+        }
+      } else if (phase === 'result') {
+        resultTimer -= dt;
+        if (resultTimer <= 0) {
+          if (throwsLeft <= 0) phase = 'done';
+          else { phase = 'power'; power = 0; powerDir = 1; }
+        }
+      } else if (phase === 'done') {
+        if (interactPressed) exitMinigame();
+      }
+      // X always bails out early, no matter the phase
+      if (buyPressed) exitMinigame();
+    },
+    draw() {
+      ctx.fillStyle = 'rgba(8,6,12,0.9)';
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#e0b040';
+      ctx.font = 'bold 22px monospace';
+      ctx.fillText('DARTS', cx, 60);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = '12px monospace';
+      ctx.fillText(`SCORE ${score}   THROWS LEFT ${Math.max(0, throwsLeft)}`, cx, 84);
+
+      // board
+      for (const ring of RINGS) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, boardR * ring.r, 0, Math.PI * 2);
+        ctx.fillStyle = ring.color;
+        ctx.fill();
+      }
+      ctx.strokeStyle = '#0c0810';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, boardR, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // aim needle position (only meaningful during aim/result)
+      if (phase === 'aim' || phase === 'result' || phase === 'done') {
+        const nx = cx + aim * boardR;
+        ctx.strokeStyle = '#f4ecd8';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(nx, cy - boardR - 14);
+        ctx.lineTo(nx, cy + boardR + 14);
+        ctx.stroke();
+      }
+
+      // power meter
+      const barX = cx - 100, barY = 400, barW = 200, barH = 18;
+      ctx.strokeStyle = '#f4ecd8';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(barX, barY, barW, barH);
+      const shownPower = phase === 'power' ? power : lockedPower;
+      ctx.fillStyle = '#e0a030';
+      ctx.fillRect(barX + 2, barY + 2, (barW - 4) * shownPower, barH - 4);
+      ctx.fillStyle = '#9a90a8';
+      ctx.font = '11px monospace';
+      ctx.fillText('POWER', cx, barY - 8);
+
+      ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
+      ctx.font = 'bold 14px monospace';
+      if (phase === 'power') ctx.fillText('- TAP E TO SET POWER -', cx, 452);
+      else if (phase === 'aim') ctx.fillText('- TAP E TO THROW -', cx, 452);
+      else if (phase === 'result') ctx.fillText(lastScoreLabel, cx, 452);
+      else if (phase === 'done') ctx.fillText(`FINAL SCORE: ${score} - PRESS E TO LEAVE`, cx, 452);
+
+      ctx.fillStyle = '#6a6070';
+      ctx.font = '10px monospace';
+      ctx.fillText('X to walk away anytime', cx, 476);
+    },
+  };
+}
+
 window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k) || k === ' ') e.preventDefault();
@@ -1038,6 +1188,11 @@ const shops = {
           'Third Thursdays hit different. See you over there in a bit.',
         ] },
     ],
+    // Dartboard on the back wall -- a quick mini-game break, same
+    // tx/ty-facing pattern as npcs above.
+    minigames: [
+      { id: 'darts', tx: 11, ty: 4, label: 'PLAY DARTS' },
+    ],
   }),
   juniors: makeShop('juniors', {
     floor: '#c8a898', plank: '#b89888', wallColor: '#e8d8c8',
@@ -1137,7 +1292,7 @@ const player = {
   tempItem: null, tempItemTimer: 0,
 };
 const collected = new Set();
-let state = 'splash'; // splash | title | digChoice | slotChoose | select | play | dialog | record | win | portal | fifa
+let state = 'splash'; // splash | title | digChoice | slotChoose | select | play | dialog | record | win | portal | fifa | minigame
 let dialog = null;   // { name, lines, i }
 let shownRecord = null;
 let activePortal = null; // { x, y } tile the player walked into to open the portal popup
@@ -1675,6 +1830,10 @@ function facingTarget() {
       const ns = map.newsstands.find(n => n.tx === tx && n.ty === ty);
       if (ns) return { type: 'newspaper', data: ns };
     }
+    if (map.minigames) {
+      const mg = map.minigames.find(m => m.tx === tx && m.ty === ty);
+      if (mg) return { type: 'minigame', data: mg };
+    }
   }
   const cart = VENDOR_CARTS.find(c => c.map === player.map &&
     Math.hypot(player.x - c.x, player.y - c.y) < c.radius);
@@ -1729,6 +1888,8 @@ function doInteract() {
     const story = VERMONT_NEWS[Math.floor(Math.random() * VERMONT_NEWS.length)];
     dialog = { name: VERMONT_NEWS_PAPER, lines: [story.headline, story.body], i: 0 };
     state = 'dialog';
+  } else if (target.type === 'minigame') {
+    if (target.data.id === 'darts') enterMinigame(createDartsGame());
   }
 }
 
@@ -2268,6 +2429,8 @@ function update(dt) {
     if (performance.now() - fifaStartTime >= 5000) {
       state = fifaReturnState;
     }
+  } else if (state === 'minigame') {
+    if (activeMinigame) activeMinigame.update(dt);
   }
   interactPressed = false;
   buyPressed = false;
@@ -2386,6 +2549,7 @@ function render(time) {
   if (state === 'win') drawWin();
   if (state === 'portal') drawPortalPopup();
   if (state === 'fifa') drawFifaPopup();
+  if (state === 'minigame' && activeMinigame) activeMinigame.draw();
   if (toast) drawToast();
 }
 
@@ -6538,6 +6702,29 @@ function drawBench(x, y, w) {
   ctx.fillRect(x + w - 6, y, 4, 12);
 }
 
+// Small wall-mounted dartboard, drawn with the same ring colors as
+// createDartsGame() so the mini-game feels like the same object.
+function drawDartboardDecoration(x, y) {
+  const r = 13;
+  const rings = [
+    { f: 1.0,  color: '#241a2a' },
+    { f: 0.78, color: '#3a2840' },
+    { f: 0.55, color: '#c04070' },
+    { f: 0.32, color: '#e0a030' },
+    { f: 0.12, color: '#f4ecd8' },
+  ];
+  ctx.fillStyle = '#4a3018';
+  ctx.beginPath();
+  ctx.arc(x, y, r + 3, 0, Math.PI * 2);
+  ctx.fill();
+  for (const ring of rings) {
+    ctx.beginPath();
+    ctx.arc(x, y, r * ring.f, 0, Math.PI * 2);
+    ctx.fillStyle = ring.color;
+    ctx.fill();
+  }
+}
+
 function drawNectarsInterior(time) {
   // Dark rock club atmosphere with stage, bar, and gravy fries station
 
@@ -6590,6 +6777,10 @@ function drawNectarsInterior(time) {
   ctx.fillStyle = 'rgba(200,220,240,0.4)';
   ctx.fillRect(barX + 8, barY + 10, 6, 8);
   ctx.fillRect(barX + 18, barY + 10, 6, 8);
+
+  // Dartboard on the back wall -- lines up with the 'darts' entry in
+  // this map's `minigames` list (tx:11, ty:4)
+  drawDartboardDecoration(11 * TILE + TILE / 2, 4 * TILE + TILE / 2);
   
   // Gravy Fries station sign (right side)
   const signX = 10 * TILE;
