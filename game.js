@@ -3068,10 +3068,27 @@ function drawBuildings(map) {
     const isComedyClub = b.name === 'VT COMEDY CLUB';
     const isDeli = b.name === 'Kountry Kart Deli';
 
+    // wall/roof shade colors: each building's wall/roof color never changes,
+    // so compute these once per building and cache them on the building
+    // object instead of re-parsing hex + re-building strings in shadeColor()
+    // for every building, every single frame. drawBuildings only runs for
+    // outdoor maps, so this churn was pure GC pressure sitting on exactly
+    // the main thread the music scheduler needs to stay on time (see the
+    // LOOKAHEAD comment on the `music` object) — and it scaled with the
+    // number of buildings on screen, which is why it only ever showed up
+    // outside, never indoors.
+    if (!b._shades) {
+      b._shades = {
+        wallDark: shadeColor(b.wall, -30),
+        wallLight: shadeColor(b.wall, 18),
+        roofDark: shadeColor(b.roof, -35),
+        roofLight: shadeColor(b.roof, 25),
+      };
+    }
     // wall: outline, base fill, side shading bands, and a darker foundation
     // strip along the bottom — same layered look as the keeper sprites.
-    const wallDark = shadeColor(b.wall, -30);
-    const wallLight = shadeColor(b.wall, 18);
+    const wallDark = b._shades.wallDark;
+    const wallLight = b._shades.wallLight;
     ctx.fillStyle = '#1c140f';
     ctx.fillRect(px - 1, py - 1, w + 2, h + 2);
     ctx.fillStyle = b.wall;
@@ -3104,8 +3121,8 @@ function drawBuildings(map) {
       ctx.fillRect(px + w - 10, py + 48, 5, 18);
     }
 
-    const roofDark = shadeColor(b.roof, -35);
-    const roofLight = shadeColor(b.roof, 25);
+    const roofDark = b._shades.roofDark;
+    const roofLight = b._shades.roofLight;
     ctx.fillStyle = '#1c140f';
     ctx.fillRect(px - 1, py - 1, w + 2, TILE + 10);
     ctx.fillStyle = b.roof;
