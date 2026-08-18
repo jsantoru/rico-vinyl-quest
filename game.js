@@ -1001,8 +1001,6 @@ const shops = {
       foundLine: 'Ha — that\'s a good one. I\'d write it down, but ghosts don\'t carry pens. Or pockets. Or hands, really.' },
     crates: [ { comedySeed: 0 } ],
     comedyClub: true,
-    // A standee cow — the club's mascot — parked in the bottom-left corner.
-    cowTile: [1, 8],
     // Waiting on the corner stool for his set — sharp, skeptical,
     // no-patience-for-nonsense energy. A cigarette he never quite lights.
     npcs: [
@@ -1448,7 +1446,6 @@ function doInteract() {
     state = 'dialog';
   } else if (target.type === 'filingCabinets') {
     dialog = { name: 'FILING CABINETS', lines: [
-      'A lopsided tower of filing cabinets, every drawer a different color, stacked four high right up against the tree line.',
       'Of course the files you actually need are jammed in the very top drawer.',
       'No ladder. No stairs. Not even a stray milk crate to stand on. How is anybody supposed to get up there?',
       'You circle the whole stack twice and come away no closer to an answer.'
@@ -5460,6 +5457,10 @@ function drawComedyClubInterior(time) {
     ctx.fillStyle = '#8a5a30';
   });
 
+  // the club's cow mascot standee, perched up on top of the far-left
+  // stool rather than parked on the floor
+  drawCow(4 * TILE - 16, 7 * TILE - 34);
+
   // "COMEDY NIGHT" marquee lettering above the stage
   ctx.fillStyle = '#e0b040';
   ctx.font = 'bold 15px monospace';
@@ -5709,64 +5710,43 @@ function drawHeyBudPoster(x, y) {
   ctx.fillText('99', x + pw / 2, y + ph * 0.62);
 }
 
-// A big hand-painted "99" poster — a sheet of paper pinned to the wall
-// with a giant, roller-painted "99" filling almost the entire sheet, nap
-// texture and drips included. Purely original pixel art, not a real logo.
-function drawRollerNinetyNinePoster(x, y, w, h) {
+// A giant neon-pink "99" sign glowing on the wall — dark backing, thick
+// tubes of hot-pink light with a soft bloom, like a bar's neon marquee.
+// Purely original pixel art, not a real logo/brand.
+function drawNeonNinetyNinePoster(x, y, w, h) {
   ctx.save();
 
-  // slightly weathered paper backing, pinned up at the corners
-  ctx.fillStyle = '#efe6cf';
+  // dark backing panel so the glow reads clearly
+  ctx.fillStyle = '#120e18';
   ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = '#c8bc9c';
+  ctx.strokeStyle = '#2a2032';
   ctx.lineWidth = 1;
   ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-  ctx.fillStyle = '#8a3838';
-  ctx.beginPath(); ctx.arc(x + 5, y + 5, 2, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x + w - 5, y + 5, 2, 0, Math.PI * 2); ctx.fill();
 
-  // giant "99" sized to fill nearly the whole sheet
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = `900 ${Math.floor(h * 0.82)}px Impact, "Arial Black", sans-serif`;
+  ctx.font = `900 ${Math.floor(h * 0.72)}px Impact, "Arial Black", sans-serif`;
   const cx = x + w / 2, cy = y + h / 2 + h * 0.02;
 
-  // a couple of slightly offset base passes, like an uneven first roller
-  // coat that didn't line up perfectly
-  ctx.fillStyle = '#d9481f';
-  ctx.fillText('99', cx - 1, cy + 1);
-  ctx.fillStyle = '#c93f19';
+  // layered soft bloom passes, widest/dimmest first, building up to a
+  // bright hot-pink core — the classic neon-glow trick
+  const glowLayers = [
+    { blur: 22, alpha: 0.30 },
+    { blur: 14, alpha: 0.45 },
+    { blur: 7,  alpha: 0.75 },
+  ];
+  for (const g of glowLayers) {
+    ctx.shadowColor = '#ff2ea6';
+    ctx.shadowBlur = g.blur;
+    ctx.fillStyle = `rgba(255,46,166,${g.alpha})`;
+    ctx.fillText('99', cx, cy);
+  }
+  // bright white-hot tube core so it doesn't read muddy
+  ctx.shadowColor = '#ff8ecb';
+  ctx.shadowBlur = 4;
+  ctx.fillStyle = '#ffe6f4';
   ctx.fillText('99', cx, cy);
-
-  // roller-nap streak texture, masked to just the painted glyph via
-  // source-atop so the streaks never spill onto the paper around it
-  ctx.globalCompositeOperation = 'source-atop';
-  for (let i = 0; i < 12; i++) {
-    const sy = y + (i / 12) * h;
-    ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.14)';
-    ctx.fillRect(x, sy, w, 2 + (i % 3));
-  }
-  ctx.strokeStyle = 'rgba(255,210,160,0.2)';
-  ctx.lineWidth = 3;
-  for (let i = 0; i < 4; i++) {
-    ctx.beginPath();
-    ctx.moveTo(x - 10, y + i * (h / 4));
-    ctx.lineTo(x + w + 10, y + i * (h / 4) - h * 0.18);
-    ctx.stroke();
-  }
-  ctx.globalCompositeOperation = 'source-over';
-
-  // paint drips running down off the bottoms of the numerals
-  ctx.strokeStyle = '#c93f19';
-  ctx.lineWidth = 2;
-  [0.2, 0.38, 0.62, 0.8].forEach((f, i) => {
-    const dx = x + w * f;
-    const dripLen = 5 + (i % 3) * 4;
-    ctx.beginPath();
-    ctx.moveTo(dx, y + h * 0.88);
-    ctx.lineTo(dx + (i % 2 ? 1 : -1), y + h * 0.88 + dripLen);
-    ctx.stroke();
-  });
+  ctx.shadowBlur = 0;
 
   ctx.restore();
 }
@@ -5815,6 +5795,125 @@ function drawStreetArtPrint(x, y, w, h, style) {
   }
 }
 
+// A glass display case up on legs, showing off a couple of prized exotic
+// specimens on a lit shelf — the shop's rare-plant centerpiece.
+function drawGlassPlantCase(x, y, w, h) {
+  ctx.save();
+
+  // wooden base/legs
+  const legY = y + h;
+  ctx.fillStyle = '#5a3d22';
+  ctx.fillRect(x + 4, legY, 5, 10);
+  ctx.fillRect(x + w - 9, legY, 5, 10);
+  ctx.fillStyle = '#4a3018';
+  ctx.fillRect(x, legY - 4, w, 6);
+
+  // metal frame
+  ctx.strokeStyle = '#8a8e92';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+
+  // glass panes — a cool, faintly luminous tint with a soft inner glow
+  ctx.fillStyle = 'rgba(170,215,225,0.22)';
+  ctx.fillRect(x + 2, y + 2, w - 4, h - 4);
+  ctx.fillStyle = 'rgba(140,240,200,0.08)';
+  ctx.fillRect(x + 2, y + 2, w - 4, h - 4);
+
+  // interior shelf, a third of the way up from the base
+  const shelfY = y + h * 0.62;
+  ctx.fillStyle = 'rgba(90,70,50,0.85)';
+  ctx.fillRect(x + 3, shelfY, w - 6, 3);
+
+  // a couple of prized exotic specimens sitting on the shelf, each a
+  // different jungle color so they read as rare/collectible
+  const specimens = [
+    { fx: 0.28, color: '#d94f9a', color2: '#3fa8d4' }, // pink & blue variegated
+    { fx: 0.68, color: '#e0483c', color2: '#2f8a44' }, // red anthurium-style
+  ];
+  specimens.forEach((s) => {
+    const px = x + w * s.fx, py = shelfY;
+    ctx.fillStyle = '#8a5a30';
+    ctx.fillRect(px - 5, py - 8, 10, 8);
+    ctx.fillStyle = s.color2;
+    ctx.beginPath(); ctx.ellipse(px - 3, py - 14, 5, 8, -0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(px + 4, py - 16, 4, 7, 0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = s.color;
+    ctx.beginPath(); ctx.ellipse(px, py - 20, 4, 7, 0, 0, Math.PI * 2); ctx.fill();
+  });
+
+  // glass highlight streak, diagonal
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.beginPath();
+  ctx.moveTo(x + 4, y + h - 4);
+  ctx.lineTo(x + w * 0.35, y + 4);
+  ctx.lineTo(x + w * 0.48, y + 4);
+  ctx.lineTo(x + w * 0.18, y + h - 4);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+// A small rack of hoodies hanging from a rod, tucked next to the shelf.
+function drawHoodieRack(x, y) {
+  const w = 46;
+  ctx.strokeStyle = '#6a5a44';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + w, y); ctx.stroke();
+
+  const hoodieColors = ['#3a4a6a', '#8a2a2a', '#2f6a44'];
+  hoodieColors.forEach((c, i) => {
+    const hx = x + 6 + i * 16;
+    // hanger
+    ctx.strokeStyle = '#9a9a9e';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(hx, y);
+    ctx.lineTo(hx - 3, y + 4);
+    ctx.lineTo(hx + 3, y + 4);
+    ctx.closePath();
+    ctx.stroke();
+    // body
+    ctx.fillStyle = c;
+    ctx.fillRect(hx - 7, y + 4, 14, 18);
+    // hood
+    ctx.beginPath();
+    ctx.ellipse(hx, y + 5, 6, 4, 0, 0, Math.PI, true);
+    ctx.fill();
+    // sleeves flaring out
+    ctx.fillRect(hx - 11, y + 5, 4, 11);
+    ctx.fillRect(hx + 7, y + 5, 4, 11);
+    // drawstrings
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(hx - 2, y + 6, 1, 6);
+    ctx.fillRect(hx + 1, y + 6, 1, 6);
+    // front pocket
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.fillRect(hx - 5, y + 15, 10, 5);
+  });
+}
+
+// A cascading vine trailing down from a ceiling corner, thick with
+// leaves — part of the "overflowing" jungle-shop dressing. dir flips it
+// to hang from the left or right corner.
+function drawVineCorner(x, y, dir, time, seed) {
+  const sway = Math.sin(time * 0.8 + seed) * 3;
+  ctx.strokeStyle = '#3f7a3f';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.quadraticCurveTo(x + dir * 14, y + 26, x + dir * 6 + sway, y + 52);
+  ctx.stroke();
+  const leafSpots = [10, 22, 34, 46];
+  leafSpots.forEach((dy, i) => {
+    const lx = x + dir * (10 + (i % 2) * 4) + sway * (dy / 52);
+    ctx.fillStyle = i % 2 === 0 ? '#4f9a52' : '#5fb862';
+    ctx.beginPath();
+    ctx.ellipse(lx, y + dy, 6, 3, dir * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
 function drawHeyBudInterior(time) {
   // Exotic-plant-shop redesign: hanging macrame planters up top, big
   // tropical potted plants flanking the entrance, a wooden shelf stocked
@@ -5843,15 +5942,31 @@ function drawHeyBudInterior(time) {
     }
   });
 
-  // --- big tropical potted plants flanking the doorway ---
+  // --- big tropical potted plants flanking the doorway, spilling well
+  // past their pots so the greenery reads as overflowing the space ---
   [[4 * TILE, 8 * TILE + 10], [9 * TILE, 8 * TILE + 10]].forEach(([bx, by]) => {
     drawPlantPot(bx, by);
     ctx.fillStyle = '#3f8a44';
-    ctx.beginPath(); ctx.ellipse(bx + 6, by - 22, 10, 5, 0.6, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(bx + 6, by - 30, 9, 4, -0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bx + 6, by - 22, 12, 6, 0.6, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bx + 6, by - 32, 11, 5, -0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bx - 4, by - 16, 9, 4.5, 1.0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#57a85c';
-    ctx.beginPath(); ctx.ellipse(bx + 2, by - 26, 7, 3.5, 0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bx + 2, by - 26, 8, 4, 0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bx + 14, by - 18, 7, 3.5, -0.3, 0, Math.PI * 2); ctx.fill();
   });
+
+  // --- extra floor greenery tucked along the front wall, so plants read
+  // as overflowing the whole shop rather than just flanking the door ---
+  [[1 * TILE + 6, 7 * TILE + 20], [12 * TILE + 6, 6 * TILE + 22]].forEach(([bx, by]) => {
+    drawPlantPot(bx, by);
+    ctx.fillStyle = '#4f9a52';
+    ctx.beginPath(); ctx.ellipse(bx + 6, by - 20, 8, 4, 0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bx + 2, by - 27, 6, 3, -0.4, 0, Math.PI * 2); ctx.fill();
+  });
+
+  // --- cascading vines trailing down from both ceiling corners ---
+  drawVineCorner(1 * TILE, 0, 1, time, 0.5);
+  drawVineCorner(13 * TILE, 0, -1, time, 1.8);
 
   // --- wooden shelving unit: books up top, folded tees on the lower shelf ---
   const shelfX = 2 * TILE, shelfY = 5 * TILE, shelfW = 2 * TILE + 12, shelfH = 2 * TILE - 4;
@@ -5879,16 +5994,120 @@ function drawHeyBudInterior(time) {
     tly += 8;
   });
 
+  // --- hoodie rack, hanging right beside the shelf ---
+  drawHoodieRack(shelfX + shelfW + 8, shelfY + 6);
+
   // --- street-art prints on the right-hand wall ---
   drawStreetArtPrint(10 * TILE + 4, 5 * TILE + 6, 26, 30, 1);
   drawStreetArtPrint(10 * TILE + 4, 6 * TILE + 10, 26, 26, 2);
 
+  // --- glass display case of prized exotic specimens, on the floor below
+  // the street-art wall ---
+  drawGlassPlantCase(10 * TILE, 7 * TILE + 2, 3 * TILE, 2 * TILE - 10);
+
   // --- the "99" Vermont poster, front and center behind the counter ---
   drawHeyBudPoster(9 * TILE + 2, 1 * TILE + 2);
 
-  // --- a second, bigger roller-painted "99" poster, filling the open wall
-  // gap between the two hanging planters above the shelf ---
-  drawRollerNinetyNinePoster(98, 34, 60, 58);
+  // --- a giant glowing neon-pink "99" sign, filling the open wall gap
+  // between the two hanging planters above the shelf ---
+  drawNeonNinetyNinePoster(98, 34, 60, 58);
+}
+
+// A wire newsstand rack, angled shelves stacked with colorful magazine
+// covers — the top shelf's front copy is the local alt-weekly, "SEVEN
+// DAYS", with a bold readable masthead. Purely original pixel art, not a
+// real logo/brand.
+function drawMagazineRack(x, y) {
+  const w = 42, h = 74;
+
+  // wire frame stand — a simple A-frame of angled metal rods
+  ctx.strokeStyle = '#8a8e92';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.lineTo(x + 4, y);
+  ctx.lineTo(x + w - 4, y);
+  ctx.lineTo(x + w, y + h);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x - 3, y + h + 4);
+  ctx.lineTo(x + w + 3, y + h + 4);
+  ctx.stroke();
+
+  // three angled wire shelves, each cradling a little fan of magazines
+  const shelves = [
+    { sy: y + 6,  sw: w - 10, mh: 22 },
+    { sy: y + 30, sw: w - 4,  mh: 24 },
+    { sy: y + 54, sw: w,      mh: 26 },
+  ];
+  const deckColors = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#e0a030', '#d94f9a'];
+  let colorIdx = 0;
+
+  shelves.forEach((shelf, si) => {
+    // wire ledge
+    ctx.strokeStyle = '#9a9ea2';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x + (w - shelf.sw) / 2, shelf.sy + shelf.mh + 2);
+    ctx.lineTo(x + (w - shelf.sw) / 2 + shelf.sw, shelf.sy + shelf.mh + 2);
+    ctx.stroke();
+
+    const magCount = si === 0 ? 2 : 3;
+    const magW = shelf.sw / magCount;
+    for (let j = 0; j < magCount; j++) {
+      const mx = x + (w - shelf.sw) / 2 + j * magW;
+      const lean = (j - (magCount - 1) / 2) * 2;
+      ctx.save();
+      ctx.translate(mx + magW / 2, shelf.sy + shelf.mh);
+      ctx.rotate(lean * 0.03);
+
+      // the top shelf's front-most copy is always the "SEVEN DAYS" issue
+      if (si === 0 && j === magCount - 1) {
+        drawSevenDaysCover(-magW * 0.42, -shelf.mh, magW * 0.84, shelf.mh);
+      } else {
+        const c = deckColors[colorIdx % deckColors.length];
+        colorIdx++;
+        ctx.fillStyle = c;
+        ctx.fillRect(-magW * 0.42, -shelf.mh, magW * 0.84, shelf.mh);
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(-magW * 0.42, -shelf.mh, magW * 0.84, shelf.mh);
+        // a couple of faint horizontal "text" bars so it reads as a cover
+        ctx.fillStyle = 'rgba(255,255,255,0.35)';
+        ctx.fillRect(-magW * 0.3, -shelf.mh + 4, magW * 0.6, 2);
+        ctx.fillRect(-magW * 0.3, -shelf.mh + 8, magW * 0.4, 2);
+      }
+      ctx.restore();
+    }
+  });
+}
+
+// A single "SEVEN DAYS" magazine cover — cream stock, a bold red masthead
+// banner across the top, and a couple of thin "headline" bars below it.
+function drawSevenDaysCover(x, y, w, h) {
+  ctx.fillStyle = '#f4ecd8';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, w, h);
+
+  // masthead banner
+  const bannerH = h * 0.34;
+  ctx.fillStyle = '#c0392b';
+  ctx.fillRect(x, y, w, bannerH);
+  ctx.fillStyle = '#f4ecd8';
+  ctx.font = `900 ${Math.max(3, Math.floor(w * 0.19))}px Impact, "Arial Black", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('SEVEN', x + w / 2, y + bannerH * 0.32);
+  ctx.fillText('DAYS', x + w / 2, y + bannerH * 0.75);
+
+  // a small photo block and a couple of headline bars filling the rest
+  ctx.fillStyle = '#8fa8b8';
+  ctx.fillRect(x + w * 0.12, y + bannerH + 2, w * 0.76, h * 0.36);
+  ctx.fillStyle = 'rgba(30,30,30,0.55)';
+  ctx.fillRect(x + w * 0.14, y + h * 0.82, w * 0.72, h * 0.06);
+  ctx.fillRect(x + w * 0.14, y + h * 0.90, w * 0.5, h * 0.06);
 }
 
 function drawHenrysInterior(time) {
@@ -5955,6 +6174,11 @@ function drawHenrysInterior(time) {
   ctx.textAlign = 'center';
   ctx.fillText("HENRY'S", 6.5 * TILE, 1 * TILE + 4);
 
+  // magazine rack, tucked along the open wall between the counter and
+  // the coffee-klatch table, stocked with covers — the local weekly,
+  // "SEVEN DAYS", is the front-facing copy up top
+  drawMagazineRack(1 * TILE + 6, 4 * TILE + 2);
+
   // jukebox in the corner, red & chrome
   const jbX = 11.3 * TILE, jbY = 6 * TILE;
   ctx.fillStyle = '#7a2018';
@@ -6018,9 +6242,9 @@ function drawBench(x, y, w) {
 function drawNectarsInterior(time) {
   // Dark rock club atmosphere with stage, bar, and gravy fries station
 
-  // "METAL MONDAY" flyer, up on the open wall to the right, above the
+  // "MI YARD" banner, up on the open wall to the right, above the
   // Gravy Fries station and clear of the stage below it
-  drawMetalMondayPoster(9 * TILE + 6, 1 * TILE + 2, 66, 56);
+  drawMiYardBanner(9 * TILE + 6, 1 * TILE + 2, 66, 56);
   
   // Stage area (top center with small platform)
   const stageX = 5 * TILE;
@@ -6139,61 +6363,98 @@ function drawNectarsInterior(time) {
   }
 }
 
-// A dark, spiky flyer advertising Nectar's weekly "METAL MONDAY" night —
-// jagged torn-edge top, a lightning bolt through the middle, hung on the
-// club wall. Purely original pixel art, not a real logo/brand.
-function drawMetalMondayPoster(x, y, w, h) {
+// A "MI YARD" reggae banner hung on Nectar's club wall — red/gold/green
+// backing, a simple pixel-art lion face up top, bold text underneath.
+// Purely original pixel art, not a real logo/brand.
+function drawMiYardBanner(x, y, w, h) {
   ctx.save();
 
-  // dark poster backing with a thin violet border
-  ctx.fillStyle = '#15101a';
+  // dark backing with a gold border
+  ctx.fillStyle = '#0e1c0e';
   ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = '#4a2a5a';
+  ctx.strokeStyle = '#e0b040';
   ctx.lineWidth = 1.5;
   ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
 
-  // jagged torn-paper spikes along the top edge
-  ctx.fillStyle = '#8a2040';
-  const spikes = 6;
-  for (let i = 0; i < spikes; i++) {
-    const sx0 = x + (i * w) / spikes;
+  // red / gold / green stripe across the top edge, reggae flag colors
+  const stripeH = Math.max(2, h * 0.06);
+  ctx.fillStyle = '#c02a2a';
+  ctx.fillRect(x, y, w / 3, stripeH);
+  ctx.fillStyle = '#e0b040';
+  ctx.fillRect(x + w / 3, y, w / 3, stripeH);
+  ctx.fillStyle = '#2a7a3a';
+  ctx.fillRect(x + (2 * w) / 3, y, w - (2 * w) / 3, stripeH);
+
+  // lion face, centered in the upper portion of the banner
+  const cx = x + w / 2, cy = y + h * 0.4, faceR = h * 0.2;
+
+  // mane: a ring of jagged triangular tufts alternating gold/rust
+  const tufts = 14;
+  for (let i = 0; i < tufts; i++) {
+    const a = (i / tufts) * Math.PI * 2;
+    const inner = faceR * 0.85;
+    const outer = faceR * (i % 2 === 0 ? 1.55 : 1.35);
+    const a0 = a - Math.PI / tufts * 0.5;
+    const a1 = a + Math.PI / tufts * 0.5;
+    ctx.fillStyle = i % 2 === 0 ? '#c07a20' : '#8a4a18';
     ctx.beginPath();
-    ctx.moveTo(sx0, y);
-    ctx.lineTo(sx0 + w / (spikes * 2), y - 5);
-    ctx.lineTo(sx0 + w / spikes, y);
+    ctx.moveTo(cx + Math.cos(a0) * inner, cy + Math.sin(a0) * inner);
+    ctx.lineTo(cx + Math.cos(a) * outer, cy + Math.sin(a) * outer);
+    ctx.lineTo(cx + Math.cos(a1) * inner, cy + Math.sin(a1) * inner);
     ctx.closePath();
     ctx.fill();
   }
 
-  // lightning bolt through the middle
-  ctx.fillStyle = '#e0b040';
+  // face
+  ctx.fillStyle = '#e8b878';
   ctx.beginPath();
-  ctx.moveTo(x + w * 0.54, y + h * 0.34);
-  ctx.lineTo(x + w * 0.40, y + h * 0.58);
-  ctx.lineTo(x + w * 0.49, y + h * 0.58);
-  ctx.lineTo(x + w * 0.38, y + h * 0.82);
-  ctx.lineTo(x + w * 0.63, y + h * 0.52);
-  ctx.lineTo(x + w * 0.53, y + h * 0.52);
-  ctx.lineTo(x + w * 0.62, y + h * 0.34);
+  ctx.arc(cx, cy, faceR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // eyes
+  ctx.fillStyle = '#1a140c';
+  ctx.beginPath();
+  ctx.ellipse(cx - faceR * 0.35, cy - faceR * 0.1, faceR * 0.14, faceR * 0.1, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx + faceR * 0.35, cy - faceR * 0.1, faceR * 0.14, faceR * 0.1, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // muzzle
+  ctx.fillStyle = '#f4dcae';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + faceR * 0.35, faceR * 0.45, faceR * 0.3, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // nose
+  ctx.fillStyle = '#1a140c';
+  ctx.beginPath();
+  ctx.moveTo(cx - faceR * 0.14, cy + faceR * 0.2);
+  ctx.lineTo(cx + faceR * 0.14, cy + faceR * 0.2);
+  ctx.lineTo(cx, cy + faceR * 0.34);
   ctx.closePath();
   ctx.fill();
 
-  // "METAL" up top, spiky and bold
-  ctx.textAlign = 'center';
-  ctx.font = `900 ${Math.floor(w * 0.22)}px Impact, "Arial Black", sans-serif`;
-  ctx.strokeStyle = '#8a2040';
-  ctx.lineWidth = 2;
-  ctx.strokeText('METAL', x + w / 2, y + h * 0.28);
-  ctx.fillStyle = '#f4ecd8';
-  ctx.fillText('METAL', x + w / 2, y + h * 0.28);
+  // mouth
+  ctx.strokeStyle = '#1a140c';
+  ctx.lineWidth = Math.max(1, faceR * 0.06);
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + faceR * 0.34);
+  ctx.lineTo(cx, cy + faceR * 0.48);
+  ctx.moveTo(cx, cy + faceR * 0.48);
+  ctx.quadraticCurveTo(cx - faceR * 0.22, cy + faceR * 0.6, cx - faceR * 0.4, cy + faceR * 0.5);
+  ctx.moveTo(cx, cy + faceR * 0.48);
+  ctx.quadraticCurveTo(cx + faceR * 0.22, cy + faceR * 0.6, cx + faceR * 0.4, cy + faceR * 0.5);
+  ctx.stroke();
 
-  // "MONDAY" underneath, smaller
-  ctx.font = `900 ${Math.floor(w * 0.16)}px Impact, "Arial Black", sans-serif`;
-  ctx.strokeStyle = '#8a2040';
-  ctx.lineWidth = 1.5;
-  ctx.strokeText('MONDAY', x + w / 2, y + h * 0.95);
-  ctx.fillStyle = '#f4ecd8';
-  ctx.fillText('MONDAY', x + w / 2, y + h * 0.95);
+  // "MI YARD" underneath, bold with a dark outline
+  ctx.textAlign = 'center';
+  ctx.font = `900 ${Math.floor(w * 0.19)}px Impact, "Arial Black", sans-serif`;
+  ctx.strokeStyle = '#1a140c';
+  ctx.lineWidth = 2;
+  ctx.strokeText('MI YARD', x + w / 2, y + h * 0.93);
+  ctx.fillStyle = '#e0b040';
+  ctx.fillText('MI YARD', x + w / 2, y + h * 0.93);
 
   ctx.restore();
 }
