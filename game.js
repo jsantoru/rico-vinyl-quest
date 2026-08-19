@@ -341,6 +341,7 @@ function exitMinigame() {
 const MINIGAME_ACTIONS = {
   darts: () => enterMinigame(createDartsGame()),
   beatmatch: () => enterMinigame(createBeatMatchGame()),
+  whackpigeon: () => enterMinigame(createWhackPigeonGame()),
 };
 
 // Darts: a two-tap power/accuracy throw, same trick classic golf games use.
@@ -564,6 +565,174 @@ function createBeatMatchGame() {
       ctx.fillStyle = '#6a6070';
       ctx.font = '10px monospace';
       ctx.fillText('X to walk away anytime', VIEW_W / 2, 384);
+    },
+  };
+}
+
+// Whack-a-Pigeon: a pigeon pops up in one of six holes in the church's
+// choir-loft ledge and lingers for a shrinking window; tap E while it's up
+// to whack it, scored by reaction speed (same PERFECT/GOOD/OK banding as
+// Beat Match). Miss the window and it flies off with nothing. Same
+// single-action contract as darts/beatmatch (E to act, X to bail anytime),
+// same dark-overlay/monospace look, same round-based scoring-then-auto-exit
+// shape. Canvas primitives only -- no images, no new assets.
+function createWhackPigeonGame() {
+  const ROUNDS = 8;
+  let phase = 'up';          // 'up' | 'result' | 'done'
+  let round = 1;
+  let score = 0;
+  let combo = 0;
+  let lastHitLabel = '';
+  let resultTimer = 0;
+  let upTimer = 0;
+  let upWindow = 1.1;        // seconds the pigeon stays up; shrinks each round
+  let holeIndex = 0;
+  let flapT = 0;             // local anim clock for the pigeon bob/flap
+
+  const cx = VIEW_W / 2;
+  const HOLES = [
+    { x: cx - 90, y: 250 }, { x: cx, y: 250 }, { x: cx + 90, y: 250 },
+    { x: cx - 90, y: 330 }, { x: cx, y: 330 }, { x: cx + 90, y: 330 },
+  ];
+  const holeRX = 34, holeRY = 16;
+
+  function pickHole() {
+    let next = Math.floor(Math.random() * HOLES.length);
+    if (HOLES.length > 1 && next === holeIndex) next = (next + 1) % HOLES.length;
+    return next;
+  }
+  holeIndex = pickHole();
+
+  function hitFor(frac) {
+    if (frac <= 0.35) return { label: 'PERFECT!', pts: 50 };
+    if (frac <= 0.65) return { label: 'GOOD', pts: 25 };
+    return { label: 'OK', pts: 10 };
+  }
+
+  function drawPigeon(x, y, bob) {
+    // body
+    ctx.fillStyle = '#8a8a94';
+    ctx.beginPath();
+    ctx.ellipse(x, y + bob, 20, 16, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // head
+    ctx.fillStyle = '#a8a8b2';
+    ctx.beginPath();
+    ctx.arc(x - 14, y + bob - 10, 9, 0, Math.PI * 2);
+    ctx.fill();
+    // beak
+    ctx.fillStyle = '#e0a030';
+    ctx.beginPath();
+    ctx.moveTo(x - 22, y + bob - 10);
+    ctx.lineTo(x - 30, y + bob - 7);
+    ctx.lineTo(x - 22, y + bob - 5);
+    ctx.closePath();
+    ctx.fill();
+    // eye
+    ctx.fillStyle = '#181418';
+    ctx.beginPath();
+    ctx.arc(x - 16, y + bob - 12, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+    // wing, flapping
+    const wingLift = Math.sin(flapT * 14) * 6;
+    ctx.fillStyle = '#6a6a76';
+    ctx.beginPath();
+    ctx.ellipse(x + 4, y + bob - wingLift, 12, 8, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    // chest highlight
+    ctx.fillStyle = '#d8c890';
+    ctx.beginPath();
+    ctx.ellipse(x - 6, y + bob + 4, 8, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  return {
+    update(dt) {
+      flapT += dt;
+      if (phase === 'up') {
+        upTimer += dt;
+        if (interactPressed) {
+          const res = hitFor(upTimer / upWindow);
+          score += res.pts;
+          combo++;
+          lastHitLabel = res.label;
+          phase = 'result';
+          resultTimer = 0.6;
+        } else if (upTimer >= upWindow) {
+          lastHitLabel = 'FLEW OFF!';
+          combo = 0;
+          phase = 'result';
+          resultTimer = 0.6;
+        }
+      } else if (phase === 'result') {
+        resultTimer -= dt;
+        if (resultTimer <= 0) {
+          if (round >= ROUNDS) { phase = 'done'; }
+          else {
+            round++;
+            upWindow = Math.max(0.5, upWindow - 0.07);
+            holeIndex = pickHole();
+            upTimer = 0;
+            phase = 'up';
+          }
+        }
+      } else if (phase === 'done') {
+        if (interactPressed) exitMinigame();
+      }
+      // X always bails out early, no matter the phase
+      if (buyPressed) exitMinigame();
+    },
+    draw() {
+      ctx.fillStyle = 'rgba(8,6,12,0.9)';
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#8cff5f';
+      ctx.font = 'bold 22px monospace';
+      ctx.fillText('WHACK-A-PIGEON', cx, 60);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = '12px monospace';
+      ctx.fillText(`SCORE ${score}   ROUND ${Math.min(round, ROUNDS)}/${ROUNDS}   COMBO x${combo}`, cx, 84);
+
+      // ledge + holes
+      ctx.fillStyle = '#3a2840';
+      ctx.fillRect(cx - 160, 200, 320, 180);
+      ctx.strokeStyle = '#241a2a';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(cx - 160, 200, 320, 180);
+
+      HOLES.forEach((h, i) => {
+        ctx.fillStyle = '#181418';
+        ctx.beginPath();
+        ctx.ellipse(h.x, h.y, holeRX, holeRY, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (i === holeIndex && (phase === 'up' || (phase === 'result' && lastHitLabel !== 'FLEW OFF!'))) {
+          const bob = Math.sin(flapT * 10) * 3;
+          drawPigeon(h.x, h.y - 14, bob);
+        }
+
+        // countdown ring around the active hole while it's up, so players
+        // can gauge how much time is left without needing a number
+        if (i === holeIndex && phase === 'up') {
+          const frac = 1 - upTimer / upWindow;
+          ctx.strokeStyle = frac > 0.35 ? '#8cff5f' : '#e0603a';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.ellipse(h.x, h.y, holeRX + 6, holeRY + 6, 0, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
+          ctx.stroke();
+        }
+      });
+
+      ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#8cff5f' : '#f4ecd8';
+      ctx.font = 'bold 14px monospace';
+      if (phase === 'up') ctx.fillText('- TAP E TO WHACK IT -', cx, 420);
+      else if (phase === 'result') ctx.fillText(lastHitLabel, cx, 420);
+      else if (phase === 'done') ctx.fillText(`FINAL SCORE: ${score} - PRESS E TO LEAVE`, cx, 420);
+
+      ctx.fillStyle = '#6a6070';
+      ctx.font = '10px monospace';
+      ctx.fillText('X to walk away anytime', cx, 444);
     },
   };
 }
@@ -1430,6 +1599,12 @@ const shops = {
         'Big finish: she closes it out on "Thank U," bowing so low her sequined cape nearly hits the floor.',
       ] },
     crates: [ { junkSeed: 3 }, { junkSeed: 7 } ],
+    // Whack-a-Pigeon, tucked into open floor on the right side of the big
+    // top -- clear of the counter table (row 3), the crates against the
+    // left wall, and the carnival props flanking the ring.
+    minigames: [
+      { id: 'whackpigeon', tx: 9, ty: 6, label: 'WHACK-A-PIGEON' },
+    ],
   }),
 };
 
