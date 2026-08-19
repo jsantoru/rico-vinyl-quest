@@ -8289,20 +8289,23 @@ const MENU_POPUP_LAYOUT = {
 function drawMenuPopupBackground(time, title) {
   const { originX, originY, dw, dh } = drawSplashBackground(menuPopupSplashImg, time);
 
-  // blank out the baked-in title text, then draw the one this screen needs
-  const coverY = originY + MENU_POPUP_LAYOUT.titleCoverYFrac * dh;
-  const coverH = MENU_POPUP_LAYOUT.titleCoverHFrac * dh;
-  ctx.fillStyle = '#05111a';
-  ctx.fillRect(originX, coverY, dw, coverH);
-  ctx.textAlign = 'center';
-  ctx.font = 'bold 18px monospace';
-  ctx.fillStyle = '#e0b040';
-  ctx.fillText(title, originX + dw / 2, originY + MENU_POPUP_LAYOUT.titleYFrac * dh);
-
   const boxX = originX + MENU_POPUP_LAYOUT.boxXFrac * dw;
   const boxW = MENU_POPUP_LAYOUT.boxWFrac * dw;
   const boxY = originY + MENU_POPUP_LAYOUT.boxTopFrac * dh;
   const boxH = (MENU_POPUP_LAYOUT.boxBottomFrac - MENU_POPUP_LAYOUT.boxTopFrac) * dh;
+
+  // blank out the baked-in title text, then draw the one this screen needs.
+  // Inset to boxX/boxW (same as the content panel below) so this doesn't
+  // paint over the gold frame border on either side.
+  const coverY = originY + MENU_POPUP_LAYOUT.titleCoverYFrac * dh;
+  const coverH = MENU_POPUP_LAYOUT.titleCoverHFrac * dh;
+  ctx.fillStyle = '#05111a';
+  ctx.fillRect(boxX, coverY, boxW, coverH);
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 18px monospace';
+  ctx.fillStyle = '#e0b040';
+  ctx.fillText(title, boxX + boxW / 2, originY + MENU_POPUP_LAYOUT.titleYFrac * dh);
+
   return { originX, originY, dw, dh, boxX, boxW, boxY, boxH };
 }
 
