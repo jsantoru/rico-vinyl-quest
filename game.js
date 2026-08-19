@@ -767,10 +767,12 @@ titleMenuImg.src = 'assets/menu_title.png';
 // slot-chooser). The row text/highlight/slot data is still drawn live on
 // top each frame -- see drawDigChoice/drawSlotChoose -- so these images
 // mainly supply the frame, logo, and static labels/hints.
-const digChoiceSplashImg = new Image();
-digChoiceSplashImg.src = 'assets/start_splash_1.png';
-const slotChooseSplashImg = new Image();
-slotChooseSplashImg.src = 'assets/start_splash_2.png';
+// Shared frame art for the two title-menu popups (dig-choice and
+// slot-chooser): logo/border/hint baked in, with a blank content panel in
+// the middle that we fill with live title text + rows each frame -- see
+// drawDigChoice/drawSlotChoose.
+const menuPopupSplashImg = new Image();
+menuPopupSplashImg.src = 'assets/start_splash_1v2.png';
 const titleSkyImg = new Image();
 titleSkyImg.src = 'assets/title_sky.png';
 
@@ -8273,83 +8275,87 @@ function drawSplashBackground(img, time) {
   return { originX, originY, dw, dh, scale };
 }
 
-// Row geometry measured directly from start_splash_1.png (as fractions of
-// the art's own width/height) so overlay text/highlight boxes land exactly
-// on top of the baked "START DIGGING" / "CONTINUE DIGGING" rows regardless
-// of how the art gets scaled to fit the view.
-const DIG_CHOICE_LAYOUT = {
-  boxYFrac: [0.5551, 0.6926 - (0.6400 - 0.5551) / 2], // top of the highlight box for each row
-  boxHFrac: 0.6400 - 0.5551,
-  boxXFrac: 0.1169, boxWFrac: 0.8609 - 0.1169,
-  textYFrac: [0.5976, 0.6926],
+// Layout measured directly from start_splash_1v2.png (as fractions of the
+// art's own width/height): the title line above the divider, and the
+// blank content panel below it where rows get drawn live. Both popups
+// share this same frame art -- see drawDigChoice/drawSlotChoose.
+const MENU_POPUP_LAYOUT = {
+  titleYFrac: 0.4652,       // baseline of the title line
+  titleCoverYFrac: 0.4196, titleCoverHFrac: 0.0910, // rect to blank out before redrawing title
+  boxTopFrac: 0.5278, boxBottomFrac: 0.8443,
+  boxXFrac: 0.0592, boxWFrac: 0.9408 - 0.0592,
 };
 
+function drawMenuPopupBackground(time, title) {
+  const { originX, originY, dw, dh } = drawSplashBackground(menuPopupSplashImg, time);
+
+  // blank out the baked-in title text, then draw the one this screen needs
+  const coverY = originY + MENU_POPUP_LAYOUT.titleCoverYFrac * dh;
+  const coverH = MENU_POPUP_LAYOUT.titleCoverHFrac * dh;
+  ctx.fillStyle = '#05111a';
+  ctx.fillRect(originX, coverY, dw, coverH);
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 18px monospace';
+  ctx.fillStyle = '#e0b040';
+  ctx.fillText(title, originX + dw / 2, originY + MENU_POPUP_LAYOUT.titleYFrac * dh);
+
+  const boxX = originX + MENU_POPUP_LAYOUT.boxXFrac * dw;
+  const boxW = MENU_POPUP_LAYOUT.boxWFrac * dw;
+  const boxY = originY + MENU_POPUP_LAYOUT.boxTopFrac * dh;
+  const boxH = (MENU_POPUP_LAYOUT.boxBottomFrac - MENU_POPUP_LAYOUT.boxTopFrac) * dh;
+  return { originX, originY, dw, dh, boxX, boxW, boxY, boxH };
+}
+
 function drawDigChoice(time) {
-  if (!digChoiceSplashImg.complete || !digChoiceSplashImg.naturalWidth) { drawDigChoiceFallback(); return; }
-  const { originX, originY, dw, dh } = drawSplashBackground(digChoiceSplashImg, time);
-  const cx = originX + dw / 2;
+  if (!menuPopupSplashImg.complete || !menuPopupSplashImg.naturalWidth) { drawDigChoiceFallback(); return; }
+  const { boxX, boxW, boxY, boxH } = drawMenuPopupBackground(time, "WHAT'S THE MOVE?");
+  const cx = boxX + boxW / 2;
+  const rowY = [boxY + boxH * 0.32, boxY + boxH * 0.58];
   DIG_CHOICES.forEach((label, i) => {
     const active = i === digChoiceIndex;
-    const textY = originY + DIG_CHOICE_LAYOUT.textYFrac[i] * dh;
     if (active) {
-      const boxY = originY + DIG_CHOICE_LAYOUT.boxYFrac[i] * dh;
-      const boxH = DIG_CHOICE_LAYOUT.boxHFrac * dh;
-      const boxX = originX + DIG_CHOICE_LAYOUT.boxXFrac * dw;
-      const boxW = DIG_CHOICE_LAYOUT.boxWFrac * dw;
+      const rh = boxH * 0.16;
       ctx.fillStyle = 'rgba(8,14,20,0.92)';
-      ctx.fillRect(boxX, boxY, boxW, boxH);
+      ctx.fillRect(boxX, rowY[i] - rh / 2, boxW, rh);
       ctx.strokeStyle = '#e0b040';
       ctx.lineWidth = 2;
-      ctx.strokeRect(boxX + 2, boxY + 2, boxW - 4, boxH - 4);
+      ctx.strokeRect(boxX + 2, rowY[i] - rh / 2 + 2, boxW - 4, rh - 4);
     }
     ctx.textAlign = 'center';
     ctx.font = 'bold 20px monospace';
     ctx.fillStyle = active ? '#e0b040' : '#f4ecd8';
-    ctx.fillText((active ? '\u25B8 ' : '') + label + (active ? ' \u25C2' : ''), cx, textY);
+    ctx.fillText((active ? '\u25B8 ' : '') + label + (active ? ' \u25C2' : ''), cx, rowY[i]);
   });
 }
 
-// Row geometry measured from start_splash_2.png. Text is left-aligned to
-// match the baked "SLOT N" rows (the chest icon sits to the right of it),
-// unlike the centered dig-choice rows above.
-const SLOT_CHOOSE_LAYOUT = {
-  mainYFrac: [0.5305, 0.6491, 0.7668],
-  subYFrac: [0.5700, 0.6876, 0.8063],
-  boxHFrac: 0.0923,
-  textXFrac: 0.2422,
-  boxXFrac: 0.0945, boxWFrac: 0.8849 - 0.0945,
-};
-
 function drawSlotChoose(time) {
-  if (!slotChooseSplashImg.complete || !slotChooseSplashImg.naturalWidth) { drawSlotChooseFallback(); return; }
-  const { originX, originY, dw, dh } = drawSplashBackground(slotChooseSplashImg, time);
-  const textX = originX + SLOT_CHOOSE_LAYOUT.textXFrac * dw;
+  if (!menuPopupSplashImg.complete || !menuPopupSplashImg.naturalWidth) { drawSlotChooseFallback(); return; }
+  const title = pendingMode === 'new' ? 'START DIGGING \u2014 PICK A SLOT' : 'CONTINUE DIGGING \u2014 PICK A SLOT';
+  const { boxX, boxW, boxY, boxH } = drawMenuPopupBackground(time, title);
+  const textX = boxX + boxW * 0.06;
+  const mainY = [boxY + boxH * 0.22, boxY + boxH * 0.52, boxY + boxH * 0.82];
+  const subYOffset = boxH * 0.115;
   SAVE_SLOTS.forEach((slot, i) => {
     const active = i === slotChoiceIndex;
     const summary = slotSummary(slot);
     const label = `SLOT ${slot}`;
     let subtext = summary || 'EMPTY';
     if (active && armedOverwriteSlot === slot) subtext = 'PRESS [E] AGAIN TO OVERWRITE';
-    const mainY = originY + SLOT_CHOOSE_LAYOUT.mainYFrac[i] * dh;
-    const subY = originY + SLOT_CHOOSE_LAYOUT.subYFrac[i] * dh;
     if (active) {
-      const boxY = mainY - (SLOT_CHOOSE_LAYOUT.boxHFrac * dh) * 0.42;
-      const boxH = SLOT_CHOOSE_LAYOUT.boxHFrac * dh;
-      const boxX = originX + SLOT_CHOOSE_LAYOUT.boxXFrac * dw;
-      const boxW = SLOT_CHOOSE_LAYOUT.boxWFrac * dw;
+      const rh = boxH * 0.27;
       ctx.fillStyle = 'rgba(8,14,20,0.92)';
-      ctx.fillRect(boxX, boxY, boxW, boxH);
+      ctx.fillRect(boxX, mainY[i] - rh * 0.4, boxW, rh);
       ctx.strokeStyle = '#e0b040';
       ctx.lineWidth = 2;
-      ctx.strokeRect(boxX + 2, boxY + 2, boxW - 4, boxH - 4);
+      ctx.strokeRect(boxX + 2, mainY[i] - rh * 0.4 + 2, boxW - 4, rh - 4);
     }
     ctx.textAlign = 'left';
     ctx.font = 'bold 20px monospace';
     ctx.fillStyle = active ? '#e0b040' : '#f4ecd8';
-    ctx.fillText((active ? '\u25B8 ' : '') + label, textX, mainY);
+    ctx.fillText((active ? '\u25B8 ' : '') + label, textX, mainY[i]);
     ctx.font = '13px monospace';
     ctx.fillStyle = active ? 'rgba(224,176,64,0.85)' : 'rgba(244,236,216,0.6)';
-    ctx.fillText(subtext, textX, subY);
+    ctx.fillText(subtext, textX, mainY[i] + subYOffset);
   });
 }
 
