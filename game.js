@@ -335,11 +335,12 @@ function exitMinigame() {
 // function that launches it. Both the "[E]" interact prompt and the tap-the-
 // sign shortcut read from this same table, so adding a future mini-game is
 // just: add its tx/ty/id/label to the map's `minigames` list, then add one
-// line here. The floating callout sign (drawMinigameCalloutSign) and its tap
+// line here. The floating arcade sign (drawMinigameArcadeSign) and its tap
 // hitbox pick up every entry in a map's `minigames` list automatically -- no
 // per-game wiring needed anywhere else.
 const MINIGAME_ACTIONS = {
   darts: () => enterMinigame(createDartsGame()),
+  beatmatch: () => enterMinigame(createBeatMatchGame()),
 };
 
 // Darts: a two-tap power/accuracy throw, same trick classic golf games use.
@@ -467,6 +468,102 @@ function createDartsGame() {
       ctx.fillStyle = '#6a6070';
       ctx.font = '10px monospace';
       ctx.fillText('X to walk away anytime', cx, 476);
+    },
+  };
+}
+
+// Beat Match: a repeating needle sweeps across a timing bar; tap E while
+// it's inside the target zone. Same two-key contract as darts (E to act,
+// X to bail anytime), same dark-overlay/monospace look, same round-based
+// scoring-then-auto-exit shape -- just built around one timing tap per
+// round instead of darts' power+aim pair, since a beat is a single hit,
+// not a two-stage throw. Canvas primitives only, no new assets, same as
+// every mini-game in this file.
+function createBeatMatchGame() {
+  const ROUNDS = 5;
+  let phase = 'wait';        // 'wait' | 'result' | 'done'
+  let pos = -1, dir = 1;     // -1..1 sweep position across the bar
+  let speed = 1.15;          // ramps up slightly each round
+  let round = 1;
+  let score = 0;
+  let combo = 0;
+  let lastHitLabel = '';
+  let resultTimer = 0;
+
+  const barW = 280, barX = VIEW_W / 2 - barW / 2, barY = 300, barH = 22;
+  const barCx = barX + barW / 2;
+
+  function hitFor(p) {
+    const d = Math.abs(p);
+    if (d <= 0.08) return { label: 'PERFECT!', pts: 50 };
+    if (d <= 0.22) return { label: 'GOOD', pts: 25 };
+    if (d <= 0.45) return { label: 'OK', pts: 10 };
+    return { label: 'MISS', pts: 0 };
+  }
+
+  return {
+    update(dt) {
+      if (phase === 'wait') {
+        pos += dir * dt * speed;
+        if (pos >= 1) { pos = 1; dir = -1; }
+        if (pos <= -1) { pos = -1; dir = 1; }
+        if (interactPressed) {
+          const res = hitFor(pos);
+          score += res.pts;
+          combo = res.pts > 0 ? combo + 1 : 0;
+          lastHitLabel = res.label;
+          phase = 'result';
+          resultTimer = 0.7;
+        }
+      } else if (phase === 'result') {
+        resultTimer -= dt;
+        if (resultTimer <= 0) {
+          if (round >= ROUNDS) { phase = 'done'; }
+          else { round++; speed += 0.15; pos = -1; dir = 1; phase = 'wait'; }
+        }
+      } else if (phase === 'done') {
+        if (interactPressed) exitMinigame();
+      }
+      // X always bails out early, no matter the phase
+      if (buyPressed) exitMinigame();
+    },
+    draw() {
+      ctx.fillStyle = 'rgba(8,6,12,0.9)';
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#4ad0ff';
+      ctx.font = 'bold 22px monospace';
+      ctx.fillText('BEAT MATCH', VIEW_W / 2, 60);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = '12px monospace';
+      ctx.fillText(`SCORE ${score}   BEAT ${Math.min(round, ROUNDS)}/${ROUNDS}   COMBO x${combo}`, VIEW_W / 2, 84);
+
+      // timing bar track
+      ctx.strokeStyle = '#f4ecd8';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(barX, barY, barW, barH);
+
+      // GOOD band, then PERFECT band on top of it, both centered
+      ctx.fillStyle = 'rgba(224,160,48,0.35)';
+      ctx.fillRect(barCx - barW * 0.22, barY, barW * 0.44, barH);
+      ctx.fillStyle = 'rgba(240,236,216,0.55)';
+      ctx.fillRect(barCx - barW * 0.08, barY, barW * 0.16, barH);
+
+      // sweeping needle
+      const nx = barCx + pos * (barW / 2);
+      ctx.fillStyle = '#e04858';
+      ctx.fillRect(nx - 2, barY - 8, 4, barH + 16);
+
+      ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#4ad0ff' : '#f4ecd8';
+      ctx.font = 'bold 14px monospace';
+      if (phase === 'wait') ctx.fillText('- TAP E ON THE BEAT -', VIEW_W / 2, 360);
+      else if (phase === 'result') ctx.fillText(lastHitLabel, VIEW_W / 2, 360);
+      else if (phase === 'done') ctx.fillText(`FINAL SCORE: ${score} - PRESS E TO LEAVE`, VIEW_W / 2, 360);
+
+      ctx.fillStyle = '#6a6070';
+      ctx.font = '10px monospace';
+      ctx.fillText('X to walk away anytime', VIEW_W / 2, 384);
     },
   };
 }
@@ -1018,6 +1115,11 @@ function makeShop(id, opts) {
     recordingDesk: opts.recordingDesk
       ? { x: opts.recordingDesk[0], y: opts.recordingDesk[1], sign: opts.recordingDeskSign || 'SKYLAB' }
       : null,
+    // Mini-games placed in this shop (tx/ty/id/label per entry) -- this is
+    // the one line that actually wires opts.minigames onto the map object;
+    // without it, the glow/arcade-sign/interact system in render() and
+    // facingTarget() has nothing to find, no matter what's listed above.
+    minigames: opts.minigames || [],
   };
   const spots = [[1,4],[1,6],[12,4],[12,6],[2,8],[11,8]];
   opts.crates.forEach((c, i) => {
@@ -1094,6 +1196,11 @@ const shops = {
           'This whole independent scene runs on people showing up for each other. I just try to make everybody\'s stuff sound as good as it deserves to.',
           'Got the MPC, got the notebook, got the headphones warmed up. Always cooking something back here.',
         ] },
+    ],
+    // Beat-matching mini-game, parked right beside Kanga's turntables --
+    // same tx/ty-facing pattern as the darts board in Nectar's.
+    minigames: [
+      { id: 'beatmatch', tx: 5, ty: 4, label: 'PLAY BEAT MATCH' },
     ],
   }),
   wax: makeShop('wax', {
@@ -2522,61 +2629,109 @@ function drawMountains(camX) {
   for (const layer of MOUNTAIN_LAYERS) drawMountainLayer(layer, camX);
 }
 
-// ---------------------------------------------------------------- mini-game callout signs
-// Every mini-game gets one of these floating over its tile automatically --
-// driven entirely by each map's `minigames` list, so a future mini-game only
-// needs an entry there (plus one line in MINIGAME_ACTIONS) and this sign
-// shows up and becomes tappable for free. Bright arcade yellow/red on
-// purpose so it reads as a different *kind* of interactable at a glance,
-// never blending into ordinary shop/decoration signage like drawSkylabSign.
+// ---------------------------------------------------------------- mini-game glow + arcade sign
+// Every mini-game automatically gets BOTH of these, driven entirely by each
+// map's `minigames` list -- so a future mini-game only needs an entry there
+// (plus one line in MINIGAME_ACTIONS) and it picks up the exact same look
+// for free, with zero per-game drawing code required:
+//   1. drawMinigameTileGlow  -- a pulsing glowing outline traced right on
+//      the floor tile the mini-game object sits on, so the object itself
+//      (dartboard, or whatever comes next) reads as special at a glance,
+//      distinct from ordinary crates/props/decoration in the room.
+//   2. drawMinigameArcadeSign -- a small glowing arcade-cabinet icon that
+//      floats and bobs above the tile, unmistakably marking "mini-game
+//      here" from across the room. Bright arcade yellow/red/cyan on
+//      purpose so it never blends into ordinary shop signage like
+//      drawSkylabSign.
+// Both are keyed off the same tile position and seed, so they stay in sync
+// automatically for any mini-game added later.
 let minigameSignHitboxes = []; // world-space rects, rebuilt every render() frame
 let lastCam = { outside: true, camX: 0, camY: 0, zoom: 1, dx: 0, dy: 0 };
 
-function drawMinigameCalloutSign(wx, wy, time, seed) {
-  const bob = Math.sin(time * 0.003 + seed) * 4;
-  const cx = wx + 14, cy = wy - 40 + bob;
-  const sw = 116, sh = 30;
+function drawMinigameTileGlow(wx, wy, time, seed) {
+  const pulse = 0.5 + Math.sin(time * 0.004 + seed) * 0.28; // 0.22..0.78
+  const half = TILE / 2 + 5;
+  ctx.save();
+  ctx.shadowColor = '#ffd23c';
+  ctx.shadowBlur = 14;
+  ctx.strokeStyle = `rgba(255,210,60,${pulse.toFixed(2)})`;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(wx - half, wy - half, half * 2, half * 2);
+  // faint fill so the tile reads as "lit up" even at a glance, not just outlined
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = `rgba(255,210,60,${(pulse * 0.14).toFixed(2)})`;
+  ctx.fillRect(wx - half, wy - half, half * 2, half * 2);
+  ctx.restore();
+}
 
-  // soft glow so it pops against dark interiors
-  ctx.fillStyle = 'rgba(255,210,60,0.30)';
-  ctx.fillRect(cx - sw / 2 - 6, cy - sh / 2 - 6, sw + 12, sh + 12);
+function drawMinigameArcadeSign(wx, wy, time, seed, label) {
+  const bob = Math.sin(time * 0.003 + seed) * 4;
+  const cx = wx, cy = wy - 46 + bob;
+  const cabW = 30, cabH = 38;
+  const pulse = 0.30 + Math.sin(time * 0.005 + seed) * 0.14;
+
+  // soft ambient glow behind the whole cabinet so it pops against dark interiors
+  ctx.save();
+  ctx.shadowColor = '#ffd23c';
+  ctx.shadowBlur = 20;
+  ctx.fillStyle = `rgba(255,210,60,${pulse.toFixed(2)})`;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + 4, cabW * 0.95, cabH * 0.7, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 
   // post connecting the sign down to the mini-game tile itself
   ctx.strokeStyle = '#241c28';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(wx, cy + sh / 2);
+  ctx.moveTo(wx, cy + cabH / 2 + 4);
   ctx.lineTo(wx, wy - 4);
   ctx.stroke();
 
-  // plaque -- arcade-cabinet red/yellow, distinct from every other sign
+  // cabinet body, glowing outline
+  ctx.save();
+  ctx.shadowColor = '#ffd23c';
+  ctx.shadowBlur = 8;
   ctx.fillStyle = '#1c1420';
-  ctx.fillRect(cx - sw / 2, cy - sh / 2, sw, sh);
+  ctx.fillRect(cx - cabW / 2, cy - cabH / 2, cabW, cabH);
   ctx.strokeStyle = '#ffd23c';
   ctx.lineWidth = 2;
-  ctx.strokeRect(cx - sw / 2, cy - sh / 2, sw, sh);
+  ctx.strokeRect(cx - cabW / 2, cy - cabH / 2, cabW, cabH);
+  ctx.restore();
 
-  // little arcade-cabinet icon: cabinet body, two buttons, a joystick
-  const ix = cx - sw / 2 + 13, iy = cy;
+  // marquee -- glowing red strip across the top, like a real cabinet header
+  ctx.save();
+  ctx.shadowColor = '#e04858';
+  ctx.shadowBlur = 8;
   ctx.fillStyle = '#e04858';
-  ctx.fillRect(ix - 6, iy - 7, 12, 14);
-  ctx.fillStyle = '#3a2c1a';
-  ctx.fillRect(ix - 6, iy - 7, 12, 4);
-  ctx.fillStyle = '#ffd23c';
-  ctx.beginPath(); ctx.arc(ix - 2.5, iy - 2, 1.6, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(ix + 2.5, iy - 2, 1.6, 0, Math.PI * 2); ctx.fill();
+  ctx.fillRect(cx - cabW / 2 + 2, cy - cabH / 2 + 2, cabW - 4, 7);
+  ctx.restore();
+
+  // screen -- glowing cyan, the classic "game's on" cue
+  ctx.save();
+  ctx.shadowColor = '#4ad0ff';
+  ctx.shadowBlur = 7;
+  ctx.fillStyle = '#4ad0ff';
+  ctx.fillRect(cx - cabW / 2 + 5, cy - cabH / 2 + 12, cabW - 10, 11);
+  ctx.restore();
+
+  // joystick + buttons on the control panel
   ctx.fillStyle = '#f4ecd8';
-  ctx.fillRect(ix - 1, iy + 2, 2, 5);
-  ctx.beginPath(); ctx.arc(ix, iy + 2, 1.8, 0, Math.PI * 2); ctx.fill();
-
-  // text
+  ctx.fillRect(cx - 7, cy + cabH / 2 - 9, 1.5, 6);
+  ctx.beginPath(); ctx.arc(cx - 6.25, cy + cabH / 2 - 10, 2, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#ffd23c';
-  ctx.font = 'bold 8px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('TAP HERE TO', cx + 12, cy - 3);
-  ctx.fillText('PLAY AROUND', cx + 12, cy + 7);
+  ctx.beginPath(); ctx.arc(cx + 4, cy + cabH / 2 - 10, 1.6, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 9, cy + cabH / 2 - 6, 1.6, 0, Math.PI * 2); ctx.fill();
 
-  return { cx, cy, hw: sw / 2 + 6, hh: sh / 2 + 6 };
+  // floating label above the cabinet -- flashes between the game's own
+  // label (e.g. "PLAY DARTS") and a generic "TAP TO PLAY" tap hint
+  const flashOnLabel = Math.floor(time / 1400) % 2 === 0;
+  ctx.fillStyle = '#ffd23c';
+  ctx.font = 'bold 9px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(flashOnLabel ? (label || 'MINI-GAME') : 'TAP TO PLAY', cx, cy - cabH / 2 - 8);
+
+  return { cx, cy, hw: cabW / 2 + 12, hh: cabH / 2 + 20 };
 }
 
 // Converts a tap already in 960x600 view-space (same space VIEW_W/VIEW_H
@@ -2637,7 +2792,9 @@ function render(time) {
   if (map.minigames) {
     map.minigames.forEach((mg, i) => {
       const wx = mg.tx * TILE + TILE / 2, wy = mg.ty * TILE + TILE / 2;
-      const rect = drawMinigameCalloutSign(wx, wy, time, i * 1.7);
+      const seed = i * 1.7;
+      drawMinigameTileGlow(wx, wy, time, seed);
+      const rect = drawMinigameArcadeSign(wx, wy, time, seed, mg.label);
       minigameSignHitboxes.push({ map: player.map, id: mg.id, ...rect });
     });
   }
