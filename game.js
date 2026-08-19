@@ -11,6 +11,28 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
+// ---------------------------------------------------------------- first-paint image preloads
+// Start the two screens the player sees first at the highest browser priority.
+// The preload links let the browser begin fetching these assets as soon as this
+// script runs, while the Image objects below reuse the same requests.
+function preloadFirstScreenImage(src) {
+  const link = document.createElement('link');
+  link.rel = 'preload';
+  link.as = 'image';
+  link.href = src;
+  link.fetchPriority = 'high';
+  document.head.appendChild(link);
+}
+preloadFirstScreenImage('assets/splash.png');
+preloadFirstScreenImage('assets/menu_title.png');
+preloadFirstScreenImage('assets/title_sky.png');
+
+// Paint a non-empty first frame immediately. This prevents a blank/black canvas
+// while splash.png is being fetched or decoded. drawSplash() replaces it with
+// the real splash as soon as the image is ready.
+ctx.fillStyle = '#120e18';
+ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
 // ---------------------------------------------------------------- responsive fullscreen canvas
 (() => {
   let vp = document.querySelector('meta[name="viewport"]');
@@ -730,6 +752,8 @@ function confirmSlotChoice() {
 let selectLayout = null; // { originX, originY, scale } of the drawn select-screen art, set each frame it's drawn
 
 const splashImg = new Image();
+splashImg.decoding = 'sync';
+splashImg.fetchPriority = 'high';
 splashImg.src = 'assets/splash.png';
 
 const purePopPosterImg = new Image();
@@ -742,8 +766,12 @@ const nectarsNeonImg = new Image();
 nectarsNeonImg.src = 'assets/nectars_neon.png';
 
 const titleMenuImg = new Image();
+titleMenuImg.decoding = 'async';
+titleMenuImg.fetchPriority = 'high';
 titleMenuImg.src = 'assets/menu_title.png';
 const titleSkyImg = new Image();
+titleSkyImg.decoding = 'async';
+titleSkyImg.fetchPriority = 'high';
 titleSkyImg.src = 'assets/title_sky.png';
 
 // "Closed for now" splash shown when the player walks into one of the
@@ -8059,23 +8087,29 @@ function buildKeyedTitleMenu() {
   titleMenuKeyed = c;
 }
 
+function drawTitleSky(time) {
+  // Always draw the cloud layer first. Previously the sky was nested inside
+  // the `titleMenuKeyed` ready-check, so any delay building menu_title.png
+  // could hide the clouds entirely.
+  ctx.fillStyle = '#9fd0ee';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+  if (titleSkyImg.complete && titleSkyImg.naturalWidth) {
+    const tw = titleSkyImg.naturalWidth * (VIEW_H / titleSkyImg.naturalHeight);
+    const off = (time * 16) % tw;
+    for (let x = -off; x < VIEW_W; x += tw) {
+      ctx.drawImage(titleSkyImg, x, 0, tw, VIEW_H);
+    }
+  }
+}
+
 function drawTitle(time) {
+  // Sky/clouds are independent of the menu art and should be visible even
+  // while menu_title.png is still loading or being chroma-keyed.
+  drawTitleSky(time);
   buildKeyedTitleMenu();
 
-  // Menu ready: chroma-keyed menu centered over a slowly drifting sky.
   if (titleMenuKeyed) {
-    if (titleSkyImg.complete && titleSkyImg.naturalWidth) {
-      const tw = titleSkyImg.naturalWidth * (VIEW_H / titleSkyImg.naturalHeight);
-      const off = (time * 16) % tw;   // clouds slowly float by
-      ctx.fillStyle = '#9fd0ee';
-      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-      for (let x = -off; x < VIEW_W; x += tw) {
-        ctx.drawImage(titleSkyImg, x, 0, tw, VIEW_H);
-      }
-    } else {
-      ctx.fillStyle = 'rgba(8,6,12,0.93)';
-      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    }
     const mw = titleMenuKeyed.width, mh = titleMenuKeyed.height;
     const s = Math.min(VIEW_W / mw, VIEW_H / mh);
     const dw = mw * s, dh = mh * s;
@@ -8085,9 +8119,9 @@ function drawTitle(time) {
     return;
   }
 
-  // fallback text-only title (used until the menu image loads)
-  ctx.fillStyle = 'rgba(8,6,12,0.93)';
-  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  // Lightweight fallback while menu_title.png is loading. It is transparent
+  // over the sky so the player still sees the animated clouds instead of a
+  // dark full-screen block.
   ctx.textAlign = 'center';
   ctx.fillStyle = '#e0b040';
   ctx.font = 'bold 44px monospace';
@@ -8096,7 +8130,7 @@ function drawTitle(time) {
   ctx.font = 'italic 14px monospace';
   const story = [
     'Your sampler is empty. Your beat is due.',
-    'Five legendary records are hiding somewhere in this town \u2014',
+    'Five legendary records are hiding somewhere in this town —',
     'in shop crates, diner backrooms, and flea market stalls.',
     'Dig them ALL up and the whole town hears your beat come alive.',
   ];
@@ -8114,19 +8148,10 @@ function drawTitle(time) {
   ];
   controls.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, 320 + i * 20));
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
-  ctx.font = 'bold 18px monospace';
-  ctx.fillText('- PRESS E TO CONTINUE -', VIEW_W / 2, 500);
-  drawTitleHotkeyHint(460);
-  drawTitleSaveHint();
+  ctx.font = 'bold 15px monospace';
+  ctx.fillText('- PRESS E TO KEEP CRUISING -', VIEW_W / 2, VIEW_H - 18);
 }
 
-// Flashing reminder that lives just under the framed title-menu art (or,
-// in the fallback text-only title, under the controls list) pointing
-// players at the new [H] hot-keys popup. Flashes on the same on/off
-// cadence as the other title-screen prompts so it reads as part of the
-// family, but is its own line so it still stands out from the surrounding
-// static text. boxBottomY is the y-coordinate of whatever it should sit
-// just below; clamped so it never runs off the bottom of the screen.
 function drawTitleHotkeyHint(boxBottomY) {
   ctx.textAlign = 'center';
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
