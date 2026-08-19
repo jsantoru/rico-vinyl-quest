@@ -1237,8 +1237,10 @@ const shops = {
     ],
     // Beat-matching mini-game, pushed up against the back wall (top row of
     // the room, right below the wall tile) instead of out on the floor.
+    // ty nudged down 2 tiles from the wall so its top edge doesn't get
+    // clipped by the wall tile above it.
     minigames: [
-      { id: 'beatmatch', tx: 5, ty: 1, label: 'PLAY BEAT MATCH' },
+      { id: 'beatmatch', tx: 5, ty: 3, label: 'PLAY BEAT MATCH' },
     ],
   }),
   wax: makeShop('wax', {
