@@ -734,7 +734,7 @@ const nectarsNeonImg = new Image();
 nectarsNeonImg.src = 'assets/nectars_neon.png';
 
 const titleMenuImg = new Image();
-titleMenuImg.src = 'assets/title_menu.png';
+titleMenuImg.src = 'assets/menu_title.png';
 const titleSkyImg = new Image();
 titleSkyImg.src = 'assets/title_sky.png';
 
