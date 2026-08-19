@@ -580,6 +580,14 @@ window.addEventListener('keydown', (e) => {
     if (k === 'y') toggleTea();
     if (k === 'k') saveGame(true);
     if (k === 'n' && (state === 'title' || state === 'play')) openDigChoice();
+    if (k === 'h') {
+      // [H] opens the hot-keys popup any time during gameplay, and closes
+      // it again on a second press -- mirrors how other in-game popups
+      // (portal, dialog) sit over 'play' without touching the menu music.
+      if (state === 'play') { hotkeysReturnState = state; state = 'hotkeys'; }
+      else if (state === 'hotkeys') { state = hotkeysReturnState; }
+    }
+    if (k === 'escape' && state === 'hotkeys') { state = hotkeysReturnState; }
     if (k === 'arrowleft') selectMove = -1;
     if (k === 'arrowright') selectMove = 1;
     if (k === 'arrowup') menuMove = -1;
@@ -1410,7 +1418,11 @@ const player = {
   tempItem: null, tempItemTimer: 0,
 };
 const collected = new Set();
-let state = 'splash'; // splash | title | digChoice | slotChoose | select | play | dialog | record | win | portal | fifa | minigame
+let state = 'splash'; // splash | title | digChoice | slotChoose | select | play | dialog | record | win | portal | fifa | minigame | hotkeys
+// State to snap back to when the [H] hotkeys popup is closed -- currently
+// always 'play' since that's the only state H can be opened from, but kept
+// as its own var in case another state wants to offer the popup later.
+let hotkeysReturnState = 'play';
 let dialog = null;   // { name, lines, i }
 let shownRecord = null;
 let activePortal = null; // { x, y } tile the player walked into to open the portal popup
@@ -2557,6 +2569,8 @@ function update(dt) {
         activePortal = null;
       }
     }
+  } else if (state === 'hotkeys') {
+    if (interactPressed || buyPressed) state = hotkeysReturnState;
   } else if (state === 'fifa') {
     if (performance.now() - fifaStartTime >= 5000) {
       state = fifaReturnState;
@@ -2779,6 +2793,7 @@ function render(time) {
   if (state === 'record') drawRecordCard();
   if (state === 'win') drawWin();
   if (state === 'portal') drawPortalPopup();
+  if (state === 'hotkeys') drawHotkeysPopup();
   if (state === 'fifa') drawFifaPopup();
   if (state === 'minigame' && activeMinigame) activeMinigame.draw();
   if (toast) drawToast();
@@ -7587,6 +7602,57 @@ function drawPortalPopup() {
   ctx.fillText('Press [E] or tap screen to return', VIEW_W / 2, boxY + boxH - 16);
 }
 
+// [H] hot-keys popup -- reachable any time during gameplay (see the
+// keydown handler and the 'hotkeys' state in update()). Pauses the action
+// behind a dark overlay the same way drawPortalPopup() does, then lists
+// every key the player has available. Keep this list in sync with the
+// keydown handler above and the fallback controls list in drawTitle().
+function drawHotkeysPopup() {
+  ctx.fillStyle = 'rgba(8,6,12,0.72)';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+  const boxW = 460, boxH = 340, boxX = (VIEW_W - boxW) / 2, boxY = (VIEW_H - boxH) / 2;
+  ctx.fillStyle = 'rgba(10,8,14,0.95)';
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+  ctx.strokeStyle = '#f4ecd8';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(boxX + 2, boxY + 2, boxW - 4, boxH - 4);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#e0b040';
+  ctx.font = 'bold 20px monospace';
+  ctx.fillText('HOT KEYS', VIEW_W / 2, boxY + 34);
+
+  const rows = [
+    ['ARROWS / WASD', 'move'],
+    ['E', 'talk / dig crates / read'],
+    ['B', 'skateboard on & off'],
+    ['C', 'cold brew coffee on & off'],
+    ['Y', 'iced yerba mate on & off'],
+    ['M', 'mute music'],
+    ['X', 'buy from carts'],
+    ['K', 'quicksave'],
+    ['N', 'back to start / new game'],
+    ['H', 'toggle this hot-keys popup'],
+  ];
+  const listX = boxX + 30, keyColW = 150, startY = boxY + 66, lh = 24;
+  ctx.textAlign = 'left';
+  rows.forEach(([keyLabel, desc], i) => {
+    const y = startY + i * lh;
+    ctx.fillStyle = '#e0b040';
+    ctx.font = 'bold 13px monospace';
+    ctx.fillText(`[${keyLabel}]`, listX, y);
+    ctx.fillStyle = '#f4ecd8';
+    ctx.font = '13px monospace';
+    ctx.fillText(desc, listX + keyColW, y);
+  });
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
+  ctx.font = 'bold 14px monospace';
+  ctx.fillText('- PRESS [H] OR [E] TO CLOSE -', VIEW_W / 2, boxY + boxH - 16);
+}
+
 // "fifa" keyword easter egg: splash image + a countdown popup that reads
 // "Time for a quick friendly! Back in 5...4...3..." with a live number,
 // shown for 5 seconds (see triggerFifaEasterEgg / fifaStartTime) before
@@ -8014,6 +8080,7 @@ function drawTitle(time) {
     const s = Math.min(VIEW_W / mw, VIEW_H / mh);
     const dw = mw * s, dh = mh * s;
     ctx.drawImage(titleMenuKeyed, (VIEW_W - dw) / 2, (VIEW_H - dh) / 2, dw, dh);
+    drawTitleHotkeyHint((VIEW_H + dh) / 2);
     drawTitleSaveHint();
     return;
   }
@@ -8049,7 +8116,23 @@ function drawTitle(time) {
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
   ctx.font = 'bold 18px monospace';
   ctx.fillText('- PRESS E TO CONTINUE -', VIEW_W / 2, 500);
+  drawTitleHotkeyHint(460);
   drawTitleSaveHint();
+}
+
+// Flashing reminder that lives just under the framed title-menu art (or,
+// in the fallback text-only title, under the controls list) pointing
+// players at the new [H] hot-keys popup. Flashes on the same on/off
+// cadence as the other title-screen prompts so it reads as part of the
+// family, but is its own line so it still stands out from the surrounding
+// static text. boxBottomY is the y-coordinate of whatever it should sit
+// just below; clamped so it never runs off the bottom of the screen.
+function drawTitleHotkeyHint(boxBottomY) {
+  ctx.textAlign = 'center';
+  ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
+  ctx.font = 'bold 14px monospace';
+  const y = Math.min(boxBottomY + 26, VIEW_H - 28);
+  ctx.fillText('Press [H] any time during gameplay to see Hot Keys!', VIEW_W / 2, y);
 }
 
 // Small persistent reminder, shown under the main prompt on the title
