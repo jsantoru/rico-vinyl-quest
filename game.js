@@ -755,6 +755,9 @@ window.addEventListener('keydown', (e) => {
       // (portal, dialog) sit over 'play' without touching the menu music.
       if (state === 'play') { hotkeysReturnState = state; state = 'hotkeys'; }
       else if (state === 'hotkeys') { state = hotkeysReturnState; }
+      // On the title screen itself, [H] just flips to/from the Hot Keys
+      // page instead -- same key, same idea, no separate state needed.
+      else if (state === 'title') { titlePage = titlePage === 0 ? 1 : 0; }
     }
     if (k === 'escape' && state === 'hotkeys') { state = hotkeysReturnState; }
     if (k === 'arrowleft') selectMove = -1;
@@ -1630,6 +1633,11 @@ let state = 'splash'; // splash | title | digChoice | slotChoose | select | play
 // always 'play' since that's the only state H can be opened from, but kept
 // as its own var in case another state wants to offer the popup later.
 let hotkeysReturnState = 'play';
+// Which of the title screen's two pages is showing: 0 = the main title
+// (story + start prompt), 1 = the Hot Keys page. Toggled with left/right
+// (or [H]) while state === 'title'; reset to 0 any time the player lands
+// back on the title screen fresh, so it never gets stuck on page 2.
+let titlePage = 0;
 let dialog = null;   // { name, lines, i }
 let shownRecord = null;
 let activePortal = null; // { x, y } tile the player walked into to open the portal popup
@@ -2574,11 +2582,12 @@ function createTouchControls() {
     btn.id = id; btn.className = 'tc-btn'; btn.textContent = label;
     bindHold(btn, () => {
       keys[k] = true;
-      // On the character-select screen the d-pad's left/right taps need to
-      // drive selectMove directly, the same way the keydown listener does
-      // for a physical keyboard — held/synthetic key state alone never
-      // reaches update()'s selectMove check.
-      if (state === 'select') {
+      // On the character-select screen (and the title screen's left/right
+      // page flip) the d-pad's left/right taps need to drive selectMove
+      // directly, the same way the keydown listener does for a physical
+      // keyboard — held/synthetic key state alone never reaches update()'s
+      // selectMove check.
+      if (state === 'select' || state === 'title') {
         if (k === 'arrowleft') selectMove = -1;
         if (k === 'arrowright') selectMove = 1;
       }
@@ -2713,16 +2722,24 @@ function update(dt) {
   if (toast) { toast.t -= dt; if (toast.t <= 0) toast = null; }
 
   if (state === 'splash') {
-    if (interactPressed) { state = 'title'; music.setMenuBreak(true); }
+    if (interactPressed) { state = 'title'; titlePage = 0; music.setMenuBreak(true); }
   } else if (state === 'title') {
+    // Left/right (physical arrows, on-screen d-pad, or [H]) flips between
+    // the two title pages; [E] always starts the dig-choice flow no matter
+    // which page is showing.
+    if (selectMove) {
+      titlePage = Math.max(0, Math.min(1, titlePage + selectMove));
+      selectMove = 0;
+    }
     if (interactPressed) openDigChoice();
+    else if (buyPressed && titlePage === 1) titlePage = 0; // X = back to the main page
   } else if (state === 'digChoice') {
     if (menuMove) {
       digChoiceIndex = Math.max(0, Math.min(DIG_CHOICES.length - 1, digChoiceIndex + menuMove));
       menuMove = 0;
     }
     if (interactPressed) openSlotChoose(digChoiceIndex === 0 ? 'new' : 'continue');
-    else if (buyPressed) { state = 'title'; music.setMenuBreak(true); } // X = back
+    else if (buyPressed) { state = 'title'; titlePage = 0; music.setMenuBreak(true); } // X = back
   } else if (state === 'slotChoose') {
     if (menuMove) {
       const newIndex = Math.max(0, Math.min(SAVE_SLOTS.length - 1, slotChoiceIndex + menuMove));
@@ -8297,7 +8314,14 @@ function drawDriftingSky(time) {
   }
 }
 
+// The title screen is two pages sharing one backdrop (the drifting-cloud
+// sky, plus the same framed menu art once it's loaded): page 0 is the
+// original story/start screen, page 1 is the Hot Keys reference. Both are
+// reachable any time via left/right, the on-screen d-pad, or [H] -- see the
+// 'title' block in update() and the keydown handler.
 function drawTitle(time) {
+  if (titlePage === 1) { drawTitleHotkeysPage(time); return; }
+
   buildKeyedTitleMenu();
 
   // Menu ready: chroma-keyed menu centered over a slowly drifting sky.
@@ -8307,7 +8331,7 @@ function drawTitle(time) {
     const s = Math.min(VIEW_W / mw, VIEW_H / mh);
     const dw = mw * s, dh = mh * s;
     ctx.drawImage(titleMenuKeyed, (VIEW_W - dw) / 2, (VIEW_H - dh) / 2, dw, dh);
-    drawTitleHotkeyHint((VIEW_H + dh) / 2);
+    drawTitleNavHint((VIEW_H + dh) / 2);
     drawTitleSaveHint();
     return;
   }
@@ -8328,6 +8352,39 @@ function drawTitle(time) {
     'Dig them ALL up and the whole town hears your beat come alive.',
   ];
   story.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, 190 + i * 26));
+  ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
+  ctx.font = 'bold 18px monospace';
+  ctx.fillText('- PRESS E TO CONTINUE -', VIEW_W / 2, 340);
+  drawTitleNavHint(346);
+  drawTitleSaveHint();
+}
+
+// The Hot Keys page shares the exact same drifting-cloud backdrop as page
+// 0 (drawDriftingSky) -- just framed by the same bordered menu-box look the
+// rest of the game's popups use (drawHotkeysPopup, drawMenuBox) instead of
+// the story art, so the full key list has room to breathe. The list itself
+// keeps its original muted color from the old title screen on purpose, so
+// it still reads as its own thing and never looks like a continuation of
+// the story/copy on page 0.
+function drawTitleHotkeysPage(time) {
+  drawDriftingSky(time);
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+  const boxW = 480, boxH = 330, boxX = (VIEW_W - boxW) / 2, boxY = (VIEW_H - boxH) / 2 - 6;
+  ctx.fillStyle = 'rgba(10,8,14,0.9)';
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+  ctx.strokeStyle = '#f4ecd8';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(boxX + 2, boxY + 2, boxW - 4, boxH - 4);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#e0b040';
+  ctx.font = 'bold 24px monospace';
+  ctx.fillText('HOT KEYS', VIEW_W / 2, boxY + 42);
+
+  // same muted color the old title-screen controls list used, so it never
+  // reads as a continuation of the story copy on page 0
   ctx.fillStyle = '#9a90a8';
   ctx.font = '13px monospace';
   const controls = [
@@ -8339,33 +8396,34 @@ function drawTitle(time) {
     'M, OR ON-SCREEN "MUTE" ....................... mute',
     'X, OR ON-SCREEN "X" ................... buy from carts',
   ];
-  controls.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, 320 + i * 20));
+  controls.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, boxY + 80 + i * 24));
+
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
-  ctx.font = 'bold 18px monospace';
-  ctx.fillText('- PRESS E TO CONTINUE -', VIEW_W / 2, 500);
-  drawTitleHotkeyHint(460);
-  drawTitleSaveHint();
+  ctx.font = 'bold 16px monospace';
+  ctx.fillText('- PRESS E TO CONTINUE -', VIEW_W / 2, boxY + boxH - 44);
+
+  ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#8a6420' : '#5a5245';
+  ctx.font = 'bold 13px monospace';
+  ctx.fillText('[\u25C0] OR [H] BACK TO TITLE', VIEW_W / 2, boxY + boxH - 18);
 }
 
-// Flashing reminder that lives just under the framed title-menu art (or,
-// in the fallback text-only title, under the controls list) pointing
-// players at the new [H] hot-keys popup. Flashes on the same on/off
-// cadence as the other title-screen prompts so it reads as part of the
-// family, but is its own line so it still stands out from the surrounding
-// static text. boxBottomY is the y-coordinate of whatever it should sit
-// just below; clamped so it never runs off the bottom of the screen.
-function drawTitleHotkeyHint(boxBottomY) {
+// Flashing reminder shown on the title screen's main page (0), pointing
+// players at the new Hot Keys page. Flashes on the same on/off cadence as
+// the other title-screen prompts so it reads as part of the family.
+// boxBottomY is the y-coordinate of whatever it should sit just below;
+// clamped so it never runs off the bottom of the screen.
+function drawTitleNavHint(boxBottomY) {
   ctx.textAlign = 'center';
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#8a6420' : '#5a5245';
   ctx.font = 'bold 14px monospace';
   const y = Math.min(boxBottomY + 26, VIEW_H - 28);
-  ctx.fillText('Press [H] any time during gameplay to see Hot Keys!', VIEW_W / 2, y);
+  ctx.fillText('[\u25B6] OR [H] TO VIEW HOT KEYS', VIEW_W / 2, y);
 }
 
 // Small persistent reminder, shown under the main prompt on the title
 // screen only, that at least one save exists.
 function drawTitleSaveHint() {
-  if (!hasAnySave()) return;
+  if (!hasAnySave() || titlePage !== 0) return;
   ctx.textAlign = 'center';
   ctx.fillStyle = 'rgba(244,236,216,0.75)';
   ctx.font = '12px monospace';
