@@ -729,7 +729,27 @@ function confirmSlotChoice() {
 }
 let selectLayout = null; // { originX, originY, scale } of the drawn select-screen art, set each frame it's drawn
 
+// Startup splash: aggressively prioritize this asset because it is the
+// very first thing the player should see. The preload hint starts the fetch
+// before normal image discovery, while the Image object is kept for drawing.
+(function preloadStartupSplash() {
+  try {
+    const link = document.createElement('link');
+    link.rel = 'preload';
+    link.as = 'image';
+    link.href = 'assets/splash.png';
+    link.fetchPriority = 'high';
+    document.head.appendChild(link);
+  } catch (err) {
+    // Older/embedded environments may not expose document.head or preload;
+    // the Image object below remains the fallback.
+  }
+})();
+
 const splashImg = new Image();
+splashImg.decoding = 'sync';
+splashImg.fetchPriority = 'high';
+splashImg.loading = 'eager';
 splashImg.src = 'assets/splash.png';
 
 const purePopPosterImg = new Image();
@@ -2486,6 +2506,12 @@ function handleCharacterTap(vx, vy) {
 }
 
 // ---------------------------------------------------------------- update
+// Paint the startup splash as early as possible. This does not wait for
+// the rest of the game's assets to initialize.
+if (state === 'splash') {
+  drawSplash();
+}
+
 let last = performance.now();
 function frame(now) {
   const dt = Math.min((now - last) / 1000, 0.05);
@@ -2727,6 +2753,12 @@ function viewToWorld(vx, vy) {
 }
 
 function render(time) {
+  // Startup optimization: the splash is the first screen and is drawn
+  // immediately. Do not spend time rendering the game world underneath it.
+  if (state === 'splash') {
+    drawSplash();
+    return;
+  }
   const map = maps[player.map];
   ctx.fillStyle = '#120e18';
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
