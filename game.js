@@ -8314,12 +8314,18 @@ function drawDigChoice(time) {
   DIG_CHOICES.forEach((label, i) => {
     const active = i === digChoiceIndex;
     if (active) {
-      const rh = boxH * 0.16;
+      // padded highlight box: extra breathing room above/below the text
+      // baseline, and inset a bit from the panel's own edges, so the gold
+      // border doesn't hug the letters or the frame.
+      const rh = boxH * 0.24;
+      const boxCY = rowY[i] - 4; // nudge up: fillText's y is the baseline, not the glyph's visual center
+      const inset = boxW * 0.05;
+      const hx = boxX + inset, hw = boxW - inset * 2;
       ctx.fillStyle = 'rgba(8,14,20,0.92)';
-      ctx.fillRect(boxX, rowY[i] - rh / 2, boxW, rh);
+      ctx.fillRect(hx, boxCY - rh / 2, hw, rh);
       ctx.strokeStyle = '#e0b040';
       ctx.lineWidth = 2;
-      ctx.strokeRect(boxX + 2, rowY[i] - rh / 2 + 2, boxW - 4, rh - 4);
+      ctx.strokeRect(hx + 2, boxCY - rh / 2 + 2, hw - 4, rh - 4);
     }
     ctx.textAlign = 'center';
     ctx.font = 'bold 20px monospace';
