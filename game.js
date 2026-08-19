@@ -33,8 +33,6 @@ ctx.imageSmoothingEnabled = false;
       image-rendering: -moz-crisp-edges;
       image-rendering: crisp-edges;
       touch-action: none;
-      /* Immediate browser-level splash: visible before splash.png is decoded. */
-      background: #120e18 url("assets/m85_intro_poster.jpg") center / cover no-repeat;
     }
     #touchControls {
       position: fixed; top: 0; left: 0; right: 0;
@@ -731,26 +729,7 @@ function confirmSlotChoice() {
 }
 let selectLayout = null; // { originX, originY, scale } of the drawn select-screen art, set each frame it's drawn
 
-// ---------------------------------------------------------------- startup intro video
-// A tiny poster is used as the browser-level background so there is always
-// something visible immediately, even before the MP4 has buffered its first
-// frame. The optimized MP4 is muted/no-audio so browsers can autoplay it.
-const introVideo = document.createElement('video');
-introVideo.preload = 'auto';
-introVideo.muted = true;
-introVideo.defaultMuted = true;
-introVideo.playsInline = true;
-introVideo.setAttribute('playsinline', '');
-introVideo.setAttribute('webkit-playsinline', '');
-try { introVideo.fetchPriority = 'high'; } catch (_) {}
-introVideo.src = 'assets/m85_intro_optimized.mp4';
-let introVideoReady = false;
-let introVideoFinished = false;
-let introVideoFallbackTimer = null;
-
 const splashImg = new Image();
-splashImg.decoding = 'async';
-splashImg.fetchPriority = 'high';
 splashImg.src = 'assets/splash.png';
 
 const purePopPosterImg = new Image();
@@ -763,12 +742,8 @@ const nectarsNeonImg = new Image();
 nectarsNeonImg.src = 'assets/nectars_neon.png';
 
 const titleMenuImg = new Image();
-titleMenuImg.decoding = 'async';
-titleMenuImg.fetchPriority = 'high';
 titleMenuImg.src = 'assets/menu_title.png';
 const titleSkyImg = new Image();
-titleSkyImg.decoding = 'async';
-titleSkyImg.fetchPriority = 'high';
 titleSkyImg.src = 'assets/title_sky.png';
 
 // "Closed for now" splash shown when the player walks into one of the
@@ -1443,7 +1418,7 @@ const player = {
   tempItem: null, tempItemTimer: 0,
 };
 const collected = new Set();
-let state = 'introVideo'; // introVideo | splash | title | digChoice | slotChoose | select | play | dialog | record | win | portal | fifa | minigame | hotkeys
+let state = 'splash'; // splash | title | digChoice | slotChoose | select | play | dialog | record | win | portal | fifa | minigame | hotkeys
 // State to snap back to when the [H] hotkeys popup is closed -- currently
 // always 'play' since that's the only state H can be opened from, but kept
 // as its own var in case another state wants to offer the popup later.
@@ -2510,56 +2485,6 @@ function handleCharacterTap(vx, vy) {
   chooseCharacter(SELECT_ORDER[idx]);
 }
 
-// ---------------------------------------------------------------- startup
-// Startup sequence: poster -> intro video -> existing splash -> game.
-// The poster is already visible through the canvas CSS background, so a slow
-// network/device never leaves the player staring at an empty canvas.
-function beginIntroVideo() {
-  introVideo.addEventListener('canplay', () => {
-    introVideoReady = true;
-    introVideo.play().catch(() => {
-      // Muted inline video normally autoplays. If this browser refuses it,
-      // fail soft to the normal splash rather than trapping the player here.
-      state = 'splash';
-      introVideoFallbackTimer && clearTimeout(introVideoFallbackTimer);
-    });
-  }, { once: true });
-
-  introVideo.addEventListener('ended', () => {
-    introVideoFinished = true;
-    if (introVideoFallbackTimer) clearTimeout(introVideoFallbackTimer);
-    state = 'splash';
-    ctx.clearRect(0, 0, VIEW_W, VIEW_H);
-    drawSplash();
-  }, { once: true });
-
-  introVideo.addEventListener('error', () => {
-    if (introVideoFallbackTimer) clearTimeout(introVideoFallbackTimer);
-    state = 'splash';
-    ctx.clearRect(0, 0, VIEW_W, VIEW_H);
-    drawSplash();
-  }, { once: true });
-
-  // Never let a failed/unsupported video hold the game at startup forever.
-  // The poster remains visible during this entire window.
-  introVideoFallbackTimer = setTimeout(() => {
-    if (!introVideoReady && !introVideoFinished && state === 'introVideo') {
-      state = 'splash';
-      try { introVideo.pause(); } catch (_) {}
-      ctx.clearRect(0, 0, VIEW_W, VIEW_H);
-      drawSplash();
-    }
-  }, 5000);
-
-  introVideo.load();
-  introVideo.play().catch(() => {});
-}
-
-// Paint immediately. The CSS poster background covers the startup gap before
-// the first video frame is decoded.
-ctx.clearRect(0, 0, VIEW_W, VIEW_H);
-beginIntroVideo();
-
 // ---------------------------------------------------------------- update
 let last = performance.now();
 function frame(now) {
@@ -2574,18 +2499,7 @@ function update(dt) {
   updateAmbient(dt);
   if (toast) { toast.t -= dt; if (toast.t <= 0) toast = null; }
 
-  if (state === 'introVideo') {
-    // Let the player skip the intro with the same interaction that advances
-    // the existing splash. This is optional convenience, not required for
-    // autoplay.
-    if (interactPressed) {
-      try { introVideo.pause(); } catch (_) {}
-      state = 'splash';
-      introVideoFinished = true;
-      if (introVideoFallbackTimer) clearTimeout(introVideoFallbackTimer);
-      interactPressed = false;
-    }
-  } else if (state === 'splash') {
+  if (state === 'splash') {
     if (interactPressed) { state = 'title'; music.setMenuBreak(true); }
   } else if (state === 'title') {
     if (interactPressed) openDigChoice();
@@ -2869,8 +2783,7 @@ function render(time) {
   }
 
   ctx.restore();
-  if (state !== 'introVideo' && state !== 'splash') drawHUD();
-  if (state === 'introVideo') drawIntroVideo();
+  if (state !== 'splash') drawHUD();
   if (state === 'splash') drawSplash();
   if (state === 'title') drawTitle(time);
   if (state === 'digChoice') drawDigChoice(time);
@@ -8105,17 +8018,6 @@ function drawRecordCard() {
   ctx.fillText('[E] ▶', x + w - 20, y + h - 12);
 }
 
-function drawIntroVideo() {
-  // Keep the poster/background visible until the browser has a real video
-  // frame. Once ready, the video covers the full game viewport at 16:9.
-  if (!introVideoReady || introVideo.readyState < 2 || !introVideo.videoWidth) return;
-  const iw = introVideo.videoWidth, ih = introVideo.videoHeight;
-  const scale = Math.max(VIEW_W / iw, VIEW_H / ih);
-  const dw = iw * scale, dh = ih * scale;
-  const dx = (VIEW_W - dw) / 2, dy = (VIEW_H - dh) / 2;
-  ctx.drawImage(introVideo, dx, dy, dw, dh);
-}
-
 function drawSplash() {
   if (splashImg.complete && splashImg.naturalWidth) {
     const iw = splashImg.naturalWidth, ih = splashImg.naturalHeight;
@@ -8124,8 +8026,8 @@ function drawSplash() {
     const dx = (VIEW_W - dw) / 2, dy = (VIEW_H - dh) / 2;
     ctx.drawImage(splashImg, dx, dy, dw, dh);
   } else {
-    // Leave the canvas transparent until the image decodes so the immediate
-    // CSS splash background remains visible during startup.
+    ctx.fillStyle = '#120e18';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   }
   ctx.fillStyle = 'rgba(8,6,12,0.55)';
   ctx.fillRect(0, VIEW_H - 64, VIEW_W, 64);
@@ -8158,26 +8060,22 @@ function buildKeyedTitleMenu() {
 }
 
 function drawTitle(time) {
-  // Always draw the animated sky/cloud layer first. The menu art is an
-  // overlay; its loading state must never determine whether clouds appear.
-  if (titleSkyImg.complete && titleSkyImg.naturalWidth) {
-    const tw = titleSkyImg.naturalWidth * (VIEW_H / titleSkyImg.naturalHeight);
-    const off = (time * 16) % tw;
-    ctx.fillStyle = '#9fd0ee';
-    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    for (let x = -off; x < VIEW_W; x += tw) {
-      ctx.drawImage(titleSkyImg, x, 0, tw, VIEW_H);
-    }
-  } else {
-    // Keep the title screen sky-colored while title_sky.png is decoding.
-    ctx.fillStyle = '#9fd0ee';
-    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-  }
-
   buildKeyedTitleMenu();
 
-  // Menu ready: chroma-keyed menu centered over the drifting sky.
+  // Menu ready: chroma-keyed menu centered over a slowly drifting sky.
   if (titleMenuKeyed) {
+    if (titleSkyImg.complete && titleSkyImg.naturalWidth) {
+      const tw = titleSkyImg.naturalWidth * (VIEW_H / titleSkyImg.naturalHeight);
+      const off = (time * 16) % tw;   // clouds slowly float by
+      ctx.fillStyle = '#9fd0ee';
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+      for (let x = -off; x < VIEW_W; x += tw) {
+        ctx.drawImage(titleSkyImg, x, 0, tw, VIEW_H);
+      }
+    } else {
+      ctx.fillStyle = 'rgba(8,6,12,0.93)';
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    }
     const mw = titleMenuKeyed.width, mh = titleMenuKeyed.height;
     const s = Math.min(VIEW_W / mw, VIEW_H / mh);
     const dw = mw * s, dh = mh * s;
@@ -8187,8 +8085,9 @@ function drawTitle(time) {
     return;
   }
 
-  // Fallback while menu_title.png is still loading. Keep the sky visible
-  // instead of replacing it with an opaque dark screen.
+  // fallback text-only title (used until the menu image loads)
+  ctx.fillStyle = 'rgba(8,6,12,0.93)';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   ctx.textAlign = 'center';
   ctx.fillStyle = '#e0b040';
   ctx.font = 'bold 44px monospace';
@@ -8197,7 +8096,7 @@ function drawTitle(time) {
   ctx.font = 'italic 14px monospace';
   const story = [
     'Your sampler is empty. Your beat is due.',
-    'Five legendary records are hiding somewhere in this town —',
+    'Five legendary records are hiding somewhere in this town \u2014',
     'in shop crates, diner backrooms, and flea market stalls.',
     'Dig them ALL up and the whole town hears your beat come alive.',
   ];
