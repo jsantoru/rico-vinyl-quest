@@ -763,6 +763,14 @@ nectarsNeonImg.src = 'assets/nectars_neon.png';
 
 const titleMenuImg = new Image();
 titleMenuImg.src = 'assets/menu_title.png';
+// Full-art backgrounds for the two title-menu popups (dig-choice and
+// slot-chooser). The row text/highlight/slot data is still drawn live on
+// top each frame -- see drawDigChoice/drawSlotChoose -- so these images
+// mainly supply the frame, logo, and static labels/hints.
+const digChoiceSplashImg = new Image();
+digChoiceSplashImg.src = 'assets/start_splash_1.png';
+const slotChooseSplashImg = new Image();
+slotChooseSplashImg.src = 'assets/start_splash_2.png';
 const titleSkyImg = new Image();
 titleSkyImg.src = 'assets/title_sky.png';
 
@@ -8091,23 +8099,31 @@ function buildKeyedTitleMenu() {
   titleMenuKeyed = c;
 }
 
+// Slowly drifting cloud background shared by the title screen and the
+// popups that follow it (dig-choice, slot-chooser), so the sky reads as
+// one continuous backdrop from the title screen up until character select
+// takes over. Falls back to a flat dark fill if the art hasn't loaded yet.
+function drawDriftingSky(time) {
+  if (titleSkyImg.complete && titleSkyImg.naturalWidth) {
+    const tw = titleSkyImg.naturalWidth * (VIEW_H / titleSkyImg.naturalHeight);
+    const off = (time * 16) % tw;   // clouds slowly float by
+    ctx.fillStyle = '#9fd0ee';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    for (let x = -off; x < VIEW_W; x += tw) {
+      ctx.drawImage(titleSkyImg, x, 0, tw, VIEW_H);
+    }
+  } else {
+    ctx.fillStyle = 'rgba(8,6,12,0.93)';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  }
+}
+
 function drawTitle(time) {
   buildKeyedTitleMenu();
 
   // Menu ready: chroma-keyed menu centered over a slowly drifting sky.
   if (titleMenuKeyed) {
-    if (titleSkyImg.complete && titleSkyImg.naturalWidth) {
-      const tw = titleSkyImg.naturalWidth * (VIEW_H / titleSkyImg.naturalHeight);
-      const off = (time * 16) % tw;   // clouds slowly float by
-      ctx.fillStyle = '#9fd0ee';
-      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-      for (let x = -off; x < VIEW_W; x += tw) {
-        ctx.drawImage(titleSkyImg, x, 0, tw, VIEW_H);
-      }
-    } else {
-      ctx.fillStyle = 'rgba(8,6,12,0.93)';
-      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    }
+    drawDriftingSky(time);
     const mw = titleMenuKeyed.width, mh = titleMenuKeyed.height;
     const s = Math.min(VIEW_W / mw, VIEW_H / mh);
     const dw = mw * s, dh = mh * s;
@@ -8161,7 +8177,7 @@ function drawTitle(time) {
 // just below; clamped so it never runs off the bottom of the screen.
 function drawTitleHotkeyHint(boxBottomY) {
   ctx.textAlign = 'center';
-  ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
+  ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#8a6420' : '#5a5245';
   ctx.font = 'bold 14px monospace';
   const y = Math.min(boxBottomY + 26, VIEW_H - 28);
   ctx.fillText('Press [H] any time during gameplay to see Hot Keys!', VIEW_W / 2, y);
@@ -8221,13 +8237,13 @@ function drawMenuRow(label, cy, active, subtext) {
   }
 }
 
-function drawDigChoice() {
+function drawDigChoiceFallback() {
   const { boxY } = drawMenuBox("WHAT'S THE MOVE?", '[\u2191\u2193] choose   [E] select   [X] back');
   const rowY = [boxY + 110, boxY + 170];
   DIG_CHOICES.forEach((label, i) => drawMenuRow(label, rowY[i], i === digChoiceIndex));
 }
 
-function drawSlotChoose() {
+function drawSlotChooseFallback() {
   const title = pendingMode === 'new' ? 'START DIGGING \u2014 PICK A SLOT' : 'CONTINUE DIGGING \u2014 PICK A SLOT';
   const { boxY } = drawMenuBox(title, '[\u2191\u2193] choose   [E] select   [X] back');
   const rowY = [boxY + 90, boxY + 140, boxY + 190];
@@ -8238,6 +8254,102 @@ function drawSlotChoose() {
     let subtext = summary || 'EMPTY';
     if (active && armedOverwriteSlot === slot) subtext = 'PRESS [E] AGAIN TO OVERWRITE';
     drawMenuRow(label, rowY[i], active, subtext);
+  });
+}
+
+// Draws `img` scaled/letterboxed to fit inside the view (same "contain"
+// fit as the character-select art), and returns the placement so callers
+// can position dynamic overlay text against the art's own coordinates
+// regardless of how it ends up scaled.
+function drawSplashBackground(img, time) {
+  drawDriftingSky(time);
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  const iw = img.naturalWidth, ih = img.naturalHeight;
+  const scale = Math.min(VIEW_W / iw, VIEW_H / ih);
+  const dw = iw * scale, dh = ih * scale;
+  const originX = (VIEW_W - dw) / 2, originY = (VIEW_H - dh) / 2;
+  ctx.drawImage(img, originX, originY, dw, dh);
+  return { originX, originY, dw, dh, scale };
+}
+
+// Row geometry measured directly from start_splash_1.png (as fractions of
+// the art's own width/height) so overlay text/highlight boxes land exactly
+// on top of the baked "START DIGGING" / "CONTINUE DIGGING" rows regardless
+// of how the art gets scaled to fit the view.
+const DIG_CHOICE_LAYOUT = {
+  boxYFrac: [0.5551, 0.6926 - (0.6400 - 0.5551) / 2], // top of the highlight box for each row
+  boxHFrac: 0.6400 - 0.5551,
+  boxXFrac: 0.1169, boxWFrac: 0.8609 - 0.1169,
+  textYFrac: [0.5976, 0.6926],
+};
+
+function drawDigChoice(time) {
+  if (!digChoiceSplashImg.complete || !digChoiceSplashImg.naturalWidth) { drawDigChoiceFallback(); return; }
+  const { originX, originY, dw, dh } = drawSplashBackground(digChoiceSplashImg, time);
+  const cx = originX + dw / 2;
+  DIG_CHOICES.forEach((label, i) => {
+    const active = i === digChoiceIndex;
+    const textY = originY + DIG_CHOICE_LAYOUT.textYFrac[i] * dh;
+    if (active) {
+      const boxY = originY + DIG_CHOICE_LAYOUT.boxYFrac[i] * dh;
+      const boxH = DIG_CHOICE_LAYOUT.boxHFrac * dh;
+      const boxX = originX + DIG_CHOICE_LAYOUT.boxXFrac * dw;
+      const boxW = DIG_CHOICE_LAYOUT.boxWFrac * dw;
+      ctx.fillStyle = 'rgba(8,14,20,0.92)';
+      ctx.fillRect(boxX, boxY, boxW, boxH);
+      ctx.strokeStyle = '#e0b040';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(boxX + 2, boxY + 2, boxW - 4, boxH - 4);
+    }
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 20px monospace';
+    ctx.fillStyle = active ? '#e0b040' : '#f4ecd8';
+    ctx.fillText((active ? '\u25B8 ' : '') + label + (active ? ' \u25C2' : ''), cx, textY);
+  });
+}
+
+// Row geometry measured from start_splash_2.png. Text is left-aligned to
+// match the baked "SLOT N" rows (the chest icon sits to the right of it),
+// unlike the centered dig-choice rows above.
+const SLOT_CHOOSE_LAYOUT = {
+  mainYFrac: [0.5305, 0.6491, 0.7668],
+  subYFrac: [0.5700, 0.6876, 0.8063],
+  boxHFrac: 0.0923,
+  textXFrac: 0.2422,
+  boxXFrac: 0.0945, boxWFrac: 0.8849 - 0.0945,
+};
+
+function drawSlotChoose(time) {
+  if (!slotChooseSplashImg.complete || !slotChooseSplashImg.naturalWidth) { drawSlotChooseFallback(); return; }
+  const { originX, originY, dw, dh } = drawSplashBackground(slotChooseSplashImg, time);
+  const textX = originX + SLOT_CHOOSE_LAYOUT.textXFrac * dw;
+  SAVE_SLOTS.forEach((slot, i) => {
+    const active = i === slotChoiceIndex;
+    const summary = slotSummary(slot);
+    const label = `SLOT ${slot}`;
+    let subtext = summary || 'EMPTY';
+    if (active && armedOverwriteSlot === slot) subtext = 'PRESS [E] AGAIN TO OVERWRITE';
+    const mainY = originY + SLOT_CHOOSE_LAYOUT.mainYFrac[i] * dh;
+    const subY = originY + SLOT_CHOOSE_LAYOUT.subYFrac[i] * dh;
+    if (active) {
+      const boxY = mainY - (SLOT_CHOOSE_LAYOUT.boxHFrac * dh) * 0.42;
+      const boxH = SLOT_CHOOSE_LAYOUT.boxHFrac * dh;
+      const boxX = originX + SLOT_CHOOSE_LAYOUT.boxXFrac * dw;
+      const boxW = SLOT_CHOOSE_LAYOUT.boxWFrac * dw;
+      ctx.fillStyle = 'rgba(8,14,20,0.92)';
+      ctx.fillRect(boxX, boxY, boxW, boxH);
+      ctx.strokeStyle = '#e0b040';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(boxX + 2, boxY + 2, boxW - 4, boxH - 4);
+    }
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 20px monospace';
+    ctx.fillStyle = active ? '#e0b040' : '#f4ecd8';
+    ctx.fillText((active ? '\u25B8 ' : '') + label, textX, mainY);
+    ctx.font = '13px monospace';
+    ctx.fillStyle = active ? 'rgba(224,176,64,0.85)' : 'rgba(244,236,216,0.6)';
+    ctx.fillText(subtext, textX, subY);
   });
 }
 
@@ -8287,20 +8399,10 @@ function drawRetroTitle(text, cx, cy, size) {
 }
 
 function drawCharacterSelect(time) {
-  // background: reuse the same drifting sky as the title screen so the two
-  // screens feel like one continuous flow
-  if (titleSkyImg.complete && titleSkyImg.naturalWidth) {
-    const tw = titleSkyImg.naturalWidth * (VIEW_H / titleSkyImg.naturalHeight);
-    const off = (time * 16) % tw;
-    ctx.fillStyle = '#9fd0ee';
-    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    for (let x = -off; x < VIEW_W; x += tw) {
-      ctx.drawImage(titleSkyImg, x, 0, tw, VIEW_H);
-    }
-  } else {
-    ctx.fillStyle = 'rgba(8,6,12,0.93)';
-    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-  }
+  // background: flat dark backdrop -- the drifting sky from the title
+  // screen stops here, once the player has moved on to picking a character.
+  ctx.fillStyle = 'rgba(8,6,12,0.93)';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
 
