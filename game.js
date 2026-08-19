@@ -1197,10 +1197,10 @@ const shops = {
           'Got the MPC, got the notebook, got the headphones warmed up. Always cooking something back here.',
         ] },
     ],
-    // Beat-matching mini-game, parked right beside Kanga's turntables --
-    // same tx/ty-facing pattern as the darts board in Nectar's.
+    // Beat-matching mini-game, pushed up against the back wall (top row of
+    // the room, right below the wall tile) instead of out on the floor.
     minigames: [
-      { id: 'beatmatch', tx: 5, ty: 4, label: 'PLAY BEAT MATCH' },
+      { id: 'beatmatch', tx: 5, ty: 1, label: 'PLAY BEAT MATCH' },
     ],
   }),
   wax: makeShop('wax', {
@@ -2629,56 +2629,37 @@ function drawMountains(camX) {
   for (const layer of MOUNTAIN_LAYERS) drawMountainLayer(layer, camX);
 }
 
-// ---------------------------------------------------------------- mini-game glow + arcade sign
-// Every mini-game automatically gets BOTH of these, driven entirely by each
-// map's `minigames` list -- so a future mini-game only needs an entry there
-// (plus one line in MINIGAME_ACTIONS) and it picks up the exact same look
-// for free, with zero per-game drawing code required:
-//   1. drawMinigameTileGlow  -- a pulsing glowing outline traced right on
-//      the floor tile the mini-game object sits on, so the object itself
-//      (dartboard, or whatever comes next) reads as special at a glance,
-//      distinct from ordinary crates/props/decoration in the room.
-//   2. drawMinigameArcadeSign -- a small glowing arcade-cabinet icon that
-//      floats and bobs above the tile, unmistakably marking "mini-game
-//      here" from across the room. Bright arcade yellow/red/cyan on
-//      purpose so it never blends into ordinary shop signage like
-//      drawSkylabSign.
+// ---------------------------------------------------------------- mini-game arcade sign
+// Every mini-game automatically gets this, driven entirely by each map's
+// `minigames` list -- so a future mini-game only needs an entry there (plus
+// one line in MINIGAME_ACTIONS) and it picks up the exact same look for
+// free, with zero per-game drawing code required:
+//   drawMinigameArcadeSign -- a small arcade-cabinet icon that floats and
+//     bobs above the tile, marking "mini-game here" from across the room.
+//     Sized off MINIGAME_OBJECT_SCALE below, so resizing every mini-game
+//     object (current and future) is a one-line change.
+// drawMinigameTileGlow is a no-op (glow removed) kept only so the render()
+// call site doesn't need to change.
 // Both are keyed off the same tile position and seed, so they stay in sync
 // automatically for any mini-game added later.
 let minigameSignHitboxes = []; // world-space rects, rebuilt every render() frame
 let lastCam = { outside: true, camX: 0, camY: 0, zoom: 1, dx: 0, dy: 0 };
 
+// Shared size for every mini-game object drawn in the world (the little
+// arcade-cabinet sign floating above its tile). Applies automatically to
+// every entry in every map's `minigames` list -- current and future -- so
+// changing this one constant is the single place to resize them all.
+const MINIGAME_OBJECT_SCALE = 0.75; // 25% smaller than the original 1.0 size
+
 function drawMinigameTileGlow(wx, wy, time, seed) {
-  const pulse = 0.5 + Math.sin(time * 0.004 + seed) * 0.28; // 0.22..0.78
-  const half = TILE / 2 + 5;
-  ctx.save();
-  ctx.shadowColor = '#ffd23c';
-  ctx.shadowBlur = 14;
-  ctx.strokeStyle = `rgba(255,210,60,${pulse.toFixed(2)})`;
-  ctx.lineWidth = 3;
-  ctx.strokeRect(wx - half, wy - half, half * 2, half * 2);
-  // faint fill so the tile reads as "lit up" even at a glance, not just outlined
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = `rgba(255,210,60,${(pulse * 0.14).toFixed(2)})`;
-  ctx.fillRect(wx - half, wy - half, half * 2, half * 2);
-  ctx.restore();
+  // Glow disabled -- kept as a no-op so callers/config don't need to change.
 }
 
 function drawMinigameArcadeSign(wx, wy, time, seed, label) {
+  const s = MINIGAME_OBJECT_SCALE;
   const bob = Math.sin(time * 0.003 + seed) * 4;
   const cx = wx, cy = wy - 46 + bob;
-  const cabW = 30, cabH = 38;
-  const pulse = 0.30 + Math.sin(time * 0.005 + seed) * 0.14;
-
-  // soft ambient glow behind the whole cabinet so it pops against dark interiors
-  ctx.save();
-  ctx.shadowColor = '#ffd23c';
-  ctx.shadowBlur = 20;
-  ctx.fillStyle = `rgba(255,210,60,${pulse.toFixed(2)})`;
-  ctx.beginPath();
-  ctx.ellipse(cx, cy + 4, cabW * 0.95, cabH * 0.7, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
+  const cabW = 30 * s, cabH = 38 * s;
 
   // post connecting the sign down to the mini-game tile itself
   ctx.strokeStyle = '#241c28';
@@ -2688,46 +2669,34 @@ function drawMinigameArcadeSign(wx, wy, time, seed, label) {
   ctx.lineTo(wx, wy - 4);
   ctx.stroke();
 
-  // cabinet body, glowing outline
-  ctx.save();
-  ctx.shadowColor = '#ffd23c';
-  ctx.shadowBlur = 8;
+  // cabinet body
   ctx.fillStyle = '#1c1420';
   ctx.fillRect(cx - cabW / 2, cy - cabH / 2, cabW, cabH);
   ctx.strokeStyle = '#ffd23c';
   ctx.lineWidth = 2;
   ctx.strokeRect(cx - cabW / 2, cy - cabH / 2, cabW, cabH);
-  ctx.restore();
 
-  // marquee -- glowing red strip across the top, like a real cabinet header
-  ctx.save();
-  ctx.shadowColor = '#e04858';
-  ctx.shadowBlur = 8;
+  // marquee -- red strip across the top, like a real cabinet header
   ctx.fillStyle = '#e04858';
-  ctx.fillRect(cx - cabW / 2 + 2, cy - cabH / 2 + 2, cabW - 4, 7);
-  ctx.restore();
+  ctx.fillRect(cx - cabW / 2 + 2 * s, cy - cabH / 2 + 2 * s, cabW - 4 * s, 7 * s);
 
-  // screen -- glowing cyan, the classic "game's on" cue
-  ctx.save();
-  ctx.shadowColor = '#4ad0ff';
-  ctx.shadowBlur = 7;
+  // screen -- cyan, the classic "game's on" cue
   ctx.fillStyle = '#4ad0ff';
-  ctx.fillRect(cx - cabW / 2 + 5, cy - cabH / 2 + 12, cabW - 10, 11);
-  ctx.restore();
+  ctx.fillRect(cx - cabW / 2 + 5 * s, cy - cabH / 2 + 12 * s, cabW - 10 * s, 11 * s);
 
   // joystick + buttons on the control panel
   ctx.fillStyle = '#f4ecd8';
-  ctx.fillRect(cx - 7, cy + cabH / 2 - 9, 1.5, 6);
-  ctx.beginPath(); ctx.arc(cx - 6.25, cy + cabH / 2 - 10, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillRect(cx - 7 * s, cy + cabH / 2 - 9 * s, 1.5 * s, 6 * s);
+  ctx.beginPath(); ctx.arc(cx - 6.25 * s, cy + cabH / 2 - 10 * s, 2 * s, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#ffd23c';
-  ctx.beginPath(); ctx.arc(cx + 4, cy + cabH / 2 - 10, 1.6, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(cx + 9, cy + cabH / 2 - 6, 1.6, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 4 * s, cy + cabH / 2 - 10 * s, 1.6 * s, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx + 9 * s, cy + cabH / 2 - 6 * s, 1.6 * s, 0, Math.PI * 2); ctx.fill();
 
   // floating label above the cabinet -- flashes between the game's own
   // label (e.g. "PLAY DARTS") and a generic "TAP TO PLAY" tap hint
   const flashOnLabel = Math.floor(time / 1400) % 2 === 0;
   ctx.fillStyle = '#ffd23c';
-  ctx.font = 'bold 9px monospace';
+  ctx.font = `bold ${Math.round(9 * s)}px monospace`;
   ctx.textAlign = 'center';
   ctx.fillText(flashOnLabel ? (label || 'MINI-GAME') : 'TAP TO PLAY', cx, cy - cabH / 2 - 8);
 
