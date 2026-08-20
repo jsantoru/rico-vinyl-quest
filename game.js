@@ -1478,6 +1478,7 @@ function makeShop(id, opts) {
     comedyClub: opts.comedyClub || false,
     circusInterior: opts.circusInterior || false,
     recordShop: opts.recordShop || false,
+    plantShop: opts.plantShop || false,
     recordingDesk: opts.recordingDesk
       ? { x: opts.recordingDesk[0], y: opts.recordingDesk[1], sign: opts.recordingDeskSign || 'SKYLAB' }
       : null,
@@ -6968,7 +6969,116 @@ function drawGlassPlantCase(x, y, w, h) {
   ctx.restore();
 }
 
-// A small rack of hoodies hanging from a rod, tucked next to the shelf.
+// A second glass display case, this one showing off vivid exotic
+// flowers rather than foliage — tall orchid sprays and a spiky
+// bird-of-paradise bloom, each in its own bright petal color, sitting in
+// small pots on the case's lit shelf. Same case construction as
+// drawGlassPlantCase (wooden base, metal frame, tinted glass, highlight
+// streak) so the two read as a matched pair of display cases.
+function drawGlassFlowerCase(x, y, w, h) {
+  ctx.save();
+
+  const legY = y + h;
+  ctx.fillStyle = '#5a3d22';
+  ctx.fillRect(x + 4, legY, 5, 10);
+  ctx.fillRect(x + w - 9, legY, 5, 10);
+  ctx.fillStyle = '#4a3018';
+  ctx.fillRect(x, legY - 4, w, 6);
+
+  ctx.strokeStyle = '#8a8e92';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+
+  ctx.fillStyle = 'rgba(225,190,225,0.20)';
+  ctx.fillRect(x + 2, y + 2, w - 4, h - 4);
+  ctx.fillStyle = 'rgba(255,210,140,0.08)';
+  ctx.fillRect(x + 2, y + 2, w - 4, h - 4);
+
+  const shelfY = y + h * 0.62;
+  ctx.fillStyle = 'rgba(90,70,50,0.85)';
+  ctx.fillRect(x + 3, shelfY, w - 6, 3);
+
+  // three flowering specimens: a hot-pink orchid spray, a spiky
+  // orange-and-blue bird-of-paradise, and a deep-purple orchid spray
+  const blooms = [
+    { fx: 0.2, kind: 'orchid', color: '#ff5fb0', color2: '#3fa8d4' },
+    { fx: 0.52, kind: 'bird', color: '#e0a030', color2: '#3f6ad4' },
+    { fx: 0.82, kind: 'orchid', color: '#b15fe0', color2: '#5fb862' },
+  ];
+  blooms.forEach((s) => {
+    const px = x + w * s.fx, py = shelfY;
+    // small terracotta pot
+    ctx.fillStyle = '#8a5a30';
+    ctx.fillRect(px - 4, py - 7, 8, 7);
+    // leafy base
+    ctx.fillStyle = s.color2;
+    ctx.beginPath(); ctx.ellipse(px - 2, py - 10, 4, 6, -0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(px + 3, py - 9, 3.5, 5, 0.4, 0, Math.PI * 2); ctx.fill();
+    if (s.kind === 'orchid') {
+      // a spray of petal blossoms along a thin arching stem
+      ctx.strokeStyle = '#3f7a3f';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(px, py - 9);
+      ctx.quadraticCurveTo(px + 6, py - 22, px + 3, py - 32);
+      ctx.stroke();
+      const petalSpots = [[px + 1, py - 15], [px + 4, py - 21], [px + 2, py - 27], [px + 4, py - 32]];
+      petalSpots.forEach(([bx, by]) => {
+        ctx.fillStyle = s.color;
+        for (let k = 0; k < 4; k++) {
+          const ang = (k / 4) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.ellipse(bx + Math.cos(ang) * 3, by + Math.sin(ang) * 3, 2.4, 1.6, ang, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = '#f4ecd8';
+        ctx.beginPath(); ctx.arc(bx, by, 1, 0, Math.PI * 2); ctx.fill();
+      });
+    } else {
+      // bird-of-paradise: a beak-shaped sheath with flame-like orange
+      // and blue petals fanning up and out
+      ctx.strokeStyle = '#3f7a3f';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(px, py - 9); ctx.lineTo(px + 2, py - 26); ctx.stroke();
+      ctx.fillStyle = '#7a4a30';
+      ctx.beginPath();
+      ctx.moveTo(px + 2, py - 24);
+      ctx.lineTo(px + 12, py - 30);
+      ctx.lineTo(px + 3, py - 34);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = s.color;
+      [[px + 4, py - 32], [px + 7, py - 34], [px + 10, py - 30]].forEach(([bx, by]) => {
+        ctx.beginPath();
+        ctx.moveTo(bx, by);
+        ctx.lineTo(bx + 5, by - 3);
+        ctx.lineTo(bx + 1, by + 2);
+        ctx.closePath();
+        ctx.fill();
+      });
+      ctx.fillStyle = s.color2;
+      ctx.beginPath();
+      ctx.moveTo(px + 3, py - 30);
+      ctx.lineTo(px + 8, py - 33);
+      ctx.lineTo(px + 4, py - 27);
+      ctx.closePath();
+      ctx.fill();
+    }
+  });
+
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.beginPath();
+  ctx.moveTo(x + 4, y + h - 4);
+  ctx.lineTo(x + w * 0.35, y + 4);
+  ctx.lineTo(x + w * 0.48, y + 4);
+  ctx.lineTo(x + w * 0.18, y + h - 4);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+
 function drawHoodieRack(x, y) {
   const w = 46;
   ctx.strokeStyle = '#6a5a44';
@@ -7007,6 +7117,33 @@ function drawHoodieRack(x, y) {
   });
 }
 
+// A low wooden display table with a small stack of folded tees on top —
+// a second, more retail-shelf-y way tees show up in the shop besides the
+// tee row already folded onto the books/tees shelf.
+function drawFoldedTeeTable(x, y) {
+  const w = 40, h = 8;
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.fillRect(x, y + 22, w, 4);
+  ctx.fillStyle = '#6a4a2c';
+  ctx.fillRect(x, y + 16, w, h);
+  ctx.fillStyle = '#5a3d22';
+  ctx.fillRect(x + 3, y + 24, 4, 6);
+  ctx.fillRect(x + w - 7, y + 24, 4, 6);
+
+  const teeColors = ['#e0a030', '#3a4a6a', '#c0392b'];
+  let ty = y + 12;
+  teeColors.forEach((c, i) => {
+    const inset = i * 2;
+    ctx.fillStyle = c;
+    ctx.fillRect(x + 2 + inset, ty, w - 4 - inset * 2, 5);
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(x + 2 + inset, ty + 4, w - 4 - inset * 2, 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.fillRect(x + 2 + inset, ty, w - 4 - inset * 2, 1);
+    ty -= 5;
+  });
+}
+
 // A cascading vine trailing down from a ceiling corner, thick with
 // leaves — part of the "overflowing" jungle-shop dressing. dir flips it
 // to hang from the left or right corner.
@@ -7031,8 +7168,10 @@ function drawVineCorner(x, y, dir, time, seed) {
 function drawHeyBudInterior(time) {
   // Exotic-plant-shop redesign: hanging macrame planters up top, big
   // tropical potted plants flanking the entrance, a wooden shelf stocked
-  // with books and folded tees, a couple of street-art prints on the
-  // wall, and the "99" Vermont-silhouette poster behind the counter.
+  // with books and folded tees, a folded-tee display table, a hoodie rack,
+  // a small gallery of street-art prints, twin glass display cases (one of
+  // rare exotic plants, one of exotic flowering blooms), and the "99"
+  // Vermont-silhouette poster behind the counter.
 
   // --- hanging macrame plant pots, gently swaying from the rafters ---
   const hangs = [[2 * TILE + 16, 0.3], [4 * TILE + 8, 1.4], [10 * TILE + 16, 0.7], [12 * TILE + 16, 2.1]];
@@ -7111,13 +7250,23 @@ function drawHeyBudInterior(time) {
   // --- hoodie rack, hanging right beside the shelf ---
   drawHoodieRack(shelfX + shelfW + 8, shelfY + 6);
 
-  // --- street-art prints on the right-hand wall ---
+  // --- a small folded-tee display table out on the floor, a second
+  // dedicated spot for tees besides the shelf's lower row ---
+  drawFoldedTeeTable(5 * TILE + 12, 7 * TILE + 22);
+
+  // --- street-art gallery: three prints, one tucked above the hoodie
+  // rack and a pair stacked on the right-hand wall ---
+  drawStreetArtPrint(4 * TILE + 20, 4 * TILE + 8, 26, 26, 0);
   drawStreetArtPrint(10 * TILE + 4, 5 * TILE + 6, 26, 30, 1);
   drawStreetArtPrint(10 * TILE + 4, 6 * TILE + 10, 26, 26, 2);
 
-  // --- glass display case of prized exotic specimens, on the floor below
-  // the street-art wall ---
+  // --- glass display case of prized exotic plant specimens, on the floor
+  // below the street-art wall ---
   drawGlassPlantCase(10 * TILE, 7 * TILE + 2, 3 * TILE, 2 * TILE - 10);
+
+  // --- a second glass case, front and center in the room, showing off
+  // vivid exotic flowering blooms -- orchid sprays and a bird-of-paradise ---
+  drawGlassFlowerCase(6 * TILE + 18, 5 * TILE, 2 * TILE + 6, 1 * TILE + 22);
 
   // --- the big roller-painted neon-pink "99" poster, centered on the wall
   // directly behind the keeper (keeper sits at tile 6,2) ---
