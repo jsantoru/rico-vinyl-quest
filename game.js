@@ -1144,6 +1144,12 @@ humbleImg.src = 'assets/humble.png';
 const hicksImg = new Image();
 hicksImg.src = 'assets/hicks.png';
 
+// MAVSTAR — veteran Vermont emcee, posted up at Junior's grabbing a quick
+// slice before he heads over to Green Door Studio to get lively with the
+// crew. Same pre-drawn treatment as the rest of the shop npcs above.
+const mavstarImg = new Image();
+mavstarImg.src = 'assets/mavstar.png';
+
 // ---------------------------------------------------------------- maps
 const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J', 'S', 'A', 'N', 'F', 'R', 'V', 'Z']);
 
@@ -1475,6 +1481,7 @@ function makeShop(id, opts) {
     darkClub: opts.darkClub || false,
     pizzaShop: opts.pizzaShop || false,
     diner: opts.diner || false,
+    deliShop: opts.deliShop || false,
     comedyClub: opts.comedyClub || false,
     circusInterior: opts.circusInterior || false,
     recordShop: opts.recordShop || false,
@@ -1637,6 +1644,7 @@ const shops = {
       foundLine: 'Well I’ll be. Make that bassline bounce again, sugar.' },
     crates: [ { junkSeed: 6 }, { junkSeed: 7 }, { junkSeed: 0 }, { junkSeed: 1 }, { record: 'cola' } ],
     jukebox: true,
+    deliShop: true,
   }),
   thrift: makeShop('thrift', {
     floor: '#6a8a6a', plank: '#587a58', wallColor: '#3a4a3a',
@@ -1702,6 +1710,18 @@ const shops = {
       foundLine: 'Grab a slice before you go. You\'ll need the energy!' },
     crates: [],
     pizzaShop: true,
+    // MAVSTAR — veteran Vermont emcee, posted up by the counter grabbing a
+    // quick slice before he heads to Green Door Studio for the cypher.
+    npcs: [
+      { id: 'mavstar', tx: 10, ty: 6, name: 'MAVSTAR', sprite: 'mavstar',
+        lines: [
+          'Yo. Mavstar. Some call me Magnus Ver Mavusson — I\'ve been pulling this scene uphill since before you had bars.',
+          'Grabbing a slice quick. Gotta keep the energy up — Green Door\'s calling and the crew doesn\'t wait.',
+          'Every cypher I\'m in, I\'m sharpening something. Perfect ain\'t a destination, it\'s the whole walk.',
+          'Vermont don\'t get enough credit for the pen game up here. I\'m out to fix that, one bar at a time.',
+          'Catch me at Green Door later — mic\'s open, and I never let it stay quiet for long.',
+        ] },
+    ],
   }),
   comedy: makeShop('comedy', {
     world: 'town',
@@ -3165,6 +3185,7 @@ function render(time) {
   if (map.darkClub) drawNectarsInterior(time);
   if (map.pizzaShop) drawJuniorsInterior(time);
   if (map.diner) drawHenrysInterior(time);
+  if (map.deliShop) drawKountryKartDeliInterior(time);
   if (map.comedyClub) drawComedyClubInterior(time);
   if (map.circusInterior) drawChurchCircusInterior(time);
   if (map.plantShop) drawHeyBudInterior(time);
@@ -6518,6 +6539,162 @@ function drawJuniorsInterior(time) {
   }
 }
 
+// Kountry Kart Deli: classic sandwich-shop interior dressing layered on top
+// of the generic shop shell (counter/keeper/crates/jukebox are already
+// placed by makeShop()). Adds a glass deli case up front with cold cuts and
+// salad tubs, twin glass-door beverage coolers, a wire newspaper rack by
+// the door, and a heat-lamp case of wrapped breakfast sandwiches at the end
+// of Rosie's counter. Positions are chosen to sit clear of the jukebox
+// (11,2), the counter/keeper (row 2-3), and the dig crates in the corners.
+function drawKountryKartDeliInterior(time) {
+  // --- glass deli case: meats & salads, front-and-center on the floor,
+  // clear of the corner crates at (12,4)/(12,6)
+  const caseX = 9 * TILE, caseY = 5 * TILE, caseW = 3 * TILE, caseH = 2 * TILE;
+  ctx.fillStyle = '#888e96';
+  ctx.fillRect(caseX, caseY, caseW, caseH);
+  ctx.fillStyle = '#585d64';
+  ctx.fillRect(caseX, caseY + caseH - 8, caseW, 8);
+  ctx.fillStyle = 'rgba(200,225,245,0.28)';
+  ctx.fillRect(caseX + 4, caseY + 6, caseW - 8, caseH - 18);
+  ctx.strokeStyle = '#c8d0d8';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(caseX + 4, caseY + 6, caseW - 8, caseH - 18);
+  // rolled cold cuts along the back of the case
+  const meatColors = ['#d8776a', '#c8543f', '#e0a06a'];
+  for (let i = 0; i < 3; i++) {
+    const mx = caseX + 14 + i * 26;
+    ctx.fillStyle = meatColors[i % meatColors.length];
+    ctx.beginPath();
+    ctx.arc(mx, caseY + 15, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.beginPath();
+    ctx.arc(mx - 2, caseY + 12, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // salad tubs up front
+  const saladColors = ['#8ab84a', '#e8c840', '#e8dcc0'];
+  for (let i = 0; i < 3; i++) {
+    const sx = caseX + 8 + i * 28;
+    ctx.fillStyle = '#e8e8e8';
+    ctx.fillRect(sx, caseY + caseH - 24, 22, 12);
+    ctx.fillStyle = saladColors[i];
+    ctx.fillRect(sx + 2, caseY + caseH - 22, 18, 6);
+  }
+  ctx.fillStyle = '#241608';
+  ctx.font = 'bold 9px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('DELI MEATS & SALADS', caseX + caseW / 2, caseY - 6);
+
+  // --- pickle barrel tucked beside the case -- a nod to Rosie's "behind
+  // the pickle barrels" line
+  drawPickleBarrel(caseX - 20, caseY + caseH - 24);
+
+  // --- twin glass-door beverage coolers against the left wall, above the
+  // crates so nothing overlaps
+  const coolerX = 2 * TILE, coolerY = TILE + 4, coolerW = TILE * 2 - 4, coolerH = TILE * 2 + 10;
+  ctx.fillStyle = '#3a3f46';
+  ctx.fillRect(coolerX, coolerY, coolerW, coolerH);
+  const canColors = ['#c8302a', '#2a68b0', '#e0b030', '#3a9450'];
+  for (let i = 0; i < 2; i++) {
+    const dx = coolerX + 3 + i * (coolerW / 2);
+    const dw = coolerW / 2 - 6;
+    ctx.fillStyle = 'rgba(160,210,240,0.3)';
+    ctx.fillRect(dx, coolerY + 4, dw, coolerH - 8);
+    ctx.strokeStyle = '#c8d8e0';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(dx, coolerY + 4, dw, coolerH - 8);
+    for (let row = 0; row < 3; row++) {
+      for (let col = 0; col < 2; col++) {
+        ctx.fillStyle = canColors[(row + col + i) % canColors.length];
+        ctx.fillRect(dx + 3 + col * 9, coolerY + 10 + row * 14, 7, 10);
+      }
+    }
+  }
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.fillRect(coolerX, coolerY, coolerW, 3);
+  ctx.fillStyle = '#e8e8e8';
+  ctx.font = 'bold 8px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('COLD DRINKS', coolerX + coolerW / 2, coolerY - 4);
+
+  // --- wire newspaper rack, tucked in the front corner near the door
+  const rackX = 4 * TILE, rackY = 7 * TILE;
+  ctx.strokeStyle = '#8a8f96';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(rackX, rackY + 26); ctx.lineTo(rackX, rackY);
+  ctx.lineTo(rackX + 20, rackY); ctx.lineTo(rackX + 20, rackY + 26);
+  ctx.stroke();
+  const paperColors = ['#f4f0e6', '#eee8da'];
+  for (let i = 0; i < 3; i++) {
+    const py2 = rackY - 2 - i * 5;
+    ctx.fillStyle = paperColors[i % 2];
+    ctx.fillRect(rackX - 2 + i, py2, 24, 14);
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(rackX - 2 + i, py2, 24, 14);
+    ctx.fillStyle = '#181818';
+    ctx.font = 'bold 5px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('DAILY NEWS', rackX, py2 + 8);
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    for (let l = 0; l < 3; l++) ctx.fillRect(rackX, py2 + 10 + l * 2, 18 - l * 3, 1);
+  }
+
+  // --- breakfast sandwiches under the heat lamp, at the end of Rosie's
+  // counter (clear of the jukebox at col 11)
+  const wx = 9 * TILE, wy = 2 * TILE + 4, ww = TILE + 12, wh = TILE - 10;
+  ctx.save();
+  ctx.fillStyle = '#ff9a40';
+  ctx.shadowColor = '#ff9a40';
+  ctx.shadowBlur = 10;
+  ctx.beginPath();
+  ctx.ellipse(wx + ww / 2, wy - 4, ww / 2, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.restore();
+  ctx.strokeStyle = '#7a4a2a';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(wx, wy - 6); ctx.lineTo(wx + ww, wy - 6);
+  ctx.stroke();
+  ctx.fillStyle = '#6a4a30';
+  ctx.fillRect(wx, wy, ww, wh);
+  ctx.fillStyle = 'rgba(255,210,140,0.25)';
+  ctx.fillRect(wx + 3, wy + 3, ww - 6, wh - 6);
+  const foilColors = ['#e8d888', '#d8e8e0'];
+  for (let i = 0; i < 3; i++) {
+    ctx.fillStyle = foilColors[i % 2];
+    const bx = wx + 6 + i * 12;
+    ctx.beginPath();
+    ctx.moveTo(bx, wy + wh - 4);
+    ctx.lineTo(bx + 9, wy + wh - 4);
+    ctx.lineTo(bx + 4.5, wy + 6);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.fillStyle = '#f4ecd8';
+  ctx.font = 'bold 7px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('B\'FAST', wx + ww / 2, wy + wh + 9);
+}
+
+// Small wooden pickle barrel prop -- (px, py) is its top-left corner.
+function drawPickleBarrel(px, py) {
+  ctx.fillStyle = '#5c4326';
+  ctx.fillRect(px, py, 18, 22);
+  ctx.fillStyle = '#3a2c18';
+  ctx.fillRect(px, py, 18, 3);
+  ctx.fillRect(px, py + 19, 18, 3);
+  ctx.fillStyle = '#4a8a3a';
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.ellipse(px + 4 + i * 5, py + 2, 2.5, 4, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 function drawComedyClubInterior(time) {
   // Small brick-backed stage with a spotlight, mic stand, a row of stools
   // facing it, and a curtain along the side wall — plus a little cow-face
@@ -8167,7 +8344,7 @@ function drawKeeper(k) {
 // anchored to the tile's floor line — no procedural fallback, since there's
 // no simple shape that stands in for this art; it just waits for the image
 // to finish loading.
-const SHOP_NPC_IMAGES = { kanga: kangaImg, truth: truthImg, bill: billImg, rza: rzaImg, gza: gzaImg, zach: zachImg, humble: humbleImg, hicks: hicksImg };
+const SHOP_NPC_IMAGES = { kanga: kangaImg, truth: truthImg, bill: billImg, rza: rzaImg, gza: gzaImg, zach: zachImg, humble: humbleImg, hicks: hicksImg, mavstar: mavstarImg };
 
 function drawShopImageNpcs(map) {
   if (!map.npcs) return;
