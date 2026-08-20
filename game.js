@@ -1595,10 +1595,10 @@ const shops = {
   }),
   henrys: makeShop('henrys', {
     floor: '#e8dcc8', plank: '#d8c8a8', wallColor: '#8a2820',
-    keeper: { name: 'HENRY', shirt: '#f4ecd8', skin: '#c89268',
-      lines: ['Welcome to Henry\'s — grab a stool, the coffee\'s always on.',
-              'Been flipping burgers on this griddle since before you were born.',
-              'Menu\'s simple: burgers, fries, milkshakes. Don\'t overthink it.'],
+    keeper: { name: 'EDNA', shirt: '#d87a9a', skin: '#c89268',
+      lines: ['Thirty-four years on this floor, honey. I could pour coffee in my sleep. Some nights I do.',
+              'I called the morning shift the day I started, and nobody\'s pried it out of my hands since.',
+              'Menu\'s simple: burgers, fries, milkshakes. Don\'t make me explain a milkshake to you.'],
       foundLine: 'Well butter my biscuit — is that a record? Keep on truckin\', kid.' },
     crates: [],
     diner: true,
@@ -8209,14 +8209,14 @@ function drawDeliSeatingArea() {
 }
 
 // ---------------------------------------------------------------- keeper
-const KEEPER_HAIR = { DEE: '#5a2e1c', ROSIE: '#c8c0b0', ZEKE: '#241a12', JADE: '#141014', TONY: '#2a2018', LANNY: '#3a1a5c', MITCH: '#5a3a1c', BIGDOG: '#3a2a1c' };
+const KEEPER_HAIR = { DEE: '#5a2e1c', ROSIE: '#c8c0b0', ZEKE: '#241a12', JADE: '#141014', TONY: '#2a2018', LANNY: '#3a1a5c', MITCH: '#5a3a1c', BIGDOG: '#3a2a1c', EDNA: '#a8a8a8' };
 
 // Optional per-keeper artwork. Drop a PNG at assets/keepers/<name>.png (any
 // size — it's scaled to KEEPER_SPR_H, feet anchored at the same floor line
 // the procedural sprite uses) and it's picked up automatically. Until a file
 // exists (or while it's still loading), drawKeeper falls back to the shaded
 // procedural sprite below, so nothing ever renders blank.
-const KEEPER_NAMES = ['SK1', 'DEE', 'ROSIE', 'ZEKE', 'JADE', 'TONY', 'LANNY', 'MITCH', 'BIGDOG'];
+const KEEPER_NAMES = ['SK1', 'DEE', 'ROSIE', 'ZEKE', 'JADE', 'TONY', 'LANNY', 'MITCH', 'BIGDOG', 'EDNA'];
 // Matches the 80px height used for Green Door Studio's image-based npcs
 // (truth.png, zach.png, kanga.png — see SHOP_NPC_IMAGES/drawShopImageNpcs'
 // `n.spriteH || 80` default), so every keeper — current and future — reads
