@@ -342,6 +342,7 @@ const MINIGAME_ACTIONS = {
   darts: () => enterMinigame(createDartsGame()),
   beatmatch: () => enterMinigame(createBeatMatchGame()),
   whackpigeon: () => enterMinigame(createWhackPigeonGame()),
+  cratedig: () => enterMinigame(createCrateDiggingGame()),
 };
 
 // Darts: a two-tap power/accuracy throw, same trick classic golf games use.
@@ -733,6 +734,160 @@ function createWhackPigeonGame() {
       ctx.fillStyle = '#6a6070';
       ctx.font = '10px monospace';
       ctx.fillText('X to walk away anytime', cx, 444);
+    },
+  };
+}
+
+// Crate Digging: a needle sweeps down through a vertical stack of drawn
+// record sleeves; tap E to grab whichever one it's over. Every sleeve looks
+// the same (plain cardboard) until it's grabbed, then it flips over to
+// reveal what was actually inside -- a rare 45, a scratched dud, or
+// somebody's mixtape -- same reveal-on-tap trick the shops' own crates use
+// (see openDigChoice/keeper.foundLine elsewhere in this file), just turned
+// into a timing mini-game. Same single-action contract as the other three
+// mini-games above (E to act, X to bail anytime), same dark-overlay/
+// monospace look, same round-based scoring-then-auto-exit shape. Canvas
+// primitives only -- no images, no new assets.
+function createCrateDiggingGame() {
+  const ROUNDS = 5;
+  const SLOTS = 6; // sleeves in the stack per round
+  let phase = 'dig';        // 'dig' | 'result' | 'done'
+  let round = 1;
+  let score = 0;
+  let needlePos = 0, dir = 1; // 0..1 down the stack
+  let speed = 0.5;            // ramps up slightly each round, like beatmatch
+  let slots = [];
+  let grabbedIndex = -1;
+  let lastOutcome = null;
+  let resultTimer = 0;
+  const tally = { rare: 0, mixtape: 0, dud: 0 };
+
+  const stackX = VIEW_W / 2 - 100, stackW = 200;
+  const stackTop = 130, stackBottom = 400;
+  const slotH = (stackBottom - stackTop) / SLOTS;
+
+  // Weighted so rares are genuinely rare, duds are the most common find --
+  // matches the "mostly junk, occasionally treasure" feel of the shops'
+  // own dig crates.
+  const OUTCOMES = [
+    { type: 'rare',    label: 'RARE 45!',       sub: 'A genuine find.',            pts: 100, color: '#e0b040', weight: 1 },
+    { type: 'mixtape', label: 'SOMEONE\'S MIXTAPE', sub: 'Handwritten label, no track list.', pts: 30, color: '#4870d0', weight: 2 },
+    { type: 'dud',     label: 'SCRATCHED DUD',  sub: 'Straight to the bargain bin.', pts: 0,   color: '#6a6070', weight: 3 },
+  ];
+  function pickOutcome() {
+    const total = OUTCOMES.reduce((s, o) => s + o.weight, 0);
+    let r = Math.random() * total;
+    for (const o of OUTCOMES) { if (r < o.weight) return o; r -= o.weight; }
+    return OUTCOMES[OUTCOMES.length - 1];
+  }
+  function newStack() { slots = Array.from({ length: SLOTS }, pickOutcome); }
+  newStack();
+
+  return {
+    update(dt) {
+      if (phase === 'dig') {
+        needlePos += dir * dt * speed;
+        if (needlePos >= 1) { needlePos = 1; dir = -1; }
+        if (needlePos <= 0) { needlePos = 0; dir = 1; }
+        if (interactPressed) {
+          grabbedIndex = Math.min(SLOTS - 1, Math.floor(needlePos * SLOTS));
+          lastOutcome = slots[grabbedIndex];
+          score += lastOutcome.pts;
+          tally[lastOutcome.type]++;
+          phase = 'result';
+          resultTimer = 1.0;
+        }
+      } else if (phase === 'result') {
+        resultTimer -= dt;
+        if (resultTimer <= 0) {
+          if (round >= ROUNDS) { phase = 'done'; }
+          else {
+            round++;
+            speed += 0.1;
+            needlePos = 0; dir = 1;
+            grabbedIndex = -1;
+            newStack();
+            phase = 'dig';
+          }
+        }
+      } else if (phase === 'done') {
+        if (interactPressed) exitMinigame();
+      }
+      // X always bails out early, no matter the phase
+      if (buyPressed) exitMinigame();
+    },
+    draw() {
+      ctx.fillStyle = 'rgba(8,6,12,0.9)';
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#e0b040';
+      ctx.font = 'bold 22px monospace';
+      ctx.fillText('CRATE DIGGING', VIEW_W / 2, 56);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = '12px monospace';
+      ctx.fillText(`SCORE ${score}   DIG ${Math.min(round, ROUNDS)}/${ROUNDS}`, VIEW_W / 2, 78);
+
+      // crate frame around the stack
+      ctx.strokeStyle = '#7a5a34';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(stackX - 10, stackTop - 10, stackW + 20, stackBottom - stackTop + 20);
+
+      // sleeves -- plain cardboard until grabbed (or revealed on the result
+      // screen), then flip to their revealed color for a beat
+      for (let i = 0; i < SLOTS; i++) {
+        const sy = stackTop + i * slotH;
+        const revealed = phase !== 'dig' && i === grabbedIndex;
+        ctx.fillStyle = revealed ? lastOutcome.color : (i % 2 === 0 ? '#9a8058' : '#8a7048');
+        ctx.fillRect(stackX, sy + 2, stackW, slotH - 4);
+        ctx.strokeStyle = revealed ? '#181418' : 'rgba(24,20,24,0.4)';
+        ctx.lineWidth = revealed ? 2 : 1;
+        ctx.strokeRect(stackX, sy + 2, stackW, slotH - 4);
+        if (revealed) {
+          ctx.fillStyle = '#181418';
+          ctx.font = 'bold 11px monospace';
+          ctx.fillText(lastOutcome.type === 'rare' ? '\u2605 RARE' : lastOutcome.type === 'mixtape' ? 'MIXTAPE' : 'DUD',
+            stackX + stackW / 2, sy + slotH / 2 + 4);
+        }
+      }
+
+      // sweeping needle, only while actively digging
+      if (phase === 'dig') {
+        const ny = stackTop + needlePos * (stackBottom - stackTop);
+        ctx.strokeStyle = '#e04858';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(stackX - 20, ny);
+        ctx.lineTo(stackX + stackW + 20, ny);
+        ctx.stroke();
+        // little needle tip on the left, like a tonearm
+        ctx.fillStyle = '#e04858';
+        ctx.beginPath();
+        ctx.moveTo(stackX - 20, ny);
+        ctx.lineTo(stackX - 32, ny - 6);
+        ctx.lineTo(stackX - 32, ny + 6);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
+      ctx.font = 'bold 14px monospace';
+      if (phase === 'dig') ctx.fillText('- TAP E TO GRAB ONE -', VIEW_W / 2, 430);
+      else if (phase === 'result') {
+        ctx.fillText(lastOutcome.label, VIEW_W / 2, 430);
+        ctx.fillStyle = '#9a90a8';
+        ctx.font = '11px monospace';
+        ctx.fillText(lastOutcome.sub, VIEW_W / 2, 448);
+      } else if (phase === 'done') {
+        ctx.fillText(`FINAL SCORE: ${score} - PRESS E TO LEAVE`, VIEW_W / 2, 430);
+        ctx.fillStyle = '#9a90a8';
+        ctx.font = '11px monospace';
+        ctx.fillText(`${tally.rare} rare 45${tally.rare === 1 ? '' : 's'}, ${tally.mixtape} mixtape${tally.mixtape === 1 ? '' : 's'}, ${tally.dud} dud${tally.dud === 1 ? '' : 's'}`, VIEW_W / 2, 448);
+      }
+
+      ctx.fillStyle = '#6a6070';
+      ctx.font = '10px monospace';
+      ctx.fillText('X to walk away anytime', VIEW_W / 2, phase === 'dig' ? 454 : 470);
     },
   };
 }
@@ -1322,6 +1477,7 @@ function makeShop(id, opts) {
     diner: opts.diner || false,
     comedyClub: opts.comedyClub || false,
     circusInterior: opts.circusInterior || false,
+    recordShop: opts.recordShop || false,
     recordingDesk: opts.recordingDesk
       ? { x: opts.recordingDesk[0], y: opts.recordingDesk[1], sign: opts.recordingDeskSign || 'SKYLAB' }
       : null,
@@ -1483,12 +1639,23 @@ const shops = {
   }),
   thrift: makeShop('thrift', {
     floor: '#6a8a6a', plank: '#587a58', wallColor: '#3a4a3a',
+    // Crate-digger's-dream redecoration: wall shelves stuffed with vinyl
+    // spines, open bins of fanned sleeves, a built-in twin-turntable DJ
+    // booth on the counter, loose record stacks, and a disco ball -- see
+    // drawPurePopInterior().
+    recordShop: true,
     keeper: { name: 'ZEKE', shirt: '#70b060', skin: '#9a7050',
       lines: ['Welcome to Pure Pop — new arrivals, deep cuts, the whole crate-digger’s dream.',
               'Some church choir gospel came in from an estate sale — real rare pressing.',
               'Might be filed on the RIGHT side. Might be misfiled entirely, honestly.'],
       foundLine: 'Galactic Hallelujah?! I nearly priced that thing at a dollar. Glad you found it first.' },
     crates: [ { junkSeed: 2 }, { junkSeed: 3 }, { junkSeed: 4 }, { record: 'choir' } ],
+    // Crate Digging mini-game, set back on open floor -- clear of the
+    // counter table (row 3), the keeper, and the four dig crates against
+    // the left/right walls (cols 1 and 12).
+    minigames: [
+      { id: 'cratedig', tx: 9, ty: 7, label: 'DIG THE CRATES' },
+    ],
   }),
   nectars: makeShop('nectars', {
     floor: '#1a1520', plank: '#0f0a15', wallColor: '#2a1a2f',
@@ -3000,6 +3167,7 @@ function render(time) {
   if (map.comedyClub) drawComedyClubInterior(time);
   if (map.circusInterior) drawChurchCircusInterior(time);
   if (map.plantShop) drawHeyBudInterior(time);
+  if (map.recordShop) drawPurePopInterior(time);
   if (map.keeper) drawKeeper(map.keeper);
   drawShopImageNpcs(map);
   drawPlayer(time);
@@ -6956,6 +7124,253 @@ function drawHeyBudInterior(time) {
   const posterW = 76, posterH = 72;
   const posterX = (6 * TILE + TILE / 2) - posterW / 2;
   drawHeyBudRollerPoster(posterX, 6, posterW, posterH);
+}
+
+// ------------------------------------------------------------------
+// Pure Pop Records interior: a proper crate-digger's dream -- wall-mounted
+// browsing shelves stuffed with colorful vinyl spines, open bins with
+// sleeves fanned out for flipping through, a twin-turntable-and-mixer DJ
+// booth built right into the counter (so Zeke reads as always mid-set),
+// loose leaning stacks of records scattered on the floor, a wall-mounted
+// vinyl medallion behind the counter, and a disco ball turning lazily up in
+// the rafters. Every helper below is Pure-Pop-specific and only called from
+// drawPurePopInterior() -- same one-function-per-shop pattern as
+// drawHeyBudInterior() above.
+// ------------------------------------------------------------------
+
+// A short run of vertical vinyl-sleeve "spines" side by side, like books on
+// a shelf -- each a flat color block with a thin pale line near the top to
+// read as a sleeve edge, and a tiny notch of the black disc peeking out.
+function drawVinylSpineRow(x, y, count, spineW, h, seedBase) {
+  const colors = ['#c0392b', '#2980b9', '#27ae60', '#e0a030', '#8e44ad', '#d94f9a', '#16a085', '#e74c3c'];
+  for (let i = 0; i < count; i++) {
+    const sx = x + i * spineW;
+    ctx.fillStyle = colors[(seedBase + i) % colors.length];
+    ctx.fillRect(sx, y, spineW - 1, h);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(sx, y, spineW - 1, 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    ctx.fillRect(sx, y + 3, spineW - 1, 1);
+    // a sliver of black vinyl peeking past the sleeve edge
+    ctx.fillStyle = '#181418';
+    ctx.fillRect(sx + spineW - 2, y + 1, 1, h - 2);
+  }
+}
+
+// Wall/floor browsing shelf: a wooden frame divided into a few rows, each
+// packed edge-to-edge with vinyl spines -- the classic record-store wall of
+// crates look.
+function drawRecordShelfUnit(x, y, w, h, seed) {
+  ctx.fillStyle = '#5a3d22';
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = '#7a5535';
+  ctx.fillRect(x + 2, y + 2, w - 4, h - 4);
+  const rows = 3;
+  const rowH = (h - 6) / rows;
+  for (let r = 0; r < rows; r++) {
+    const ry = y + 3 + r * rowH;
+    ctx.fillStyle = '#4a3018';
+    ctx.fillRect(x + 2, ry + rowH - 2, w - 4, 2);
+    const spineW = 6;
+    const count = Math.max(1, Math.floor((w - 8) / spineW));
+    drawVinylSpineRow(x + 4, ry + 2, count, spineW, rowH - 6, seed + r * 7);
+  }
+}
+
+// An open wooden crate/bin with a fan of record sleeves sticking up out of
+// it at angles, like someone left mid-flip through the stack -- the
+// literal "crate digging" look.
+function drawRecordBin(x, y, seed) {
+  const w = 46, h = 28;
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(x + w / 2, y + h + 4, w / 2, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const colors = ['#c0392b', '#2980b9', '#27ae60', '#e0a030', '#8e44ad', '#d94f9a'];
+  const sCount = 6;
+  for (let i = 0; i < sCount; i++) {
+    const t = i / (sCount - 1);
+    const angle = (t - 0.5) * 0.7;
+    const sx = x + 8 + t * (w - 16);
+    ctx.save();
+    ctx.translate(sx, y + 6);
+    ctx.rotate(angle);
+    ctx.fillStyle = colors[(seed + i) % colors.length];
+    ctx.fillRect(-9, -28, 18, 28);
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-9, -28, 18, 28);
+    ctx.restore();
+  }
+
+  // crate body drawn on top, so the sleeves read as sticking up out of it
+  ctx.fillStyle = '#8a5a30';
+  ctx.fillRect(x, y + 2, w, h - 2);
+  ctx.fillStyle = '#6a4020';
+  ctx.fillRect(x, y + 2, w, 4);
+  ctx.fillRect(x, y + h - 4, w, 4);
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  for (let i = 8; i < w; i += 10) ctx.fillRect(x + i, y + 6, 2, h - 10);
+}
+
+// A single turntable: body, spinning platter with a highlight groove that
+// rotates over time, a gold center label, and a tonearm that drifts gently
+// as if it's mid-play.
+function drawTurntableDeck(x, y, scale, time, seed) {
+  const w = 44 * scale, h = 34 * scale;
+  ctx.fillStyle = '#1c1c20';
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = '#2c2a30';
+  ctx.fillRect(x + 2, y + 2, w - 4, h - 4);
+
+  const cx = x + w * 0.38, cy = y + h * 0.55, r = h * 0.38;
+  ctx.fillStyle = '#111014';
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#3a3a40';
+  ctx.lineWidth = 1;
+  for (let i = 1; i <= 3; i++) {
+    ctx.beginPath(); ctx.arc(cx, cy, r * (0.35 + i * 0.2), 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.fillStyle = '#e0b040';
+  ctx.beginPath(); ctx.arc(cx, cy, r * 0.28, 0, Math.PI * 2); ctx.fill();
+
+  const spin = time * 3 + seed;
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + Math.cos(spin) * r, cy + Math.sin(spin) * r);
+  ctx.stroke();
+
+  const armBaseX = x + w * 0.86, armBaseY = y + h * 0.22;
+  const armAngle = -0.45 + Math.sin(time * 0.5 + seed) * 0.05;
+  ctx.strokeStyle = '#c8c8cc';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(armBaseX, armBaseY);
+  ctx.lineTo(armBaseX - Math.cos(armAngle) * w * 0.5, armBaseY + Math.sin(armAngle) * w * 0.5);
+  ctx.stroke();
+  ctx.fillStyle = '#c8c8cc';
+  ctx.beginPath(); ctx.arc(armBaseX, armBaseY, 3, 0, Math.PI * 2); ctx.fill();
+}
+
+// A small DJ mixer -- three faders with gold caps sitting between the two
+// turntables in the counter's built-in booth.
+function drawMixerProp(x, y) {
+  ctx.fillStyle = '#242226';
+  ctx.fillRect(x, y, 26, 30);
+  ctx.fillStyle = '#3a373e';
+  ctx.fillRect(x + 2, y + 2, 22, 10);
+  for (let i = 0; i < 3; i++) {
+    ctx.strokeStyle = '#555a60';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x + 5 + i * 7, y + 14); ctx.lineTo(x + 5 + i * 7, y + 27); ctx.stroke();
+    ctx.fillStyle = '#e0b040';
+    ctx.fillRect(x + 3 + i * 7, y + 14 + ((i * 5) % 10), 4, 3);
+  }
+}
+
+// A hanging disco ball, swaying slightly, faceted with a fine mirror grid
+// and a couple of blinking sparkle glints -- the funk factor.
+function drawDiscoBallHang(x, ropeLen, time) {
+  const sway = Math.sin(time * 0.8) * 3;
+  ctx.strokeStyle = '#8a8a8a';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + sway, ropeLen); ctx.stroke();
+
+  const bx = x + sway, by = ropeLen + 10, r = 9;
+  ctx.fillStyle = '#c8ccd4';
+  ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(60,60,70,0.5)';
+  ctx.lineWidth = 0.6;
+  for (let i = -r; i <= r; i += 3) {
+    ctx.beginPath(); ctx.moveTo(bx - r, by + i); ctx.lineTo(bx + r, by + i); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(bx + i, by - r); ctx.lineTo(bx + i, by + r); ctx.stroke();
+  }
+  const glints = [[-4, -3], [3, -5], [5, 2], [-3, 4]];
+  const glintPhase = Math.floor(time * 3) % glints.length;
+  const [gx, gy] = glints[glintPhase];
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.beginPath(); ctx.arc(bx + gx, by + gy, 1.4, 0, Math.PI * 2); ctx.fill();
+}
+
+// The big vinyl-record medallion mounted on the wall behind the counter,
+// standing in for a store logo/sign -- concentric grooves, a gold center
+// label reading "PURE POP RECORDS", and a punched spindle hole.
+function drawVinylWallArt(cx, cy, r) {
+  const grad = ctx.createRadialGradient(cx, cy, 2, cx, cy, r);
+  grad.addColorStop(0, '#2a2a2e');
+  grad.addColorStop(1, '#0c0c0e');
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i <= 4; i++) {
+    ctx.beginPath(); ctx.arc(cx, cy, r * (i / 5), 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.fillStyle = '#e0b040';
+  ctx.beginPath(); ctx.arc(cx, cy, r * 0.32, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#181418';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 7px monospace';
+  ctx.fillText('PURE POP', cx, cy - 1);
+  ctx.font = '6px monospace';
+  ctx.fillText('RECORDS', cx, cy + 7);
+  ctx.fillStyle = '#0c0c0e';
+  ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2); ctx.fill();
+}
+
+// A loose leaning stack of records on the floor -- flat sleeves piled up
+// with a slight alternating lean, like a stack someone's still sorting.
+function drawLeaningVinylStack(x, y, count, seed) {
+  const colors = ['#c0392b', '#2980b9', '#27ae60', '#e0a030', '#8e44ad'];
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.beginPath(); ctx.ellipse(x + 10, y + 4, 12, 3, 0, 0, Math.PI * 2); ctx.fill();
+  for (let i = 0; i < count; i++) {
+    const lean = (i % 2 === 0 ? 1 : -1) * i;
+    ctx.save();
+    ctx.translate(x + 10, y - i * 4);
+    ctx.rotate(lean * 0.02);
+    ctx.fillStyle = colors[(seed + i) % colors.length];
+    ctx.fillRect(-11, -3, 22, 6);
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-11, -3, 22, 6);
+    ctx.restore();
+  }
+}
+
+function drawPurePopInterior(time) {
+  // vinyl medallion on the back wall, centered behind the counter (keeper
+  // stands at tile 6,2) -- drawn first so the keeper sprite layers on top
+  drawVinylWallArt(6 * TILE + 16, 46, 38);
+
+  // wall-to-wall browsing shelves packed with vinyl spines, flanking the
+  // counter on both sides -- clear of the interactive dig crates at
+  // tile-columns 1 and 12
+  drawRecordShelfUnit(2 * TILE, 4 * TILE + 22, 3 * TILE + 8, 2 * TILE - 16, 2);
+  drawRecordShelfUnit(9 * TILE - 8, 4 * TILE + 22, 3 * TILE + 8, 2 * TILE - 16, 9);
+
+  // twin-turntable-and-mixer DJ booth built right into the counter, so
+  // Zeke reads as always mid-set behind the register
+  drawTurntableDeck(4 * TILE + 12, 2 * TILE + 18, 0.85, time, 0.4);
+  drawMixerProp(6 * TILE + 2, 2 * TILE + 22);
+  drawTurntableDeck(7 * TILE + 2, 2 * TILE + 18, 0.85, time, 2.1);
+
+  // open bins of fanned-out sleeves, down in the open floor corners --
+  // clear of the mini-game sign at tile 9,7
+  drawRecordBin(2 * TILE + 6, 8 * TILE - 4, 1);
+  drawRecordBin(10 * TILE + 10, 8 * TILE - 4, 4);
+
+  // loose stacks of vinyl scattered across the open floor between the
+  // shelves -- the "stacks and stacks" of the request
+  drawLeaningVinylStack(5 * TILE + 30, 5 * TILE + 10, 5, 0);
+  drawLeaningVinylStack(7 * TILE + 6, 5 * TILE + 18, 4, 2);
+  drawLeaningVinylStack(6 * TILE + 16, 7 * TILE + 26, 3, 1);
+
+  // disco ball turning slowly up in the rafters for the funk factor
+  drawDiscoBallHang(11 * TILE + 8, 22, time);
 }
 
 // A wire newsstand rack, angled shelves stacked with colorful magazine
