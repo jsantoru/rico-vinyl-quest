@@ -112,6 +112,17 @@ ctx.imageSmoothingEnabled = false;
       border-color: rgba(224,176,64,0.9);
       color: #f4ecd8;
     }
+    /* SAVE / NEW get their own color in the extras panel so they stand
+       out from the BREW/YERBA toggles above them. */
+    #extrasPanel .tc-btn.tc-important {
+      background: rgba(196,90,64,0.35);
+      border-color: rgba(224,120,90,0.85);
+      color: #f4ecd8;
+    }
+    #extrasPanel .tc-btn.tc-important:active {
+      background: rgba(224,120,90,0.55);
+      border-color: rgba(224,120,90,1);
+    }
   `;
   document.head.appendChild(style);
 
@@ -2862,7 +2873,7 @@ function createTouchControls() {
   ];
   extras.forEach(([label, action, isOn]) => {
     const btn = document.createElement('div');
-    btn.className = 'tc-btn';
+    btn.className = 'tc-btn' + ((label === 'SAVE' || label === 'NEW') ? ' tc-important' : '');
     btn.textContent = label;
     bindTap(btn, () => {
       action();
@@ -9190,10 +9201,27 @@ function drawTitleHotkeysPage(time) {
 // clamped so it never runs off the bottom of the screen.
 function drawTitleNavHint(boxBottomY) {
   ctx.textAlign = 'center';
-  ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#8a6420' : '#5a5245';
-  ctx.font = 'bold 14px monospace';
-  const y = Math.min(boxBottomY + 26, VIEW_H - 28);
-  ctx.fillText('[\u25B6] OR [H] TO VIEW HOT KEYS', VIEW_W / 2, y);
+  const flashOn = Math.floor(performance.now() / 400) % 2;
+  const color = flashOn ? '#e0b040' : '#f4ecd8';
+  ctx.font = 'bold 18px monospace';
+  const y = Math.min(boxBottomY + 30, VIEW_H - 34);
+  const label = '[\u25B6] OR [H] TO VIEW HOT KEYS';
+
+  // Flashing border box around the text so it reads as a callout rather
+  // than blending into the other dim title-screen prompts.
+  const textW = ctx.measureText(label).width;
+  const padX = 16, padY = 10;
+  const boxW = textW + padX * 2;
+  const boxH = 28;
+  const boxX = VIEW_W / 2 - boxW / 2;
+  const boxY = y - boxH + padY - 4;
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+  ctx.fillStyle = color;
+  ctx.fillText(label, VIEW_W / 2, y);
 }
 
 // Small persistent reminder, shown under the main prompt on the title
