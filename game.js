@@ -354,6 +354,7 @@ const MINIGAME_ACTIONS = {
   beatmatch: () => enterMinigame(createBeatMatchGame()),
   whackpigeon: () => enterMinigame(createWhackPigeonGame()),
   cratedig: () => enterMinigame(createCrateDiggingGame()),
+  speedsweep: () => enterMinigame(createSpeedSweepGame()),
 };
 
 // Darts: a two-tap power/accuracy throw, same trick classic golf games use.
@@ -899,6 +900,208 @@ function createCrateDiggingGame() {
       ctx.fillStyle = '#6a6070';
       ctx.font = '10px monospace';
       ctx.fillText('X to walk away anytime', VIEW_W / 2, phase === 'dig' ? 454 : 470);
+    },
+  };
+}
+
+// Speed Sweep: literally sweeping the shop floor. A broom icon slides left/
+// right along the floor (held ◀▶ / A-D, or the touch d-pad -- same `keys`
+// object the overworld movement already reads from), and tapping E sweeps
+// away any dust pile within reach of the bristles. Piles keep spawning at
+// random spots until the clock runs out -- simple accumulation-under-timer
+// scoring, no rounds, no combo, just "how much can you clear before time's
+// up". Same single-action contract as the other mini-games (E to act, X to
+// bail anytime), same dark-overlay/monospace look. Canvas primitives only.
+function createSpeedSweepGame() {
+  const TIME_LIMIT = 24;           // seconds on the clock
+  const FLOOR_Y = 300;             // baseline the dust/broom sit on
+  const FLOOR_LEFT = 150, FLOOR_RIGHT = VIEW_W - 150; // sweeping range
+  const BROOM_SPEED = 340;         // px/sec while held
+  const SWEEP_RADIUS = 34;         // how close the broom needs to be to clear a pile
+  const MAX_PILES = 6;             // dust piles on the floor at once, at most
+
+  let phase = 'sweep';             // 'sweep' | 'done'
+  let timeLeft = TIME_LIMIT;
+  let score = 0;
+  let swept = 0;
+  let broomX = VIEW_W / 2;
+  let piles = [];
+  let pileId = 0;
+  let spawnTimer = 0.5;
+  let pops = []; // brief "+pts" pop effects where a pile just got swept
+
+  // Weighted so small piles are the bread-and-butter and the occasional
+  // big pile is worth stopping for -- same weighted-pick trick as the
+  // crate-digging mini-game's outcome table.
+  const PILE_TYPES = [
+    { type: 'small', r: 7,  pts: 10, color: '#c8b088', weight: 5 },
+    { type: 'big',   r: 12, pts: 25, color: '#a8895c', weight: 2 },
+  ];
+  function pickType() {
+    const total = PILE_TYPES.reduce((s, o) => s + o.weight, 0);
+    let r = Math.random() * total;
+    for (const o of PILE_TYPES) { if (r < o.weight) return o; r -= o.weight; }
+    return PILE_TYPES[0];
+  }
+  function spawnPile() {
+    if (piles.length >= MAX_PILES) return;
+    const t = pickType();
+    piles.push({
+      id: pileId++,
+      x: FLOOR_LEFT + Math.random() * (FLOOR_RIGHT - FLOOR_LEFT),
+      y: FLOOR_Y + (Math.random() * 34 - 17), // slight scatter, purely visual
+      driftSeed: Math.random() * 10,
+      ...t,
+    });
+  }
+  // seed a handful so the floor isn't bare the instant the game opens
+  for (let i = 0; i < 3; i++) spawnPile();
+
+  function drawBroom(x, y) {
+    // handle, angled back over the shoulder
+    ctx.strokeStyle = '#8a6a3a';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x - 10, y - 78);
+    ctx.lineTo(x, y - 16);
+    ctx.stroke();
+    // binding band where the straw meets the handle
+    ctx.fillStyle = '#5c4326';
+    ctx.fillRect(x - 8, y - 20, 16, 6);
+    // fanned straw bristles
+    ctx.strokeStyle = '#e0c060';
+    ctx.lineWidth = 2;
+    for (let i = -4; i <= 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(x, y - 16);
+      ctx.lineTo(x + i * 6, y + 14);
+      ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(224,192,96,0.25)';
+    ctx.beginPath();
+    ctx.moveTo(x - 24, y + 14);
+    ctx.lineTo(x + 24, y + 14);
+    ctx.lineTo(x, y - 16);
+    ctx.closePath();
+    ctx.fill();
+    // faint reach indicator so players can gauge the sweep radius
+    ctx.strokeStyle = 'rgba(224,192,96,0.3)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath();
+    ctx.ellipse(x, y + 4, SWEEP_RADIUS, 10, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  return {
+    update(dt) {
+      if (phase === 'sweep') {
+        timeLeft -= dt;
+        if (timeLeft <= 0) { timeLeft = 0; phase = 'done'; }
+
+        let dx = 0;
+        if (keys['arrowleft'] || keys['a']) dx -= 1;
+        if (keys['arrowright'] || keys['d']) dx += 1;
+        broomX += dx * BROOM_SPEED * dt;
+        broomX = Math.max(FLOOR_LEFT, Math.min(FLOOR_RIGHT, broomX));
+
+        spawnTimer -= dt;
+        if (spawnTimer <= 0) {
+          spawnPile();
+          spawnTimer = 0.5 + Math.random() * 0.6;
+        }
+
+        // one swipe clears every pile within reach in a single go -- feels
+        // like an actual broom stroke catching a cluster of dust at once
+        if (interactPressed) {
+          piles = piles.filter((p) => {
+            const hit = Math.abs(p.x - broomX) <= SWEEP_RADIUS;
+            if (hit) {
+              score += p.pts;
+              swept++;
+              pops.push({ x: p.x, y: p.y, pts: p.pts, life: 0.5, color: p.color });
+            }
+            return !hit;
+          });
+        }
+
+        pops.forEach((p) => { p.life -= dt; p.y -= dt * 24; });
+        pops = pops.filter((p) => p.life > 0);
+      } else if (phase === 'done') {
+        if (interactPressed) exitMinigame();
+      }
+      // X always bails out early, no matter the phase
+      if (buyPressed) exitMinigame();
+    },
+    draw() {
+      ctx.fillStyle = 'rgba(8,6,12,0.9)';
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#e0b040';
+      ctx.font = 'bold 22px monospace';
+      ctx.fillText('SPEED SWEEP', VIEW_W / 2, 56);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = '12px monospace';
+      ctx.fillText(`SCORE ${score}   SWEPT ${swept}`, VIEW_W / 2, 78);
+
+      // countdown bar
+      const barW = 260, barX = VIEW_W / 2 - barW / 2, barY = 92;
+      ctx.fillStyle = 'rgba(244,236,216,0.15)';
+      ctx.fillRect(barX, barY, barW, 8);
+      const frac = timeLeft / TIME_LIMIT;
+      ctx.fillStyle = frac > 0.3 ? '#8cff5f' : '#e0603a';
+      ctx.fillRect(barX, barY, barW * Math.max(0, frac), 8);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText(`${Math.ceil(timeLeft)}s`, VIEW_W / 2, barY + 24);
+
+      // shop floor strip
+      const floorTop = FLOOR_Y - 70, floorH = 150;
+      ctx.fillStyle = '#a8946e';
+      ctx.fillRect(FLOOR_LEFT - 40, floorTop, FLOOR_RIGHT - FLOOR_LEFT + 80, floorH);
+      ctx.strokeStyle = 'rgba(90,70,40,0.4)';
+      ctx.lineWidth = 1;
+      for (let px = FLOOR_LEFT - 40; px <= FLOOR_RIGHT + 40; px += 22) {
+        ctx.beginPath(); ctx.moveTo(px, floorTop); ctx.lineTo(px, floorTop + floorH); ctx.stroke();
+      }
+      ctx.strokeStyle = '#5c4a30';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(FLOOR_LEFT - 40, floorTop, FLOOR_RIGHT - FLOOR_LEFT + 80, floorH);
+
+      // dust piles
+      piles.forEach((p) => {
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y, p.r, p.r * 0.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.15)';
+        ctx.beginPath();
+        ctx.ellipse(p.x - p.r * 0.3, p.y - p.r * 0.25, p.r * 0.35, p.r * 0.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // "+pts" pop effects where dust just got swept
+      pops.forEach((p) => {
+        ctx.globalAlpha = Math.max(0, p.life / 0.5);
+        ctx.fillStyle = '#8cff5f';
+        ctx.font = 'bold 13px monospace';
+        ctx.fillText(`+${p.pts}`, p.x, p.y - 10);
+        ctx.globalAlpha = 1;
+      });
+
+      if (phase === 'sweep') drawBroom(broomX, FLOOR_Y);
+
+      ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#8cff5f' : '#f4ecd8';
+      ctx.font = 'bold 14px monospace';
+      if (phase === 'sweep') ctx.fillText('- HOLD \u25c0 \u25b6 TO MOVE, TAP E TO SWEEP -', VIEW_W / 2, 420);
+      else ctx.fillText(`TIME'S UP! FINAL SCORE: ${score} - PRESS E TO LEAVE`, VIEW_W / 2, 420);
+
+      ctx.fillStyle = '#6a6070';
+      ctx.font = '10px monospace';
+      ctx.fillText('X to walk away anytime', VIEW_W / 2, 444);
     },
   };
 }
@@ -1680,6 +1883,13 @@ const shops = {
           'Board\'s got more scars than a heavy bag. Every chip\'s a story, every story\'s a bar waiting to happen.',
           'Grab a sandwich, stick around. I been known to freestyle off whatever\'s on the menu board.',
         ] },
+    ],
+    // Speed Sweep mini-game, set back on open floor -- clear of the counter
+    // table (row 3), Trav (3,6), the corner crates (1,4)/(1,6)/(12,4)/(12,6),
+    // and the deli case/cooler/newspaper-rack dressing drawn over cols 9-11
+    // rows 5-6 and col 4 row 7 (see drawKountryKartDeliInterior).
+    minigames: [
+      { id: 'speedsweep', tx: 10, ty: 8, label: 'SPEED SWEEP' },
     ],
   }),
   thrift: makeShop('thrift', {
