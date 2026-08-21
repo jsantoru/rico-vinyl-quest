@@ -1150,6 +1150,19 @@ hicksImg.src = 'assets/hicks.png';
 const mavstarImg = new Image();
 mavstarImg.src = 'assets/mavstar.png';
 
+// BOXGUTS — ferocious lyricist and SWAMP CAMP crew member, posted up at
+// Junior's with MAVSTAR grabbing a slice before they both head over to
+// Green Door Studio. Same pre-drawn treatment as the rest of the shop npcs
+// above.
+const boxgutsImg = new Image();
+boxgutsImg.src = 'assets/boxguts.png';
+
+// TRAV — skater and G FAM emcee, always ready to spit a verse, posted up
+// inside Kountry Kart Deli. Same pre-drawn treatment as the rest of the
+// shop npcs above.
+const travImg = new Image();
+travImg.src = 'assets/trav.png';
+
 // ---------------------------------------------------------------- maps
 const SOLID = new Set(['#', 'w', 'f', '~', 'W', 'T', 'C', 'c', 'K', 'J', 'S', 'A', 'N', 'F', 'R', 'V', 'Z']);
 
@@ -1645,6 +1658,18 @@ const shops = {
     crates: [ { junkSeed: 6 }, { junkSeed: 7 }, { junkSeed: 0 }, { junkSeed: 1 }, { record: 'cola' } ],
     jukebox: true,
     deliShop: true,
+    // TRAV — skater and G FAM emcee, posted up with his board, always
+    // ready to spit a verse for anybody who'll listen.
+    npcs: [
+      { id: 'trav', tx: 3, ty: 6, name: 'TRAV', sprite: 'trav',
+        lines: [
+          'Trav. Skate deck in one hand, sixteen bars in the other — I don\'t really put either one down.',
+          'Any time, any place, I\'m ready to spit. You want a verse right here in the deli line? Say less.',
+          'G FAM, that\'s the crew. We roll deep and we roll loud — pavement by day, mic by night.',
+          'Board\'s got more scars than a heavy bag. Every chip\'s a story, every story\'s a bar waiting to happen.',
+          'Grab a sandwich, stick around. I been known to freestyle off whatever\'s on the menu board.',
+        ] },
+    ],
   }),
   thrift: makeShop('thrift', {
     floor: '#6a8a6a', plank: '#587a58', wallColor: '#3a4a3a',
@@ -1712,6 +1737,8 @@ const shops = {
     pizzaShop: true,
     // MAVSTAR — veteran Vermont emcee, posted up by the counter grabbing a
     // quick slice before he heads to Green Door Studio for the cypher.
+    // BOXGUTS — ferocious lyricist and SWAMP CAMP crew member, posted up
+    // with him grabbing food before the same trip over to Green Door.
     npcs: [
       { id: 'mavstar', tx: 10, ty: 6, name: 'MAVSTAR', sprite: 'mavstar',
         lines: [
@@ -1720,6 +1747,14 @@ const shops = {
           'Every cypher I\'m in, I\'m sharpening something. Perfect ain\'t a destination, it\'s the whole walk.',
           'Vermont don\'t get enough credit for the pen game up here. I\'m out to fix that, one bar at a time.',
           'Catch me at Green Door later — mic\'s open, and I never let it stay quiet for long.',
+        ] },
+      { id: 'boxguts', tx: 3, ty: 6, name: 'BOXGUTS', sprite: 'boxguts',
+        lines: [
+          'Boxguts. Bars on bars on bars — I don\'t write filler, I don\'t write filler, I don\'t write filler.',
+          'Rolling with Mavstar today. Grab a slice, save some bars, head to Green Door — that\'s the whole itinerary.',
+          'Swamp Camp, that\'s my crew. We ain\'t soft — I\'ve wrestled gators with less attitude than some rappers.',
+          'Choked out a copperhead before breakfast once. Booth\'s a lot less dangerous, but I bring the same energy.',
+          'Living that swamp life up here in Vermont — long way from the bayou, bars translate anywhere though.',
         ] },
     ],
   }),
@@ -8344,7 +8379,7 @@ function drawKeeper(k) {
 // anchored to the tile's floor line — no procedural fallback, since there's
 // no simple shape that stands in for this art; it just waits for the image
 // to finish loading.
-const SHOP_NPC_IMAGES = { kanga: kangaImg, truth: truthImg, bill: billImg, rza: rzaImg, gza: gzaImg, zach: zachImg, humble: humbleImg, hicks: hicksImg, mavstar: mavstarImg };
+const SHOP_NPC_IMAGES = { kanga: kangaImg, truth: truthImg, bill: billImg, rza: rzaImg, gza: gzaImg, zach: zachImg, humble: humbleImg, hicks: hicksImg, mavstar: mavstarImg, boxguts: boxgutsImg, trav: travImg };
 
 function drawShopImageNpcs(map) {
   if (!map.npcs) return;
