@@ -253,6 +253,18 @@ const COMEDY_JUNK = [
   'A heckler-response album — just forty minutes of comebacks with no setup jokes.',
 ];
 
+// Italian soundtracks & Sinatra-adjacent junk finds — used for Junior's
+// Pizza's dig crates. Good vibes, but never one of the 5 collectible
+// records, so these never advance the sampler.
+const PIZZA_JUNK = [
+  'A well-worn "Sinatra at the Sands" LP. Somebody\'s dad definitely cried to this.',
+  'A Rat Pack cocktail-hour compilation. Smells faintly of oregano and cologne.',
+  'The soundtrack to some old spaghetti western. Not a single word of English on it.',
+  '"Dino Sings, Dino Swings" — the sleeve is stained with what you sincerely hope is marinara.',
+  'A Neapolitan mandolin record, warped slightly from sitting too close to the pizza oven.',
+  'Tony Bennett doing his best Sinatra impression on a bootleg 45. Not bad, actually.',
+];
+
 // Fake front-page stories for the town's newspaper stands. Onion/Daily Show
 // style Vermont satire — one random headline+body pops up each time a stand
 // is read. Keep these silly and harmless, no real people, just generic
@@ -355,6 +367,7 @@ const MINIGAME_ACTIONS = {
   whackpigeon: () => enterMinigame(createWhackPigeonGame()),
   cratedig: () => enterMinigame(createCrateDiggingGame()),
   speedsweep: () => enterMinigame(createSpeedSweepGame()),
+  staringcontest: () => enterMinigame(createStaringContestGame()),
 };
 
 // Darts: a two-tap power/accuracy throw, same trick classic golf games use.
@@ -1106,6 +1119,227 @@ function createSpeedSweepGame() {
   };
 }
 
+// Staring Contest with a Cat: the cat blinks at a random moment; hold
+// completely still (no movement keys, no E, no X) until it does, and you
+// win. Press or hold ANYTHING before the blink and that counts as giving
+// in -- you lose. No score, no cost, just vibes. Canvas primitives only --
+// no images, no new assets. Unlike the other mini-games, X does NOT bail
+// out for free here -- pressing it mid-stare IS the "give in" loss, since
+// that's the whole joke.
+function createStaringContestGame() {
+  // Movement keys are held/level-triggered (not edge-triggered like E/X),
+  // so a key already down when the game opens (e.g. still holding the
+  // arrow that walked the player onto the sign) shouldn't count as an
+  // instant loss -- only a FRESH press should. heldLast snapshots the
+  // starting state per key so we can detect that transition ourselves.
+  const WATCHED_KEYS = ['arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'w', 'a', 's', 'd'];
+  const heldLast = {};
+  WATCHED_KEYS.forEach((k) => { heldLast[k] = !!keys[k]; });
+
+  let phase = 'staring';   // 'staring' | 'result' | 'done'
+  let outcome = null;      // 'won' | 'lost'
+  let elapsed = 0;
+  const blinkAt = 1.6 + Math.random() * 3.4; // the cat blinks somewhere in here
+  const BLINK_DUR = 0.22;
+  let blinkT = 0;           // >0 while the blink animation is playing
+  let idleT = 0;            // free-running clock for tail/whisker idle motion
+  let resultTimer = 0;
+
+  function loseByGivingIn() {
+    if (phase !== 'staring') return;
+    outcome = 'lost';
+    phase = 'result';
+    resultTimer = 1.3;
+  }
+
+  return {
+    update(dt) {
+      idleT += dt;
+      if (phase === 'staring') {
+        elapsed += dt;
+        if (blinkT > 0) {
+          blinkT -= dt;
+        } else if (elapsed >= blinkAt) {
+          // the cat blinks first -- the player wins, no input needed
+          blinkT = BLINK_DUR;
+          outcome = 'won';
+          phase = 'result';
+          resultTimer = 1.3;
+        }
+        if (phase === 'staring') {
+          if (interactPressed || buyPressed) {
+            loseByGivingIn();
+          } else {
+            for (const k of WATCHED_KEYS) {
+              const down = !!keys[k];
+              if (down && !heldLast[k]) loseByGivingIn();
+              heldLast[k] = down;
+            }
+          }
+        }
+      } else if (phase === 'result') {
+        resultTimer -= dt;
+        if (resultTimer <= 0 || interactPressed || buyPressed) phase = 'done';
+      } else if (phase === 'done') {
+        if (interactPressed || buyPressed) exitMinigame();
+      }
+    },
+    draw() {
+      ctx.fillStyle = 'rgba(8,6,12,0.9)';
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+      const cx = VIEW_W / 2;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#e0b040';
+      ctx.font = 'bold 22px monospace';
+      ctx.fillText('STARING CONTEST', cx, 56);
+      ctx.fillStyle = '#c8c0d8';
+      ctx.font = '12px monospace';
+      ctx.fillText('First one to blink loses.', cx, 78);
+
+      // --- cushion the cat sits on ---
+      const catCx = cx, catBaseY = 340;
+      ctx.fillStyle = '#4a3a52';
+      ctx.beginPath();
+      ctx.ellipse(catCx, catBaseY + 34, 110, 22, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // eyelid closure: 0 = fully open, 1 = fully shut. Rides a sine pulse
+      // across BLINK_DUR so the eye opens -> shuts -> opens again inside
+      // that one short window, instead of just snapping.
+      const closure = blinkT > 0 ? Math.sin(Math.PI * (blinkT / BLINK_DUR)) : 0;
+
+      // tail: slow idle sweep, a little quicker if the player just lost
+      // (a small told-you-so flick)
+      const tailSpeed = outcome === 'lost' ? 3.2 : 1.4;
+      const tailSwing = Math.sin(idleT * tailSpeed) * 22;
+      ctx.strokeStyle = '#2a2430';
+      ctx.lineWidth = 10;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(catCx + 70, catBaseY + 10);
+      ctx.quadraticCurveTo(catCx + 110, catBaseY - 10 + tailSwing, catCx + 96, catBaseY - 60 + tailSwing * 0.4);
+      ctx.stroke();
+
+      // body
+      ctx.fillStyle = '#3a3038';
+      ctx.beginPath();
+      ctx.ellipse(catCx, catBaseY, 74, 54, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // chest patch
+      ctx.fillStyle = '#e8e0d0';
+      ctx.beginPath();
+      ctx.ellipse(catCx, catBaseY + 18, 30, 34, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // front paws
+      ctx.fillStyle = '#3a3038';
+      ctx.beginPath(); ctx.ellipse(catCx - 26, catBaseY + 46, 14, 10, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(catCx + 26, catBaseY + 46, 14, 10, 0, 0, Math.PI * 2); ctx.fill();
+
+      // head
+      const headCx = catCx, headCy = catBaseY - 78, headR = 46;
+      ctx.fillStyle = '#3a3038';
+      ctx.beginPath();
+      ctx.arc(headCx, headCy, headR, 0, Math.PI * 2);
+      ctx.fill();
+      // ears
+      ctx.fillStyle = '#3a3038';
+      ctx.beginPath();
+      ctx.moveTo(headCx - 40, headCy - 18); ctx.lineTo(headCx - 20, headCy - 60); ctx.lineTo(headCx - 4, headCy - 24);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(headCx + 40, headCy - 18); ctx.lineTo(headCx + 20, headCy - 60); ctx.lineTo(headCx + 4, headCy - 24);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#c86a8a';
+      ctx.beginPath();
+      ctx.moveTo(headCx - 32, headCy - 22); ctx.lineTo(headCx - 20, headCy - 46); ctx.lineTo(headCx - 10, headCy - 26);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(headCx + 32, headCy - 22); ctx.lineTo(headCx + 20, headCy - 46); ctx.lineTo(headCx + 10, headCy - 26);
+      ctx.closePath(); ctx.fill();
+
+      // muzzle patch
+      ctx.fillStyle = '#e8e0d0';
+      ctx.beginPath();
+      ctx.ellipse(headCx, headCy + 20, 22, 16, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // whiskers -- twitch slightly with the idle clock
+      const whiskT = Math.sin(idleT * 2.2) * 2;
+      ctx.strokeStyle = '#d8d0e0';
+      ctx.lineWidth = 1.5;
+      [-1, 1].forEach((side) => {
+        for (let i = 0; i < 3; i++) {
+          const wy = headCy + 14 + i * 6;
+          ctx.beginPath();
+          ctx.moveTo(headCx + side * 14, wy);
+          ctx.lineTo(headCx + side * (52 + whiskT), wy - 4 + i * 3);
+          ctx.stroke();
+        }
+      });
+
+      // nose
+      ctx.fillStyle = '#c86a8a';
+      ctx.beginPath();
+      ctx.moveTo(headCx - 5, headCy + 8); ctx.lineTo(headCx + 5, headCy + 8); ctx.lineTo(headCx, headCy + 15);
+      ctx.closePath(); ctx.fill();
+
+      // eyes -- ellipse height shrinks toward zero as `closure` -> 1, and
+      // a smug slit gets drawn instead once the player has lost
+      const eyeY = headCy - 6, eyeDX = 20;
+      const eyeColor = '#8cd050';
+      [-1, 1].forEach((side) => {
+        const ex = headCx + side * eyeDX;
+        if (outcome === 'lost') {
+          // narrowed, satisfied slits -- the cat clearly won
+          ctx.strokeStyle = eyeColor;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(ex - 9, eyeY + 2);
+          ctx.quadraticCurveTo(ex, eyeY - 4, ex + 9, eyeY + 2);
+          ctx.stroke();
+          return;
+        }
+        const openness = Math.max(0.04, 1 - closure);
+        ctx.fillStyle = eyeColor;
+        ctx.beginPath();
+        ctx.ellipse(ex, eyeY, 10, 10 * openness, 0, 0, Math.PI * 2);
+        ctx.fill();
+        if (openness > 0.35) {
+          ctx.fillStyle = '#181418';
+          ctx.beginPath();
+          ctx.ellipse(ex, eyeY, 3, 7 * openness, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+
+      // status line + result
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 14px monospace';
+      if (phase === 'staring') {
+        ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
+        ctx.fillText('- DON\'T MOVE. DON\'T PRESS ANYTHING. -', cx, 440);
+        ctx.font = '11px monospace';
+        ctx.fillStyle = '#9a90a8';
+        ctx.fillText(`HOLDING STILL: ${elapsed.toFixed(1)}s`, cx, 462);
+      } else if (phase === 'result' || phase === 'done') {
+        if (outcome === 'won') {
+          ctx.fillStyle = '#8cff5f';
+          ctx.fillText('IT BLINKED FIRST -- YOU WIN!', cx, 440);
+        } else {
+          ctx.fillStyle = '#e0603a';
+          ctx.fillText('YOU BLINKED. THE CAT WINS.', cx, 440);
+        }
+        if (phase === 'done') {
+          ctx.font = '11px monospace';
+          ctx.fillStyle = '#9a90a8';
+          ctx.fillText('PRESS E TO LEAVE', cx, 462);
+        }
+      }
+    },
+  };
+}
+
 window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k) || k === ' ') e.preventDefault();
@@ -1146,6 +1380,7 @@ window.addEventListener('keydown', (e) => {
       fifaBuffer = '';
     }
   }
+
   keys[k] = true;
   music.start(); // audio needs a user gesture
 });
@@ -1316,6 +1551,25 @@ const menuPopupSplashImg = new Image();
 menuPopupSplashImg.src = 'assets/start_splash_1v2.png';
 const titleSkyImg = new Image();
 titleSkyImg.src = 'assets/title_sky.png';
+
+// Full-art "record found" splash shown by drawRecordCard() when a record
+// is picked up -- one PNG per record id, keyed to match worldRecords() for
+// the town world (elm/cola/stab/choir/white). Each image already has the
+// title, art, flavor text and "[E]" prompt baked in, so drawRecordCard()
+// just centers and scales the right one; other worlds (no matching art
+// yet) fall back to the procedural card -- see drawRecordCardFallback().
+const RECORD_FOUND_IMGS = {
+  elm:   new Image(),
+  cola:  new Image(),
+  stab:  new Image(),
+  choir: new Image(),
+  white: new Image(),
+};
+RECORD_FOUND_IMGS.elm.src   = 'assets/record_found_elm.png';
+RECORD_FOUND_IMGS.cola.src  = 'assets/record_found_cola.png';
+RECORD_FOUND_IMGS.stab.src  = 'assets/record_found_stab.png';
+RECORD_FOUND_IMGS.choir.src = 'assets/record_found_choir.png';
+RECORD_FOUND_IMGS.white.src = 'assets/record_found_white.png';
 
 // "Closed for now" splash shown when the player walks into one of the
 // placeholder portal doors at the west/east edges of the map.
@@ -1954,7 +2208,10 @@ const shops = {
               'But I\'ll tell ya — Kountry Kart Deli has some old jukebox connections.',
               'And that art studio down the street? Those painters are always spinning something weird.'],
       foundLine: 'Grab a slice before you go. You\'ll need the energy!' },
-    crates: [],
+    // Tony's own crates behind the counter -- all Italian soundtracks and
+    // Sinatra/Rat Pack records. Good digging, great vibes, but never one
+    // of the 5 records the player's actually after (see PIZZA_JUNK).
+    crates: [ { pizzaSeed: 0 }, { pizzaSeed: 1 } ],
     pizzaShop: true,
     // MAVSTAR — veteran Vermont emcee, posted up by the counter grabbing a
     // quick slice before he heads to Green Door Studio for the cypher.
@@ -2006,6 +2263,11 @@ const shops = {
           'The smartest thing you can say in a room full of certainty is "wait, why though." Watch how fast people get uncomfortable.',
           'I quit trying to be liked by everybody. Turns out that\'s also when people started actually listening.',
         ] },
+    ],
+    // Corner arcade sign for the staring contest -- clear of the crate at
+    // (1,4) and the skeptic NPC at (10,6).
+    minigames: [
+      { id: 'staringcontest', tx: 11, ty: 4, label: 'STARE DOWN THE CAT' },
     ],
   }),
   church: makeShop('church', {
@@ -2654,6 +2916,9 @@ function doInteract() {
       state = 'dialog';
     } else if (c.comedySeed !== undefined) {
       dialog = { name: 'CRATE', lines: [COMEDY_JUNK[c.comedySeed % COMEDY_JUNK.length], 'Keep digging...'], i: 0 };
+      state = 'dialog';
+    } else if (c.pizzaSeed !== undefined) {
+      dialog = { name: 'CRATE', lines: [PIZZA_JUNK[c.pizzaSeed % PIZZA_JUNK.length], 'Good vibes, but not what you\'re digging for.'], i: 0 };
       state = 'dialog';
     } else {
       dialog = { name: 'CRATE', lines: [JUNK[c.junkSeed % JUNK.length], 'Keep digging...'], i: 0 };
@@ -9195,6 +9460,25 @@ function drawAlbumArt(x, y, s, r) {
 }
 
 function drawRecordCard() {
+  // Prefer the full-art splash PNG for this record when we have one loaded;
+  // otherwise fall back to the original procedurally-drawn card below (this
+  // keeps other worlds like swamp -- which reuse ids like 'choir' for a
+  // different record -- working without matching art).
+  const img = RECORD_FOUND_IMGS[shownRecord];
+  if (currentWorldId() === 'town' && img && img.complete && img.naturalWidth) {
+    ctx.fillStyle = 'rgba(6,4,10,0.85)';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    const maxW = VIEW_W * 0.8, maxH = VIEW_H * 0.88;
+    const scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
+    const dw = img.naturalWidth * scale, dh = img.naturalHeight * scale;
+    const dx = (VIEW_W - dw) / 2, dy = (VIEW_H - dh) / 2;
+    ctx.drawImage(img, dx, dy, dw, dh);
+    return;
+  }
+  drawRecordCardFallback();
+}
+
+function drawRecordCardFallback() {
   const r = worldRecords()[shownRecord];
   ctx.fillStyle = 'rgba(6,4,10,0.85)';
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
