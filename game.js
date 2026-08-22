@@ -123,6 +123,22 @@ ctx.imageSmoothingEnabled = false;
       background: rgba(224,120,90,0.55);
       border-color: rgba(224,120,90,1);
     }
+    /* TROPHY gets its own distinct color so it stands out from both the
+       BREW/YERBA toggles and the SAVE/NEW/CRATE tc-important group. */
+    #extrasPanel .tc-btn.tc-trophy {
+      background: rgba(90,150,220,0.35);
+      border-color: rgba(120,180,240,0.9);
+      color: #f4ecd8;
+    }
+    #extrasPanel .tc-btn.tc-trophy:active {
+      background: rgba(120,180,240,0.55);
+      border-color: rgba(120,180,240,1);
+    }
+    #extrasPanel .tc-btn.tc-trophy svg {
+      width: 20px; height: 20px;
+      fill: currentColor;
+      pointer-events: none;
+    }
   `;
   document.head.appendChild(style);
 
@@ -4430,17 +4446,31 @@ function createTouchControls() {
   // for every toggle.
   const extrasPanel = document.createElement('div');
   extrasPanel.id = 'extrasPanel';
+  // A simple monochrome trophy silhouette (cup + handles + base), drawn as
+  // inline SVG so it scales crisply at any size and inherits the button's
+  // text color via currentColor/fill.
+  const TROPHY_ICON_SVG = '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">' +
+    '<path d="M6 2h12v2h2a1 1 0 0 1 1 1v2c0 2.76-1.9 5.07-4.46 5.72A6.02 6.02 0 0 1 13 17.42V20h3v2H8v-2h3v-2.58a6.02 6.02 0 0 1-3.54-4.7C4.9 12.07 3 9.76 3 7V5a1 1 0 0 1 1-1h2V2zm0 4H5v1c0 1.5.91 2.78 2.2 3.34A8.5 8.5 0 0 1 6 7V6zm12 0v1c0 .82-.13 1.6-.37 2.34C18.91 8.78 19.82 7.5 19.82 6H18z"/>' +
+    '</svg>';
+
   const extras = [
     ['BREW',  () => toggleCoffee(),     () => player.holdingCoffee],
     ['YERBA', () => toggleTea(),        () => player.holdingTea],
     ['CRATE', () => openCrate(),        () => false],
     ['SAVE',  () => saveGame(true),     () => false],
     ['NEW',   () => { openDigChoice(); },       () => false],
+    ['TROPHY', () => openTrophyCase(),  () => false],
   ];
   extras.forEach(([label, action, isOn]) => {
     const btn = document.createElement('div');
-    btn.className = 'tc-btn' + ((label === 'SAVE' || label === 'NEW' || label === 'CRATE') ? ' tc-important' : '');
-    btn.textContent = label;
+    btn.className = 'tc-btn' + ((label === 'SAVE' || label === 'NEW' || label === 'CRATE') ? ' tc-important' : '')
+      + (label === 'TROPHY' ? ' tc-trophy' : '');
+    if (label === 'TROPHY') {
+      btn.innerHTML = TROPHY_ICON_SVG;
+      btn.setAttribute('aria-label', 'Trophy Case');
+    } else {
+      btn.textContent = label;
+    }
     bindTap(btn, () => {
       action();
       music.start();
