@@ -369,6 +369,8 @@ const MINIGAME_ACTIONS = {
   speedsweep: () => enterMinigame(createSpeedSweepGame()),
   staringcontest: () => enterMinigame(createStaringContestGame()),
   buildpizza: () => enterMinigame(createPizzaBuildGame()),
+  clawmachine: () => enterMinigame(createClawMachineGame()),
+  beatjam: () => enterMinigame(createBeatJamGame()),
 };
 
 // Darts: a two-tap power/accuracy throw, same trick classic golf games use.
@@ -592,6 +594,146 @@ function createBeatMatchGame() {
       ctx.fillStyle = '#6a6070';
       ctx.font = '10px monospace';
       ctx.fillText('X to walk away anytime', VIEW_W / 2, 384);
+    },
+  };
+}
+
+// Beat Jam: a freeform MPC-style pad session, not a scored mini-game at
+// all -- four beat pads (Kick, Snare, Hi-Hat, Keys) arranged in a cross
+// that lines up 1:1 with the d-pad/arrow keys, so \u25B2\u25BC\u25C0\u25B6
+// hits the pad in that same screen direction. Each pad also answers a
+// direct tap/click right on the pad itself (see onPointerDown below and
+// its hookup on the shared canvas pointerdown handler), since "hit the
+// pad" is the whole point of an MPC and touch players shouldn't have to
+// find the d-pad for it. No rounds, no win/lose -- just a 30-second
+// freestyle window to vibe out before it auto-exits back to 'play'.
+// Reuses the same kick/snare/hat synths the background music engine
+// already has (see the `music` object above) instead of any new assets,
+// plus a short rotating note run for the Keys pad so mashing it still
+// sounds musical instead of one dead note on repeat.
+function createBeatJamGame() {
+  const TIME_LIMIT = 30;
+  const cx = VIEW_W / 2, cy = 280;
+  const OFFSET = 108, PAD = 88;
+  const KEY_NOTES = [60, 63, 65, 67, 70]; // short minor-pentatonic run for the Keys pad
+
+  const PADS = [
+    { id: 'snare', label: 'SNARE',  hint: '\u25B2', key: 'arrowup',    dx: 0,       dy: -OFFSET, color: '#4ad0ff', flash: 0 },
+    { id: 'kick',  label: 'KICK',   hint: '\u25BC', key: 'arrowdown',  dx: 0,       dy: OFFSET,  color: '#e0603a', flash: 0 },
+    { id: 'hihat', label: 'HI-HAT', hint: '\u25C0', key: 'arrowleft',  dx: -OFFSET, dy: 0,       color: '#e0b040', flash: 0 },
+    { id: 'keys',  label: 'KEYS',   hint: '\u25B6', key: 'arrowright', dx: OFFSET,  dy: 0,       color: '#8cff5f', flash: 0 },
+  ];
+
+  let timeLeft = TIME_LIMIT;
+  let hits = 0;
+  let keyIdx = 0;
+  let phase = 'jam'; // jam | done
+  const prevKey = {};
+
+  function triggerPad(p) {
+    p.flash = 1;
+    hits++;
+    if (!music.ctx) return;
+    const t = music.ctx.currentTime + 0.02;
+    if (p.id === 'kick') music.kick(t);
+    else if (p.id === 'snare') music.snare(t);
+    else if (p.id === 'hihat') music.hat(t, false, 0.16);
+    else if (p.id === 'keys') {
+      music.note(t, 'triangle', KEY_NOTES[keyIdx % KEY_NOTES.length], 0.22, 0.09, 0.08);
+      keyIdx++;
+    }
+  }
+
+  function padAt(vx, vy) {
+    return PADS.find((p) => {
+      const x = cx + p.dx, y = cy + p.dy;
+      return Math.abs(vx - x) < PAD / 2 && Math.abs(vy - y) < PAD / 2;
+    });
+  }
+
+  return {
+    // Called by the shared canvas pointerdown handler with view-space
+    // (960x600) coordinates -- lets a mouse click or touch tap land
+    // directly on a pad, same as pressing its matching arrow key.
+    onPointerDown(vx, vy) {
+      if (phase !== 'jam') return;
+      const p = padAt(vx, vy);
+      if (p) triggerPad(p);
+    },
+    update(dt) {
+      if (buyPressed) { exitMinigame(); return; }
+
+      if (phase === 'jam') {
+        timeLeft -= dt;
+        if (timeLeft <= 0) { timeLeft = 0; phase = 'done'; }
+
+        PADS.forEach((p) => {
+          const down = !!keys[p.key];
+          if (down && !prevKey[p.key]) triggerPad(p);
+          prevKey[p.key] = down;
+          p.flash = Math.max(0, p.flash - dt * 3.2);
+        });
+      } else if (phase === 'done') {
+        if (interactPressed) exitMinigame();
+      }
+    },
+    draw() {
+      ctx.fillStyle = 'rgba(8,6,12,0.9)';
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#e0b040';
+      ctx.font = 'bold 22px monospace';
+      ctx.fillText('BEAT JAM', cx, 56);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = '12px monospace';
+      ctx.fillText(`HITS ${hits}`, cx, 78);
+
+      // countdown bar
+      const barW = 260, barX = cx - barW / 2, barY = 92;
+      ctx.fillStyle = 'rgba(244,236,216,0.15)';
+      ctx.fillRect(barX, barY, barW, 8);
+      const frac = timeLeft / TIME_LIMIT;
+      ctx.fillStyle = frac > 0.3 ? '#8cff5f' : '#e0603a';
+      ctx.fillRect(barX, barY, barW * Math.max(0, frac), 8);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText(`${Math.ceil(timeLeft)}s`, cx, barY + 24);
+
+      // MPC-style pad body behind the four pads
+      const bodyR = OFFSET + PAD / 2 + 20;
+      ctx.fillStyle = '#241a2a';
+      ctx.fillRect(cx - bodyR, cy - bodyR, bodyR * 2, bodyR * 2);
+      ctx.strokeStyle = '#5a4a6a';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(cx - bodyR, cy - bodyR, bodyR * 2, bodyR * 2);
+
+      PADS.forEach((p) => {
+        const x = cx + p.dx, y = cy + p.dy;
+        const lit = p.flash > 0;
+        ctx.globalAlpha = lit ? 0.5 + p.flash * 0.5 : 1;
+        ctx.fillStyle = lit ? p.color : 'rgba(244,236,216,0.08)';
+        ctx.fillRect(x - PAD / 2, y - PAD / 2, PAD, PAD);
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = lit ? p.color : 'rgba(244,236,216,0.35)';
+        ctx.lineWidth = lit ? 3 : 1.5;
+        ctx.strokeRect(x - PAD / 2, y - PAD / 2, PAD, PAD);
+
+        ctx.fillStyle = lit ? '#181418' : '#f4ecd8';
+        ctx.font = 'bold 13px monospace';
+        ctx.fillText(p.label, x, y + 3);
+        ctx.font = '11px monospace';
+        ctx.fillText(p.hint, x, y - 16);
+      });
+
+      ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#8cff5f' : '#f4ecd8';
+      ctx.font = 'bold 14px monospace';
+      if (phase === 'jam') ctx.fillText('- \u25B2\u25BC\u25C0\u25B6 OR TAP A PAD TO PLAY -', cx, 460);
+      else ctx.fillText("TIME'S UP! NICE SET - PRESS E TO LEAVE", cx, 460);
+
+      ctx.fillStyle = '#6a6070';
+      ctx.font = '10px monospace';
+      ctx.fillText('X to walk away anytime', cx, 484);
     },
   };
 }
@@ -1548,6 +1690,223 @@ function createPizzaBuildGame() {
   };
 }
 
+// Claw Machine: a classic arcade grabber stocked with tiny potted flowers
+// instead of plushies -- fits right in at Hey Bud. Hold LEFT/RIGHT to slide
+// the claw along the top rail, tap E to drop it straight down. Whatever
+// flower is closest to the claw's X when it bottoms out gets a grab attempt
+// -- rarer blooms score more but are harder to hold, so the claw can still
+// fumble one on the way up to the chute, same petty betrayal every real
+// claw machine pulls. A fixed number of drops, score tallied, then
+// auto-exits back to 'play'. Canvas primitives only -- no images, no new
+// assets, same one-function-per-minigame pattern as the games above.
+function createClawMachineGame() {
+  const TRIES_TOTAL = 6;
+  const RAIL_Y = 130;                 // claw's resting height, top of the case
+  const FLOOR_Y = 360;                // where flowers sit at the bottom of the case
+  const CASE_LEFT = VIEW_W / 2 - 220, CASE_RIGHT = VIEW_W / 2 + 220;
+  const CLAW_SPEED = 240;             // px/sec sliding left/right
+  const DROP_SPEED = 260;             // px/sec descending/ascending
+  const GRAB_RADIUS = 26;             // how close, in x, the claw needs to be to a flower to try grabbing it
+  const CHUTE_X = CASE_RIGHT + 46, CHUTE_Y = RAIL_Y;
+
+  // Weighted so daisies are the bread-and-butter grab and a rose is a rare,
+  // hard-won prize -- same weighted-pick trick as speed sweep's dust piles.
+  const FLOWER_TYPES = [
+    { type: 'daisy', pts: 10, grabChance: 0.85, petal: '#f4ecd8', center: '#e0b040', weight: 5 },
+    { type: 'tulip', pts: 20, grabChance: 0.65, petal: '#d94f9a', center: '#e0b040', weight: 3 },
+    { type: 'rose',  pts: 40, grabChance: 0.45, petal: '#c0392b', center: '#8e2418', weight: 1 },
+  ];
+  function pickType() {
+    const total = FLOWER_TYPES.reduce((s, o) => s + o.weight, 0);
+    let r = Math.random() * total;
+    for (const o of FLOWER_TYPES) { if (r < o.weight) return o; r -= o.weight; }
+    return FLOWER_TYPES[0];
+  }
+  function spawnFlowers(n) {
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      out.push({
+        id: i,
+        x: CASE_LEFT + 24 + Math.random() * (CASE_RIGHT - CASE_LEFT - 48),
+        wobble: Math.random() * 10,
+        ...pickType(),
+      });
+    }
+    return out;
+  }
+
+  let flowers = spawnFlowers(9);
+  let triesLeft = TRIES_TOTAL;
+  let score = 0, caught = 0;
+  let phase = 'aim';         // aim | drop | rise | deliver | done
+  let clawX = VIEW_W / 2, clawY = RAIL_Y;
+  let held = null;           // flower currently gripped, or null
+  let pops = [];             // "+pts" / "SLIPPED!" / "MISS" pop effects
+
+  // Common exit for the drop/rise/deliver branches: back to aiming if
+  // there's a try and a flower left to go for, otherwise the round's over.
+  function afterAttempt() {
+    phase = (triesLeft > 0 && flowers.length > 0) ? 'aim' : 'done';
+  }
+
+  function nearestFlower(x) {
+    let best = null, bestD = Infinity;
+    flowers.forEach((f) => {
+      const d = Math.abs(f.x - x);
+      if (d < GRAB_RADIUS && d < bestD) { best = f; bestD = d; }
+    });
+    return best;
+  }
+
+  function drawClawArm(x, y, closed) {
+    ctx.strokeStyle = '#5a5060';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(x, RAIL_Y - 30); ctx.lineTo(x, y); ctx.stroke();
+    ctx.fillStyle = '#9a90a8';
+    ctx.fillRect(x - 10, y - 6, 20, 10);
+    ctx.strokeStyle = '#c8bcd8';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    const spread = closed ? 4 : 14;
+    ctx.beginPath();
+    ctx.moveTo(x - 8, y + 4); ctx.lineTo(x - spread, y + 22);
+    ctx.moveTo(x + 8, y + 4); ctx.lineTo(x + spread, y + 22);
+    ctx.stroke();
+  }
+
+  function drawFlower(f, y) {
+    const wob = Math.sin(performance.now() / 400 + f.wobble) * 1.5;
+    ctx.strokeStyle = '#4f9a52';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(f.x, y + 14); ctx.lineTo(f.x + wob, y - 2); ctx.stroke();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      ctx.fillStyle = f.petal;
+      ctx.beginPath();
+      ctx.ellipse(f.x + wob + Math.cos(a) * 6, y - 2 + Math.sin(a) * 6, 4, 3, a, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = f.center;
+    ctx.beginPath(); ctx.arc(f.x + wob, y - 2, 3.5, 0, Math.PI * 2); ctx.fill();
+  }
+
+  return {
+    update(dt) {
+      if (buyPressed) { exitMinigame(); return; }
+
+      if (phase === 'aim') {
+        let dx = 0;
+        if (keys['arrowleft'] || keys['a']) dx -= 1;
+        if (keys['arrowright'] || keys['d']) dx += 1;
+        clawX += dx * CLAW_SPEED * dt;
+        clawX = Math.max(CASE_LEFT + 10, Math.min(CASE_RIGHT - 10, clawX));
+        if (interactPressed && triesLeft > 0) phase = 'drop';
+      } else if (phase === 'drop') {
+        clawY += DROP_SPEED * dt;
+        if (clawY >= FLOOR_Y) {
+          clawY = FLOOR_Y;
+          const f = nearestFlower(clawX);
+          if (f && Math.random() < f.grabChance) {
+            held = f;
+            flowers = flowers.filter((x) => x !== f);
+          }
+          phase = 'rise';
+        }
+      } else if (phase === 'rise') {
+        clawY -= DROP_SPEED * dt;
+        if (clawY <= RAIL_Y) {
+          clawY = RAIL_Y;
+          triesLeft--;
+          if (held) {
+            // one more chance for the claw to fumble it before the chute
+            if (Math.random() < 0.22) {
+              pops.push({ x: clawX, y: RAIL_Y, life: 0.7, color: '#e0603a', text: 'SLIPPED!' });
+              flowers.push({ ...held, x: clawX });
+              held = null;
+              afterAttempt();
+            } else {
+              phase = 'deliver';
+            }
+          } else {
+            pops.push({ x: clawX, y: RAIL_Y, life: 0.6, color: '#9a90a8', text: 'MISS' });
+            afterAttempt();
+          }
+        }
+      } else if (phase === 'deliver') {
+        const dxp = CHUTE_X - clawX;
+        clawX += Math.sign(dxp) * CLAW_SPEED * 1.3 * dt;
+        if (Math.abs(dxp) < 6) {
+          score += held.pts;
+          caught++;
+          pops.push({ x: CHUTE_X, y: CHUTE_Y, life: 0.7, color: '#8cff5f', text: `+${held.pts}` });
+          held = null;
+          afterAttempt();
+        }
+      } else if (phase === 'done') {
+        if (interactPressed) exitMinigame();
+      }
+
+      pops.forEach((p) => { p.life -= dt; p.y -= dt * 20; });
+      pops = pops.filter((p) => p.life > 0);
+    },
+    draw() {
+      ctx.fillStyle = 'rgba(8,6,12,0.9)';
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#e0b040';
+      ctx.font = 'bold 22px monospace';
+      ctx.fillText('CLAW MACHINE', VIEW_W / 2, 56);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = '12px monospace';
+      ctx.fillText(`SCORE ${score}   CAUGHT ${caught}   TRIES LEFT ${Math.max(0, triesLeft)}`, VIEW_W / 2, 78);
+
+      // glass case
+      ctx.strokeStyle = 'rgba(200,220,255,0.5)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(CASE_LEFT - 20, RAIL_Y - 40, CASE_RIGHT - CASE_LEFT + 40, FLOOR_Y - RAIL_Y + 60);
+      ctx.fillStyle = 'rgba(200,220,255,0.05)';
+      ctx.fillRect(CASE_LEFT - 20, RAIL_Y - 40, CASE_RIGHT - CASE_LEFT + 40, FLOOR_Y - RAIL_Y + 60);
+      // planter-box floor of the case
+      ctx.fillStyle = '#3c5c40';
+      ctx.fillRect(CASE_LEFT - 20, FLOOR_Y + 14, CASE_RIGHT - CASE_LEFT + 40, 16);
+
+      // prize chute off to the right
+      ctx.fillStyle = '#6a4a2c';
+      ctx.fillRect(CHUTE_X - 16, RAIL_Y - 46, 32, 24);
+      ctx.fillStyle = '#8a6438';
+      ctx.fillRect(CHUTE_X - 12, RAIL_Y - 42, 24, 16);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = 'bold 9px monospace';
+      ctx.fillText('WIN', CHUTE_X, RAIL_Y - 52);
+
+      flowers.forEach((f) => drawFlower(f, FLOOR_Y));
+      if (held) drawFlower(held, clawY + 20);
+      drawClawArm(clawX, clawY, !!held || (phase === 'drop' && clawY >= FLOOR_Y - 6));
+
+      pops.forEach((p) => {
+        ctx.globalAlpha = Math.max(0, p.life / 0.7);
+        ctx.fillStyle = p.color;
+        ctx.font = 'bold 13px monospace';
+        ctx.fillText(p.text, p.x, p.y - 10);
+        ctx.globalAlpha = 1;
+      });
+
+      ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#8cff5f' : '#f4ecd8';
+      ctx.font = 'bold 14px monospace';
+      if (phase === 'done') {
+        ctx.fillText(`OUT OF TRIES! FINAL SCORE: ${score} - PRESS E TO LEAVE`, VIEW_W / 2, 420);
+      } else if (phase === 'aim') {
+        ctx.fillText('- HOLD \u25c0 \u25b6 TO AIM, TAP E TO DROP -', VIEW_W / 2, 420);
+      }
+
+      ctx.fillStyle = '#6a6070';
+      ctx.font = '10px monospace';
+      ctx.fillText('X to walk away anytime', VIEW_W / 2, 444);
+    },
+  };
+}
+
 window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k) || k === ' ') e.preventDefault();
@@ -2264,8 +2623,12 @@ const shops = {
     // the room, right below the wall tile) instead of out on the floor.
     // ty nudged down 2 tiles from the wall so its top edge doesn't get
     // clipped by the wall tile above it.
+    // Beat Jam sits on open floor near the bottom of the room, clear of
+    // the gear tiles (4,7)/(10,7), the mic stand (7,5), and the couch run
+    // along the bottom-left wall (1,8)/(2,8)/(3,8).
     minigames: [
       { id: 'beatmatch', tx: 5, ty: 3, label: 'PLAY BEAT MATCH' },
+      { id: 'beatjam', tx: 6, ty: 7, label: 'FREESTYLE BEAT JAM' },
     ],
   }),
   wax: makeShop('wax', {
@@ -2281,6 +2644,13 @@ const shops = {
               'Should still be in a crate on the RIGHT side, behind the ferns.'],
       foundLine: 'Midnight Stab, right here at Hey Bud? Those horns are gonna grow on you.' },
     crates: [ { junkSeed: 3 }, { junkSeed: 4 }, { record: 'stab' }, { junkSeed: 5 } ],
+    // Claw machine, set back on open floor between the two big tropical
+    // potted plants flanking the doorway (tiles 4,8 and 9,8) -- clear of
+    // the shelf/hoodie rack (cols 2-6), the tee table (~5,7), and the
+    // glass display cases on the right wall (cols 10-13).
+    minigames: [
+      { id: 'clawmachine', tx: 7, ty: 8, label: 'CLAW MACHINE' },
+    ],
   }),
   henrys: makeShop('henrys', {
     floor: '#e8dcc8', plank: '#d8c8a8', wallColor: '#8a2820',
@@ -3602,6 +3972,15 @@ canvas.addEventListener('pointerdown', (e) => {
       const start = MINIGAME_ACTIONS[hit.id];
       if (start) start();
     }
+  } else if (state === 'minigame' && activeMinigame && activeMinigame.onPointerDown) {
+    // Lets a mini-game (e.g. Beat Jam's pads) answer a direct tap/click at
+    // its own screen position, instead of only the generic "E" press every
+    // other mini-game uses. Falls through to interactPressed for any
+    // mini-game that doesn't define this.
+    const rect = canvas.getBoundingClientRect();
+    const vx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const vy = (e.clientY - rect.top) * (canvas.height / rect.height);
+    activeMinigame.onPointerDown(vx, vy);
   } else {
     interactPressed = true;
   }
