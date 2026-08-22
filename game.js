@@ -307,6 +307,31 @@ const PIZZA_JUNK = [
   'Tony Bennett doing his best Sinatra impression on a bootleg 45. Not bad, actually.',
 ];
 
+// Nectar's own three themed dig crates -- each one a dead end for the
+// sampler, but flavorful for its own reason. Unlike JUNK/COMEDY_JUNK/
+// PIZZA_JUNK (a shared pool multiple crates draw from), each entry here is
+// paired 1:1 with one specific crate via c.nectarsSeed (see doInteract()),
+// so digging a given crate always turns up its own themed find.
+const NECTARS_JUNK = [
+  { line: 'Crate after crate of amateur Phish and Grateful Dead cover bands, taped live at open mic nights around town. You are not interested. At all.',
+    reply: 'Keep digging... there\'s got to be something else in here.' },
+  { line: 'Deep reggae cuts, hand-selected — this whole crate is Big Dog\'s own top-shelf picks, dubbed special for Reggae Night.',
+    reply: 'Serious quality selections, but not one of the five you\'re chasing.' },
+  { line: 'Raw, dope hip hop instrumentals — big shoutout to FLEX RECORDS for supplying the heat in this crate.',
+    reply: 'Certified fire beats. Still not what\'s calling you tonight, though.' },
+];
+
+// Henry's Diner's two themed dig crates -- vintage 1950s jazz crooners,
+// same 1:1 pairing via c.henrysSeed as NECTARS_JUNK above. Great records,
+// worth a trip back once the current hunt is done, but never one of the
+// 5 collectibles.
+const HENRYS_JUNK = [
+  { line: 'A stack of 1950s jazz crooner 78s — smooth, late-night stuff, sleeves gone soft and yellowed with age. Really cool records.',
+    reply: 'Worth coming back for sometime. Just not what you\'re after tonight.' },
+  { line: 'More crooner sides from the same era — some big-band swing mixed in, all beautifully worn from decades of diner jukebox spins.',
+    reply: 'Great stuff, all of it. None of it is one of the five, though.' },
+];
+
 // Fake front-page stories for the town's newspaper stands. Onion/Daily Show
 // style Vermont satire — one random headline+body pops up each time a stand
 // is read. Keep these silly and harmless, no real people, just generic
@@ -2845,7 +2870,7 @@ const shops = {
                 ? 'Somebody told me you found that White Label. No sleeve, no name — good ears, honey. That one\'s a legend around here.'
                 : null],
       foundLine: 'Well butter my biscuit — is that a record? Keep on truckin\', kid.' },
-    crates: [],
+    crates: [ { henrysSeed: 0 }, { henrysSeed: 1 } ],
     diner: true,
     // Corner coffee table with three regulars posted up around it, same
     // "solid, image-drawn" treatment as Green Door Studio's npcs.
@@ -2940,7 +2965,7 @@ const shops = {
               'Try Pure Pop Records for rare finds, or Hey Bud — they get weird stuff with plant shipments.',
               'Green Door Studio might have some old session reels too.'],
       foundLine: 'Big tune! That\'s the kind of find that makes Reggae Night legendary.' },
-    crates: [ { junkSeed: 5 }, { junkSeed: 6 } ],
+    crates: [ { nectarsSeed: 0 }, { nectarsSeed: 1 }, { nectarsSeed: 2 } ],
     darkClub: true,
     // Truth & Humble, grabbing a quick slice before the freestyle cypher
     // later tonight at Green Door Studio.
@@ -3728,6 +3753,14 @@ function doInteract() {
       state = 'dialog';
     } else if (c.pizzaSeed !== undefined) {
       dialog = { name: 'CRATE', lines: [PIZZA_JUNK[c.pizzaSeed % PIZZA_JUNK.length], 'Good vibes, but not what you\'re digging for.'], i: 0 };
+      state = 'dialog';
+    } else if (c.nectarsSeed !== undefined) {
+      const nj = NECTARS_JUNK[c.nectarsSeed % NECTARS_JUNK.length];
+      dialog = { name: 'CRATE', lines: [nj.line, nj.reply], i: 0 };
+      state = 'dialog';
+    } else if (c.henrysSeed !== undefined) {
+      const hj = HENRYS_JUNK[c.henrysSeed % HENRYS_JUNK.length];
+      dialog = { name: 'CRATE', lines: [hj.line, hj.reply], i: 0 };
       state = 'dialog';
     } else {
       dialog = { name: 'CRATE', lines: [JUNK[c.junkSeed % JUNK.length], 'Keep digging...'], i: 0 };
@@ -4697,7 +4730,7 @@ function drawTiles(map, time, camX = 0, camY = 0) {
           ctx.fillRect(px + TILE - 8, py + 4, 1, 20);
           break;
         }
-        case 'c': case 'C': drawCrate(px, py, map.crates[key(tx, ty)], map.world); break;
+        case 'c': case 'C': drawCrateProp(px, py, map.crates[key(tx, ty)], map.world); break;
         case 'W': {
           ctx.fillStyle = shadeColor(map.wallColor, -35);
           ctx.fillRect(px, py, TILE, TILE);
@@ -5217,7 +5250,7 @@ function drawCow(px, py) {
   ctx.beginPath(); ctx.arc(hx - 1, hy - 1, 1.4, 0, Math.PI * 2); ctx.fill();
 }
 
-function drawCrate(px, py, data, worldId) {
+function drawCrateProp(px, py, data, worldId) {
   ctx.fillStyle = '#8a5a30';
   ctx.fillRect(px + 2, py + 6, TILE - 4, TILE - 8);
   ctx.fillStyle = '#6a4020';
