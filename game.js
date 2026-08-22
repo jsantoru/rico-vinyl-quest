@@ -193,8 +193,12 @@ const WORLD_DEFS = {
     padOrder: ['elm', 'cola', 'stab', 'choir', 'white'],
   },
   // The swamp — a template overworld, not yet connected to any other map.
+  // `locked: true` keeps it out of player-facing lists (currently just the
+  // Crate's world tabs) while it's still under construction. Flip it off
+  // once a real portal into it exists and it's ready for players to find.
   swamp: {
     name: 'Bayou Crossing',
+    locked: true,
     records: {
       moss: { title: 'Strum Low', artist: 'Boss Bass', year: '1981',
               sample: 'Bassline', layer: 'bass', color: '#3f8f4f', pad: 'BAS',
@@ -229,7 +233,30 @@ function currentWorldId() { return maps[player.map].world; }
 function worldDef()      { return WORLD_DEFS[currentWorldId()] || WORLD_DEFS.town; }
 function worldRecords()  { return worldDef().records; }
 function worldPadOrder() { return worldDef().padOrder; }
-function worldComplete() { return worldPadOrder().every(id => collected.has(id)); }
+// `collected` stores world-qualified keys ("town:choir", "swamp:choir") so
+// that worlds which happen to reuse a record id (both worlds have a
+// 'choir' slot right now) stay independent -- finding one no longer marks
+// the other as found. Every in-game read/write of `collected` should go
+// through this helper rather than using a bare record id directly.
+function recKey(worldId, id) { return worldId + ':' + id; }
+function worldComplete() { return worldPadOrder().every(id => collected.has(recKey(currentWorldId(), id))); }
+
+// All player-visible world ids, in WORLD_DEFS order, skipping any marked
+// `locked` (worlds still under construction, not yet reachable in-game --
+// see the comment on WORLD_DEFS.swamp). Adding a new finished world is all
+// it takes for it to show up as another Crate tab; leaving `locked: true`
+// on one keeps it out of the Crate until it's ready to be found.
+function crateWorldIds() { return Object.keys(WORLD_DEFS).filter((id) => !WORLD_DEFS[id].locked); }
+
+// Opens The Crate (see drawCrate()) from 'play', defaulting the world tab to
+// wherever the player currently is so it never opens on an unrelated world.
+function openCrate() {
+  if (state !== 'play') return;
+  crateReturnState = state;
+  crateWorldIndex = Math.max(0, crateWorldIds().indexOf(currentWorldId()));
+  crateSlotIndex = 0;
+  state = 'crate';
+}
 
 const JUNK = [
   'A water-damaged polka compilation. Hard pass.',
@@ -1930,6 +1957,13 @@ window.addEventListener('keydown', (e) => {
       else if (state === 'title') { titlePage = titlePage === 0 ? 1 : 0; }
     }
     if (k === 'escape' && state === 'hotkeys') { state = hotkeysReturnState; }
+    if (k === 'v') {
+      // [V] opens The Crate any time during gameplay, and closes it again
+      // on a second press -- same open/close pattern as [H] for hotkeys.
+      if (state === 'play') openCrate();
+      else if (state === 'crate') state = crateReturnState;
+    }
+    if (k === 'escape' && state === 'crate') { state = crateReturnState; }
     if (k === 'arrowleft') selectMove = -1;
     if (k === 'arrowright') selectMove = 1;
     if (k === 'arrowup') menuMove = -1;
@@ -2918,11 +2952,19 @@ const player = {
   tempItem: null, tempItemTimer: 0,
 };
 const collected = new Set();
-let state = 'splash'; // splash | title | digChoice | slotChoose | select | play | dialog | record | win | portal | fifa | minigame | hotkeys
+let state = 'splash'; // splash | title | digChoice | slotChoose | select | play | dialog | record | win | portal | fifa | minigame | hotkeys | crate
 // State to snap back to when the [H] hotkeys popup is closed -- currently
 // always 'play' since that's the only state H can be opened from, but kept
 // as its own var in case another state wants to offer the popup later.
 let hotkeysReturnState = 'play';
+// The Crate -- a persistent collection book of every record found across
+// every world (see WORLD_DEFS + drawCrate()). crateWorldIndex/crateSlotIndex
+// track which world tab and which of that world's 5 slots the player is
+// currently browsing; both reset to 0 whenever the crate is opened fresh so
+// it always starts on the player's current world.
+let crateReturnState = 'play';
+let crateWorldIndex = 0;
+let crateSlotIndex = 0;
 // Which of the title screen's two pages is showing: 0 = the main title
 // (story + start prompt), 1 = the Hot Keys page. Toggled with left/right
 // (or [H]) while state === 'title'; reset to 0 any time the player lands
@@ -3023,6 +3065,18 @@ function saveGame(showToast) {
   }
 }
 
+// Saves written before `collected` switched to world-qualified keys
+// ("town:elm" instead of a bare "elm") stored the bare id. Every world that
+// was actually reachable back then was 'town', so that's the only sensible
+// home for a legacy id -- the fallback scan only matters if a bare id ever
+// shows up that isn't a town record, which shouldn't happen in practice.
+function migrateRecordId(id) {
+  if (typeof id !== 'string' || id.includes(':')) return id; // already namespaced
+  if (WORLD_DEFS.town.records[id]) return recKey('town', id);
+  const worldId = Object.keys(WORLD_DEFS).find((w) => WORLD_DEFS[w].records[id]);
+  return worldId ? recKey(worldId, id) : recKey('town', id);
+}
+
 // Restores progress from the given slot and drops the player straight into
 // 'play' at their last position. Returns false (and leaves the game state
 // untouched) if the slot is empty or corrupt/outdated.
@@ -3044,7 +3098,7 @@ function loadGame(slot) {
   player.tempItemTimer = 0;
 
   collected.clear();
-  (data.collected || []).forEach((id) => collected.add(id));
+  (data.collected || []).forEach((id) => collected.add(migrateRecordId(id)));
   completedWorlds.clear();
   (data.completedWorlds || []).forEach((id) => completedWorlds.add(id));
 
@@ -3482,14 +3536,14 @@ function doInteract() {
   if (target.type === 'keeper') {
     const k = target.data;
     const shopRecord = Object.values(maps[player.map].crates).find(c => c.record)?.record;
-    const lines = shopRecord && collected.has(shopRecord) ? [k.foundLine] : k.lines;
+    const lines = shopRecord && collected.has(recKey(currentWorldId(), shopRecord)) ? [k.foundLine] : k.lines;
     dialog = { name: k.name, lines, i: 0 };
     state = 'dialog';
   } else if (target.type === 'crate') {
     const c = target.data;
     if (!c) return;
-    if (c.record && !collected.has(c.record)) {
-      collected.add(c.record);
+    if (c.record && !collected.has(recKey(currentWorldId(), c.record))) {
+      collected.add(recKey(currentWorldId(), c.record));
       music.enable(worldRecords()[c.record].layer);
       music.sting();
       shownRecord = c.record;
@@ -3888,6 +3942,14 @@ function createTouchControls() {
         if (k === 'arrowup') menuMove = -1;
         if (k === 'arrowdown') menuMove = 1;
       }
+      // The Crate uses left/right for world tabs and up/down to browse
+      // slots, same reasoning as the selectMove/menuMove cases above.
+      if (state === 'crate') {
+        if (k === 'arrowleft') selectMove = -1;
+        if (k === 'arrowright') selectMove = 1;
+        if (k === 'arrowup') menuMove = -1;
+        if (k === 'arrowdown') menuMove = 1;
+      }
       music.start();
     }, () => { keys[k] = false; });
     wrap.appendChild(btn);
@@ -3927,12 +3989,13 @@ function createTouchControls() {
   const extras = [
     ['BREW',  () => toggleCoffee(),     () => player.holdingCoffee],
     ['YERBA', () => toggleTea(),        () => player.holdingTea],
+    ['CRATE', () => openCrate(),        () => false],
     ['SAVE',  () => saveGame(true),     () => false],
     ['NEW',   () => { openDigChoice(); },       () => false],
   ];
   extras.forEach(([label, action, isOn]) => {
     const btn = document.createElement('div');
-    btn.className = 'tc-btn' + ((label === 'SAVE' || label === 'NEW') ? ' tc-important' : '');
+    btn.className = 'tc-btn' + ((label === 'SAVE' || label === 'NEW' || label === 'CRATE') ? ' tc-important' : '');
     btn.textContent = label;
     bindTap(btn, () => {
       action();
@@ -4103,6 +4166,22 @@ function update(dt) {
     }
   } else if (state === 'hotkeys') {
     if (interactPressed || buyPressed) state = hotkeysReturnState;
+  } else if (state === 'crate') {
+    // Left/right flips between world tabs, up/down browses that world's 5
+    // slots. Both are read-only browsing -- E, X, [V] and [Esc] all just
+    // close the book, same as the hotkeys popup.
+    if (selectMove) {
+      const ids = crateWorldIds();
+      crateWorldIndex = (crateWorldIndex + selectMove + ids.length) % ids.length;
+      crateSlotIndex = 0;
+      selectMove = 0;
+    }
+    if (menuMove) {
+      const slots = WORLD_DEFS[crateWorldIds()[crateWorldIndex]].padOrder;
+      crateSlotIndex = Math.max(0, Math.min(slots.length - 1, crateSlotIndex + menuMove));
+      menuMove = 0;
+    }
+    if (interactPressed || buyPressed) state = crateReturnState;
   } else if (state === 'fifa') {
     if (performance.now() - fifaStartTime >= 5000) {
       state = fifaReturnState;
@@ -4334,6 +4413,7 @@ function render(time) {
   if (state === 'win') drawWin();
   if (state === 'portal') drawPortalPopup();
   if (state === 'hotkeys') drawHotkeysPopup();
+  if (state === 'crate') drawCrate();
   if (state === 'fifa') drawFifaPopup();
   if (state === 'minigame' && activeMinigame) activeMinigame.draw();
   if (toast) drawToast();
@@ -4437,7 +4517,7 @@ function drawTiles(map, time, camX = 0, camY = 0) {
           ctx.fillRect(px + TILE - 8, py + 4, 1, 20);
           break;
         }
-        case 'c': case 'C': drawCrate(px, py, map.crates[key(tx, ty)]); break;
+        case 'c': case 'C': drawCrate(px, py, map.crates[key(tx, ty)], map.world); break;
         case 'W': {
           ctx.fillStyle = shadeColor(map.wallColor, -35);
           ctx.fillRect(px, py, TILE, TILE);
@@ -4957,13 +5037,13 @@ function drawCow(px, py) {
   ctx.beginPath(); ctx.arc(hx - 1, hy - 1, 1.4, 0, Math.PI * 2); ctx.fill();
 }
 
-function drawCrate(px, py, data) {
+function drawCrate(px, py, data, worldId) {
   ctx.fillStyle = '#8a5a30';
   ctx.fillRect(px + 2, py + 6, TILE - 4, TILE - 8);
   ctx.fillStyle = '#6a4020';
   ctx.fillRect(px + 2, py + 6, TILE - 4, 3);
   ctx.fillRect(px + 2, py + TILE - 5, TILE - 4, 3);
-  const empty = data && data.record && collected.has(data.record);
+  const empty = data && data.record && collected.has(recKey(worldId, data.record));
   const colors = empty ? ['#5a3a1e'] : ['#c04040', '#4060c0', '#d0a030'];
   colors.forEach((c, i) => {
     ctx.fillStyle = c;
@@ -9597,11 +9677,11 @@ function drawHUD() {
   worldPadOrder().forEach((id, i) => {
     const r = worldRecords()[id];
     const x = 88 + i * 46, y = 14;
-    ctx.fillStyle = collected.has(id) ? r.color : '#262030';
+    ctx.fillStyle = collected.has(recKey(currentWorldId(), id)) ? r.color : '#262030';
     ctx.fillRect(x, y, 38, 30);
     ctx.strokeStyle = '#0a080e';
     ctx.strokeRect(x + 0.5, y + 0.5, 37, 29);
-    ctx.fillStyle = collected.has(id) ? '#181418' : '#4a4258';
+    ctx.fillStyle = collected.has(recKey(currentWorldId(), id)) ? '#181418' : '#4a4258';
     ctx.textAlign = 'center';
     ctx.fillText(r.pad, x + 19, y + 20);
   });
@@ -9724,6 +9804,7 @@ function drawHotkeysPopup() {
     ['X', 'buy from carts'],
     ['K', 'quicksave'],
     ['N', 'back to start / new game'],
+    ['V', 'open The Crate (record collection)'],
     ['H', 'toggle this hot-keys popup'],
   ];
   const listX = boxX + 30, keyColW = 150, startY = boxY + 66, lh = 24;
@@ -10126,6 +10207,132 @@ function drawRecordCardFallback() {
   ctx.fillStyle = '#9a90a8';
   ctx.font = '11px monospace';
   ctx.fillText('[E] ▶', x + w - 20, y + h - 12);
+}
+
+// ---------------------------------------------------------------- The Crate
+// A read-only browse-and-remember screen, not a new gameplay system: it
+// just reads WORLD_DEFS + collected, the same two things worldRecords()/
+// worldComplete() already read. Adding a new world to WORLD_DEFS (or a 6th
+// record to an existing one) shows up here automatically -- nothing about
+// drawCrate() needs to change.
+//
+// Every world.record id is looked up via recKey(worldId, id) here (not the
+// bare id) so that ids reused across worlds -- e.g. 'choir' means a
+// different record in town vs. swamp -- are tracked independently. See
+// recKey()'s definition for the full rationale.
+function drawCrate() {
+  ctx.fillStyle = 'rgba(6,4,10,0.88)';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+  const boxW = 760, boxH = 470, boxX = (VIEW_W - boxW) / 2, boxY = (VIEW_H - boxH) / 2;
+  ctx.fillStyle = '#1c1626';
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+  ctx.strokeStyle = '#e0b040';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(boxX + 2, boxY + 2, boxW - 4, boxH - 4);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#e0b040';
+  ctx.font = 'bold 24px monospace';
+  ctx.fillText('THE CRATE', VIEW_W / 2, boxY + 38);
+
+  const ids = crateWorldIds();
+  const worldId = ids[crateWorldIndex];
+  const def = WORLD_DEFS[worldId];
+  const records = def.records;
+  const padOrder = def.padOrder;
+  const foundInWorld = padOrder.filter((id) => collected.has(recKey(worldId, id))).length;
+
+  // world tab row -- left/right (arrows, d-pad, or dedicated buttons in
+  // future control schemes) cycles through every world in WORLD_DEFS
+  ctx.font = 'bold 18px monospace';
+  ctx.fillStyle = '#f4ecd8';
+  const tabY = boxY + 70;
+  ctx.fillText(`\u25C0  ${def.name.toUpperCase()}  \u25B6`, VIEW_W / 2, tabY);
+  ctx.font = '12px monospace';
+  ctx.fillStyle = '#9a90a8';
+  ctx.fillText(
+    `${foundInWorld} / ${padOrder.length} found here  \u00b7  world ${crateWorldIndex + 1} of ${ids.length}`,
+    VIEW_W / 2, tabY + 20
+  );
+
+  // 5-slot grid, same visual language as the pad HUD / win-screen grid:
+  // filled + colored when found, dim with a "?" when not. The currently
+  // browsed slot (crateSlotIndex) gets a pulsing highlight border.
+  const sq = 78, gap = 18;
+  const totalW = sq * padOrder.length + gap * (padOrder.length - 1);
+  const gridX = VIEW_W / 2 - totalW / 2, gridY = tabY + 44;
+  padOrder.forEach((id, i) => {
+    const r = records[id];
+    const x = gridX + i * (sq + gap);
+    const found = collected.has(recKey(worldId, id));
+    ctx.fillStyle = found ? r.color : '#262030';
+    ctx.fillRect(x, gridY, sq, sq);
+    if (i === crateSlotIndex) {
+      ctx.strokeStyle = Math.floor(performance.now() / 300) % 2 ? '#e0b040' : '#f4ecd8';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x - 3, gridY - 3, sq + 6, sq + 6);
+    }
+    ctx.textAlign = 'center';
+    ctx.fillStyle = found ? '#181418' : '#4a4258';
+    ctx.font = 'bold 13px monospace';
+    ctx.fillText(found ? r.pad : '?', x + sq / 2, gridY + sq / 2 + 5);
+  });
+
+  // detail panel for whichever slot is currently browsed
+  const selId = padOrder[crateSlotIndex];
+  const selRecord = records[selId];
+  const found = collected.has(recKey(worldId, selId));
+  const panelY = gridY + sq + 26;
+  const panelX = boxX + 40, panelW = boxW - 80;
+
+  if (found) {
+    const artS = 96;
+    drawAlbumArt(panelX, panelY, artS, selRecord);
+    ctx.strokeStyle = selRecord.color;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(panelX, panelY, artS, artS);
+
+    const tx = panelX + artS + 24;
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 16px monospace';
+    ctx.fillStyle = selRecord.color === '#e8e4dc' ? '#f4ecd8' : selRecord.color;
+    wrapText('"' + selRecord.title + '"', tx, panelY + 16, panelW - artS - 24, 20);
+    ctx.font = '13px monospace';
+    ctx.fillStyle = '#c8c0d8';
+    ctx.fillText(selRecord.artist + ' \u00b7 ' + selRecord.year, tx, panelY + 60);
+    ctx.fillStyle = '#f4ecd8';
+    ctx.font = 'bold 12px monospace';
+    ctx.fillText('SAMPLE: ' + selRecord.sample, tx, panelY + 82);
+
+    ctx.font = '12px monospace';
+    ctx.fillStyle = '#c8c0d8';
+    wrapText(selRecord.flavor, panelX, panelY + artS + 22, panelW, 16);
+  } else {
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 16px monospace';
+    ctx.fillStyle = '#6a6278';
+    ctx.fillText('??? \u2014 not yet found', panelX, panelY + 40);
+    ctx.font = '12px monospace';
+    ctx.fillStyle = '#4a4258';
+    ctx.fillText('Dig around ' + def.name + ' to turn this one up.', panelX, panelY + 62);
+  }
+
+  // running total across every world -- grows on its own as WORLD_DEFS grows
+  let totalFound = 0, totalSlots = 0;
+  ids.forEach((wid) => {
+    const p = WORLD_DEFS[wid].padOrder;
+    totalSlots += p.length;
+    totalFound += p.filter((id) => collected.has(recKey(wid, id))).length;
+  });
+  ctx.textAlign = 'center';
+  ctx.font = '12px monospace';
+  ctx.fillStyle = '#9a90a8';
+  ctx.fillText(`${totalFound} / ${totalSlots} records found across all worlds`, VIEW_W / 2, boxY + boxH - 46);
+
+  ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
+  ctx.font = 'bold 14px monospace';
+  ctx.fillText('[\u25C0\u25B6] world   [\u25B2\u25BC] browse   [E] close', VIEW_W / 2, boxY + boxH - 18);
 }
 
 function drawSplash() {
