@@ -382,6 +382,11 @@ const VERMONT_NEWS = [
 const keys = {};
 let interactPressed = false;
 let buyPressed = false; // also doubles as "back" (X) on the dig-choice/slot-choose menus
+// Second action key, only meaningful inside a mini-game that needs two
+// independent inputs (currently just Freestyle Scratch-DJ's right-hand
+// needle). Keyboard: [Q]. Touch: doubles up on the SK8 button, which is
+// otherwise a no-op outside the 'play' state (see toggleSkate()).
+let scratchPressed = false;
 let menuMove = 0; // edge-triggered -1/0/1 from up/down arrows, consumed by the dig-choice/slot-choose menus
 
 // ---- "fifa" keyword easter egg -------------------------------------------
@@ -438,6 +443,7 @@ const MINIGAME_ACTIONS = {
   buildpizza: () => enterMinigame(createPizzaBuildGame()),
   clawmachine: () => enterMinigame(createClawMachineGame()),
   beatjam: () => enterMinigame(createBeatJamGame()),
+  scratchdj: () => enterMinigame(createScratchDJGame()),
 };
 
 // ---- trophy case: personal bests for the 8 scored mini-games --------------
@@ -465,6 +471,8 @@ const MINIGAME_TROPHIES = [
     flavor: 'Grab the right topping right as it passes the marker.' },
   { id: 'clawmachine', label: 'Claw Machine', unit: 'pts',
     flavor: 'Six tries to walk off with the good flowers.' },
+  { id: 'scratchdj', label: 'Freestyle Scratch-DJ', unit: 'pts',
+    flavor: 'Two needles, two hands, no time to think about either.' },
 ];
 
 function trophyMetaFor(id) { return MINIGAME_TROPHIES.find((t) => t.id === id); }
@@ -2094,12 +2102,187 @@ function createClawMachineGame() {
   };
 }
 
+// Freestyle Scratch-DJ: twin turntables instead of beat match's one bar --
+// a left needle (under [E]) and a right needle (under [Q]) sweep back and
+// forth completely independently, at different speeds and out of phase
+// with each other, so they're never lined up the same way twice. Each
+// round the game calls out a hand; scratch that hand's key while its
+// needle sits in the target zone to score, with a combo multiplier that
+// climbs the longer the streak holds. Scratching the *wrong* hand -- or
+// missing the zone -- resets the combo to zero. Same finite-rounds/score-
+// then-exit shape and dark-overlay/monospace look as every mini-game in
+// this file, just two sweeps instead of one, which is what actually makes
+// it chaotic: the "wrong" needle never stops moving while you're focused
+// on the one you were called for. Canvas primitives only, no new assets.
+function createScratchDJGame() {
+  const ROUNDS = 10;
+  let phase = 'wait';        // 'wait' | 'result' | 'done'
+  let round = 1;
+  let score = 0;
+  let combo = 0;
+  let lastHitLabel = '';
+  let resultTimer = 0;
+  let bestRecorded = false, isNewBest = false;
+
+  // Two independent needles. Different starting positions/directions and
+  // speeds that ramp up separately each round, so they drift in and out
+  // of sync with each other instead of ever settling into a rhythm.
+  let leftPos = -1, leftDir = 1, leftSpeed = 1.05;
+  let rightPos = 1, rightDir = -1, rightSpeed = 1.35;
+  let expectedHand = Math.random() < 0.5 ? 'left' : 'right';
+
+  const DECK_W = 210, DECK_H = 20;
+  const leftCx = VIEW_W / 2 - 150, rightCx = VIEW_W / 2 + 150;
+  const leftX = leftCx - DECK_W / 2, rightX = rightCx - DECK_W / 2;
+  const deckY = 290;
+
+  function hitFor(p) {
+    const d = Math.abs(p);
+    if (d <= 0.08) return { label: 'PERFECT!', pts: 50 };
+    if (d <= 0.22) return { label: 'GOOD', pts: 25 };
+    if (d <= 0.45) return { label: 'OK', pts: 10 };
+    return { label: 'MISS', pts: 0 };
+  }
+
+  function nextRound() {
+    round++;
+    leftSpeed += 0.07;
+    rightSpeed += 0.09;
+    expectedHand = Math.random() < 0.5 ? 'left' : 'right';
+    phase = 'wait';
+  }
+
+  return {
+    update(dt) {
+      if (phase === 'wait') {
+        leftPos += leftDir * dt * leftSpeed;
+        if (leftPos >= 1) { leftPos = 1; leftDir = -1; }
+        if (leftPos <= -1) { leftPos = -1; leftDir = 1; }
+        rightPos += rightDir * dt * rightSpeed;
+        if (rightPos >= 1) { rightPos = 1; rightDir = -1; }
+        if (rightPos <= -1) { rightPos = -1; rightDir = 1; }
+
+        const pressedHand = interactPressed ? 'left' : (scratchPressed ? 'right' : null);
+        if (pressedHand) {
+          if (pressedHand !== expectedHand) {
+            // wrong hand -- the chaotic penalty: combo dies, no points,
+            // no matter how well-timed the press was.
+            combo = 0;
+            lastHitLabel = 'WRONG HAND!';
+          } else {
+            const pos = pressedHand === 'left' ? leftPos : rightPos;
+            const res = hitFor(pos);
+            const mult = 1 + Math.min(combo, 8) * 0.1;
+            score += Math.round(res.pts * mult);
+            combo = res.pts > 0 ? combo + 1 : 0;
+            lastHitLabel = res.label;
+          }
+          phase = 'result';
+          resultTimer = 0.6;
+        }
+      } else if (phase === 'result') {
+        resultTimer -= dt;
+        if (resultTimer <= 0) {
+          if (round >= ROUNDS) phase = 'done';
+          else nextRound();
+        }
+      } else if (phase === 'done') {
+        if (!bestRecorded) { isNewBest = recordMinigameScore('scratchdj', score); bestRecorded = true; }
+        if (interactPressed || scratchPressed) exitMinigame();
+      }
+      // X always bails out early, no matter the phase
+      if (buyPressed) exitMinigame();
+    },
+    draw() {
+      ctx.fillStyle = 'rgba(8,6,12,0.9)';
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#e0b040';
+      ctx.font = 'bold 24px monospace';
+      ctx.fillText('FREESTYLE SCRATCH-DJ', VIEW_W / 2, 56);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = '15px monospace';
+      ctx.fillText(`SCORE ${score}   COMBO x${combo}   ROUND ${Math.min(round, ROUNDS)}/${ROUNDS}`, VIEW_W / 2, 80);
+
+      // called-hand callout, flashing above the deck it belongs to
+      const calloutX = expectedHand === 'left' ? leftCx : rightCx;
+      const flash = Math.floor(performance.now() / 250) % 2;
+      if (phase === 'wait' && flash) {
+        ctx.fillStyle = expectedHand === 'left' ? '#5fd0ff' : '#ff5fb0';
+        ctx.font = 'bold 20px monospace';
+        ctx.fillText('\u25bc', calloutX, deckY - 46);
+      }
+
+      [
+        { cx: leftCx, x: leftX, pos: leftPos, label: 'LEFT [E]', color: '#5fd0ff', hand: 'left' },
+        { cx: rightCx, x: rightX, pos: rightPos, label: 'RIGHT [Q/SK8]', color: '#ff5fb0', hand: 'right' },
+      ].forEach((deck) => {
+        const isCalled = deck.hand === expectedHand;
+        // little vinyl platter above each deck, purely decorative flavor
+        ctx.beginPath();
+        ctx.arc(deck.cx, deckY - 34, 16, 0, Math.PI * 2);
+        ctx.fillStyle = '#141018';
+        ctx.fill();
+        ctx.strokeStyle = deck.color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(deck.cx, deckY - 34, 4, 0, Math.PI * 2);
+        ctx.fillStyle = deck.color;
+        ctx.fill();
+
+        // deck bar + target zone
+        ctx.strokeStyle = isCalled ? deck.color : 'rgba(244,236,216,0.35)';
+        ctx.lineWidth = isCalled ? 3 : 2;
+        ctx.strokeRect(deck.x, deckY, DECK_W, DECK_H);
+        ctx.fillStyle = 'rgba(224,176,64,0.28)';
+        const zoneW = DECK_W * 0.22; // matches the 'GOOD' (d <= 0.22) band
+        ctx.fillRect(deck.cx - zoneW / 2, deckY, zoneW, DECK_H);
+        ctx.fillStyle = 'rgba(224,176,64,0.55)';
+        const perfectW = DECK_W * 0.08;
+        ctx.fillRect(deck.cx - perfectW / 2, deckY, perfectW, DECK_H);
+
+        // needle
+        const nx = deck.x + DECK_W / 2 + deck.pos * (DECK_W / 2);
+        ctx.strokeStyle = '#f4ecd8';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(nx, deckY - 6);
+        ctx.lineTo(nx, deckY + DECK_H + 6);
+        ctx.stroke();
+
+        ctx.fillStyle = deck.color;
+        ctx.font = 'bold 13px monospace';
+        ctx.fillText(deck.label, deck.cx, deckY + DECK_H + 22);
+      });
+
+      ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
+      ctx.font = 'bold 16px monospace';
+      if (phase === 'wait') ctx.fillText('- SCRATCH THE CALLED HAND ON THE BEAT -', VIEW_W / 2, 380);
+      else if (phase === 'result') ctx.fillText(lastHitLabel, VIEW_W / 2, 380);
+      else if (phase === 'done') ctx.fillText(`FINAL SCORE: ${score} - PRESS E TO LEAVE`, VIEW_W / 2, 380);
+
+      if (phase === 'done') {
+        ctx.font = '14px monospace';
+        ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
+        ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('scratchdj')}`, VIEW_W / 2, 400);
+      }
+
+      ctx.fillStyle = '#6a6070';
+      ctx.font = '13px monospace';
+      ctx.fillText('X to walk away anytime', VIEW_W / 2, phase === 'done' ? 418 : 402);
+    },
+  };
+}
+
 window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
   if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k) || k === ' ') e.preventDefault();
   if (!keys[k]) {
     if (k === 'e' || k === 'enter' || k === 'z' || k === ' ') interactPressed = true;
     if (k === 'x') buyPressed = true;
+    if (k === 'q') scratchPressed = true;
     if (k === 'b') toggleSkate();
     if (k === 'm') music.toggleMute();
     if (k === 'c') toggleCoffee();
@@ -2758,7 +2941,10 @@ function makeShop(id, opts) {
     // facingTarget() has nothing to find, no matter what's listed above.
     minigames: opts.minigames || [],
   };
-  const spots = [[1,4],[1,6],[12,4],[12,6],[2,8],[11,8]];
+  // Default crate spots, in priority order. A shop can override which
+  // tiles its own crates land on (e.g. Henry's Diner pushes its crates to
+  // the right wall, clear of the magazine rack) via opts.crateSpots.
+  const spots = opts.crateSpots || [[1,4],[1,6],[12,4],[12,6],[2,8],[11,8]];
   opts.crates.forEach((c, i) => {
     const [x, y] = spots[i % spots.length];
     g[y][x] = 'C';
@@ -2884,6 +3070,9 @@ const shops = {
                 : null],
       foundLine: 'Well butter my biscuit — is that a record? Keep on truckin\', kid.' },
     crates: [ { henrysSeed: 0 }, { henrysSeed: 1 } ],
+    // Right side of the room, clear of the magazine rack at (1,4)/(1,6)
+    // on the left wall (see drawMagazineRack in drawHenrysInterior).
+    crateSpots: [[12,4],[12,6]],
     diner: true,
     // Corner coffee table with three regulars posted up around it, same
     // "solid, image-drawn" treatment as Green Door Studio's npcs.
@@ -2996,10 +3185,12 @@ const shops = {
           'Third Thursdays hit different. See you over there in a bit.',
         ] },
     ],
-    // Dartboard on the back wall -- a quick mini-game break, same
-    // tx/ty-facing pattern as npcs above.
+    // Dartboard on the back wall, plus a pair of turntables tucked right
+    // next to Big Dog's counter spot (6,2) for a quick scratch session --
+    // same tx/ty-facing pattern as npcs above.
     minigames: [
       { id: 'darts', tx: 11, ty: 4, label: 'PLAY DARTS' },
+      { id: 'scratchdj', tx: 3, ty: 2, label: 'SCRATCH DJ' },
     ],
   }),
   juniors: makeShop('juniors', {
@@ -4193,6 +4384,7 @@ function createTouchControls() {
   skBtn.id = 'btnSK8'; skBtn.className = 'tc-btn'; skBtn.textContent = 'SK8';
   bindTap(skBtn, () => {
     toggleSkate();
+    scratchPressed = true; // doubles as the 2nd mini-game action button; harmless outside 'minigame'
     music.start();
     skBtn.classList.toggle('tc-on', player.skating);
   });
@@ -4416,6 +4608,7 @@ function update(dt) {
   }
   interactPressed = false;
   buyPressed = false;
+  scratchPressed = false;
   menuMove = 0;
 }
 
@@ -9368,6 +9561,43 @@ function drawDartboardDecoration(x, y) {
   }
 }
 
+// A compact pair of DJ turntables -- two small vinyl platters with
+// tonearms, sat side by side on a little booth ledge -- marking the
+// 'scratchdj' mini-game's tile the same way drawDartboardDecoration()
+// marks 'darts'. Purely original pixel art, canvas primitives only.
+function drawTurntablesDecoration(x, y) {
+  const boothW = 40, boothH = 26;
+  ctx.fillStyle = '#2a1a30';
+  ctx.fillRect(x - boothW / 2, y - boothH / 2, boothW, boothH);
+  ctx.strokeStyle = '#4a3060';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x - boothW / 2, y - boothH / 2, boothW, boothH);
+
+  [-1, 1].forEach((side) => {
+    const px = x + side * 10, py = y;
+    // platter
+    ctx.beginPath();
+    ctx.arc(px, py, 9, 0, Math.PI * 2);
+    ctx.fillStyle = '#0f0a15';
+    ctx.fill();
+    ctx.strokeStyle = side < 0 ? '#5fd0ff' : '#ff5fb0';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // record label
+    ctx.beginPath();
+    ctx.arc(px, py, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#e0b040';
+    ctx.fill();
+    // tonearm, angled in toward the label from the outer corner
+    ctx.strokeStyle = '#c8ccd0';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(px + side * 8, py - 8);
+    ctx.lineTo(px + side * 2, py - 2);
+    ctx.stroke();
+  });
+}
+
 function drawNectarsInterior(time) {
   // Dark rock club atmosphere with stage, bar, and gravy fries station
 
@@ -9424,6 +9654,10 @@ function drawNectarsInterior(time) {
   // Dartboard on the back wall -- lines up with the 'darts' entry in
   // this map's `minigames` list (tx:11, ty:4)
   drawDartboardDecoration(11 * TILE + TILE / 2, 4 * TILE + TILE / 2);
+
+  // Twin turntables, right next to Big Dog's spot behind the counter --
+  // lines up with the 'scratchdj' entry (tx:3, ty:2)
+  drawTurntablesDecoration(3 * TILE + TILE / 2, 2 * TILE + TILE / 2);
   
   // Gravy Fries station sign (right side)
   const signX = 10 * TILE;
