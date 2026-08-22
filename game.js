@@ -576,10 +576,10 @@ function createDartsGame() {
 
       ctx.textAlign = 'center';
       ctx.fillStyle = '#e0b040';
-      ctx.font = 'bold 22px monospace';
+      ctx.font = 'bold 26px monospace';
       ctx.fillText('DARTS', cx, 60);
       ctx.fillStyle = '#f4ecd8';
-      ctx.font = '12px monospace';
+      ctx.font = '15px monospace';
       ctx.fillText(`SCORE ${score}   THROWS LEFT ${Math.max(0, throwsLeft)}`, cx, 84);
 
       // board
@@ -615,24 +615,24 @@ function createDartsGame() {
       ctx.fillStyle = '#e0a030';
       ctx.fillRect(barX + 2, barY + 2, (barW - 4) * shownPower, barH - 4);
       ctx.fillStyle = '#9a90a8';
-      ctx.font = '11px monospace';
+      ctx.font = '14px monospace';
       ctx.fillText('POWER', cx, barY - 8);
 
       ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
-      ctx.font = 'bold 14px monospace';
+      ctx.font = 'bold 17px monospace';
       if (phase === 'power') ctx.fillText('- TAP E TO SET POWER -', cx, 452);
       else if (phase === 'aim') ctx.fillText('- TAP E TO THROW -', cx, 452);
       else if (phase === 'result') ctx.fillText(lastScoreLabel, cx, 452);
       else if (phase === 'done') ctx.fillText(`FINAL SCORE: ${score} - PRESS E TO LEAVE`, cx, 452);
 
       if (phase === 'done') {
-        ctx.font = '11px monospace';
+        ctx.font = '14px monospace';
         ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
         ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('darts')}`, cx, 470);
       }
 
       ctx.fillStyle = '#6a6070';
-      ctx.font = '10px monospace';
+      ctx.font = '13px monospace';
       ctx.fillText('X to walk away anytime', cx, phase === 'done' ? 488 : 476);
     },
   };
@@ -701,10 +701,10 @@ function createBeatMatchGame() {
 
       ctx.textAlign = 'center';
       ctx.fillStyle = '#4ad0ff';
-      ctx.font = 'bold 22px monospace';
+      ctx.font = 'bold 26px monospace';
       ctx.fillText('BEAT MATCH', VIEW_W / 2, 60);
       ctx.fillStyle = '#f4ecd8';
-      ctx.font = '12px monospace';
+      ctx.font = '15px monospace';
       ctx.fillText(`SCORE ${score}   BEAT ${Math.min(round, ROUNDS)}/${ROUNDS}   COMBO x${combo}`, VIEW_W / 2, 84);
 
       // timing bar track
@@ -724,19 +724,19 @@ function createBeatMatchGame() {
       ctx.fillRect(nx - 2, barY - 8, 4, barH + 16);
 
       ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#4ad0ff' : '#f4ecd8';
-      ctx.font = 'bold 14px monospace';
+      ctx.font = 'bold 17px monospace';
       if (phase === 'wait') ctx.fillText('- TAP E ON THE BEAT -', VIEW_W / 2, 360);
       else if (phase === 'result') ctx.fillText(lastHitLabel, VIEW_W / 2, 360);
       else if (phase === 'done') ctx.fillText(`FINAL SCORE: ${score} - PRESS E TO LEAVE`, VIEW_W / 2, 360);
 
       if (phase === 'done') {
-        ctx.font = '11px monospace';
+        ctx.font = '14px monospace';
         ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
         ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('beatmatch')}`, VIEW_W / 2, 378);
       }
 
       ctx.fillStyle = '#6a6070';
-      ctx.font = '10px monospace';
+      ctx.font = '13px monospace';
       ctx.fillText('X to walk away anytime', VIEW_W / 2, phase === 'done' ? 396 : 384);
     },
   };
@@ -833,10 +833,10 @@ function createBeatJamGame() {
 
       ctx.textAlign = 'center';
       ctx.fillStyle = '#e0b040';
-      ctx.font = 'bold 22px monospace';
+      ctx.font = 'bold 26px monospace';
       ctx.fillText('BEAT JAM', cx, 56);
       ctx.fillStyle = '#f4ecd8';
-      ctx.font = '12px monospace';
+      ctx.font = '15px monospace';
       ctx.fillText(`HITS ${hits}`, cx, 78);
 
       // countdown bar
@@ -847,7 +847,7 @@ function createBeatJamGame() {
       ctx.fillStyle = frac > 0.3 ? '#8cff5f' : '#e0603a';
       ctx.fillRect(barX, barY, barW * Math.max(0, frac), 8);
       ctx.fillStyle = '#f4ecd8';
-      ctx.font = 'bold 11px monospace';
+      ctx.font = 'bold 14px monospace';
       ctx.fillText(`${Math.ceil(timeLeft)}s`, cx, barY + 24);
 
       // MPC-style pad body behind the four pads
@@ -870,19 +870,19 @@ function createBeatJamGame() {
         ctx.strokeRect(x - PAD / 2, y - PAD / 2, PAD, PAD);
 
         ctx.fillStyle = lit ? '#181418' : '#f4ecd8';
-        ctx.font = 'bold 20px monospace';
+        ctx.font = 'bold 22px monospace';
         ctx.fillText(p.label, x, y + 8);
-        ctx.font = '18px monospace';
+        ctx.font = '20px monospace';
         ctx.fillText(p.hint, x, y - 26);
       });
 
       ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#8cff5f' : '#f4ecd8';
-      ctx.font = 'bold 14px monospace';
+      ctx.font = 'bold 17px monospace';
       if (phase === 'jam') ctx.fillText('- \u25B2\u25BC\u25C0\u25B6 OR TAP A PAD TO PLAY -', cx, 562);
       else ctx.fillText("TIME'S UP! NICE SET - PRESS E TO LEAVE", cx, 562);
 
       ctx.fillStyle = '#6a6070';
-      ctx.font = '10px monospace';
+      ctx.font = '13px monospace';
       ctx.fillText('X to walk away anytime', cx, 584);
     },
   };
@@ -1009,10 +1009,10 @@ function createWhackPigeonGame() {
 
       ctx.textAlign = 'center';
       ctx.fillStyle = '#8cff5f';
-      ctx.font = 'bold 22px monospace';
+      ctx.font = 'bold 26px monospace';
       ctx.fillText('WHACK-A-PIGEON', cx, 60);
       ctx.fillStyle = '#f4ecd8';
-      ctx.font = '12px monospace';
+      ctx.font = '15px monospace';
       ctx.fillText(`SCORE ${score}   ROUND ${Math.min(round, ROUNDS)}/${ROUNDS}   COMBO x${combo}`, cx, 84);
 
       // ledge + holes
@@ -1046,19 +1046,19 @@ function createWhackPigeonGame() {
       });
 
       ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#8cff5f' : '#f4ecd8';
-      ctx.font = 'bold 14px monospace';
+      ctx.font = 'bold 17px monospace';
       if (phase === 'up') ctx.fillText('- TAP E TO WHACK IT -', cx, 420);
       else if (phase === 'result') ctx.fillText(lastHitLabel, cx, 420);
       else if (phase === 'done') ctx.fillText(`FINAL SCORE: ${score} - PRESS E TO LEAVE`, cx, 420);
 
       if (phase === 'done') {
-        ctx.font = '11px monospace';
+        ctx.font = '14px monospace';
         ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
         ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('whackpigeon')}`, cx, 438);
       }
 
       ctx.fillStyle = '#6a6070';
-      ctx.font = '10px monospace';
+      ctx.font = '13px monospace';
       ctx.fillText('X to walk away anytime', cx, phase === 'done' ? 456 : 444);
     },
   };
@@ -1150,10 +1150,10 @@ function createCrateDiggingGame() {
 
       ctx.textAlign = 'center';
       ctx.fillStyle = '#e0b040';
-      ctx.font = 'bold 22px monospace';
+      ctx.font = 'bold 26px monospace';
       ctx.fillText('CRATE DIGGING', VIEW_W / 2, 56);
       ctx.fillStyle = '#f4ecd8';
-      ctx.font = '12px monospace';
+      ctx.font = '15px monospace';
       ctx.fillText(`SCORE ${score}   DIG ${Math.min(round, ROUNDS)}/${ROUNDS}`, VIEW_W / 2, 78);
 
       // crate frame around the stack
@@ -1173,7 +1173,7 @@ function createCrateDiggingGame() {
         ctx.strokeRect(stackX, sy + 2, stackW, slotH - 4);
         if (revealed) {
           ctx.fillStyle = '#181418';
-          ctx.font = 'bold 11px monospace';
+          ctx.font = 'bold 14px monospace';
           ctx.fillText(lastOutcome.type === 'rare' ? '\u2605 RARE' : lastOutcome.type === 'mixtape' ? 'MIXTAPE' : 'DUD',
             stackX + stackW / 2, sy + slotH / 2 + 4);
         }
@@ -1199,24 +1199,24 @@ function createCrateDiggingGame() {
       }
 
       ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
-      ctx.font = 'bold 14px monospace';
+      ctx.font = 'bold 17px monospace';
       if (phase === 'dig') ctx.fillText('- TAP E TO GRAB ONE -', VIEW_W / 2, 430);
       else if (phase === 'result') {
         ctx.fillText(lastOutcome.label, VIEW_W / 2, 430);
         ctx.fillStyle = '#9a90a8';
-        ctx.font = '11px monospace';
+        ctx.font = '14px monospace';
         ctx.fillText(lastOutcome.sub, VIEW_W / 2, 448);
       } else if (phase === 'done') {
         ctx.fillText(`FINAL SCORE: ${score} - PRESS E TO LEAVE`, VIEW_W / 2, 430);
         ctx.fillStyle = '#9a90a8';
-        ctx.font = '11px monospace';
+        ctx.font = '14px monospace';
         ctx.fillText(`${tally.rare} rare 45${tally.rare === 1 ? '' : 's'}, ${tally.mixtape} mixtape${tally.mixtape === 1 ? '' : 's'}, ${tally.dud} dud${tally.dud === 1 ? '' : 's'}`, VIEW_W / 2, 448);
         ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
         ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('cratedig')}`, VIEW_W / 2, 464);
       }
 
       ctx.fillStyle = '#6a6070';
-      ctx.font = '10px monospace';
+      ctx.font = '13px monospace';
       ctx.fillText('X to walk away anytime', VIEW_W / 2, phase === 'dig' ? 454 : 486);
     },
   };
@@ -1361,10 +1361,10 @@ function createSpeedSweepGame() {
 
       ctx.textAlign = 'center';
       ctx.fillStyle = '#e0b040';
-      ctx.font = 'bold 22px monospace';
+      ctx.font = 'bold 26px monospace';
       ctx.fillText('SPEED SWEEP', VIEW_W / 2, 56);
       ctx.fillStyle = '#f4ecd8';
-      ctx.font = '12px monospace';
+      ctx.font = '15px monospace';
       ctx.fillText(`SCORE ${score}   SWEPT ${swept}`, VIEW_W / 2, 78);
 
       // countdown bar
@@ -1375,7 +1375,7 @@ function createSpeedSweepGame() {
       ctx.fillStyle = frac > 0.3 ? '#8cff5f' : '#e0603a';
       ctx.fillRect(barX, barY, barW * Math.max(0, frac), 8);
       ctx.fillStyle = '#f4ecd8';
-      ctx.font = 'bold 11px monospace';
+      ctx.font = 'bold 14px monospace';
       ctx.fillText(`${Math.ceil(timeLeft)}s`, VIEW_W / 2, barY + 24);
 
       // shop floor strip
@@ -1407,7 +1407,7 @@ function createSpeedSweepGame() {
       pops.forEach((p) => {
         ctx.globalAlpha = Math.max(0, p.life / 0.5);
         ctx.fillStyle = '#8cff5f';
-        ctx.font = 'bold 13px monospace';
+        ctx.font = 'bold 16px monospace';
         ctx.fillText(`+${p.pts}`, p.x, p.y - 10);
         ctx.globalAlpha = 1;
       });
@@ -1415,18 +1415,18 @@ function createSpeedSweepGame() {
       if (phase === 'sweep') drawBroom(broomX, FLOOR_Y);
 
       ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#8cff5f' : '#f4ecd8';
-      ctx.font = 'bold 14px monospace';
+      ctx.font = 'bold 17px monospace';
       if (phase === 'sweep') ctx.fillText('- HOLD \u25c0 \u25b6 TO MOVE, TAP E TO SWEEP -', VIEW_W / 2, 420);
       else ctx.fillText(`TIME'S UP! FINAL SCORE: ${score} - PRESS E TO LEAVE`, VIEW_W / 2, 420);
 
       if (phase === 'done') {
-        ctx.font = '11px monospace';
+        ctx.font = '14px monospace';
         ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
         ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('speedsweep')}`, VIEW_W / 2, 438);
       }
 
       ctx.fillStyle = '#6a6070';
-      ctx.font = '10px monospace';
+      ctx.font = '13px monospace';
       ctx.fillText('X to walk away anytime', VIEW_W / 2, phase === 'done' ? 456 : 444);
     },
   };
@@ -1506,10 +1506,10 @@ function createStaringContestGame() {
       const cx = VIEW_W / 2;
       ctx.textAlign = 'center';
       ctx.fillStyle = '#e0b040';
-      ctx.font = 'bold 22px monospace';
+      ctx.font = 'bold 26px monospace';
       ctx.fillText('STARING CONTEST', cx, 56);
       ctx.fillStyle = '#c8c0d8';
-      ctx.font = '12px monospace';
+      ctx.font = '15px monospace';
       ctx.fillText('First one to blink loses.', cx, 78);
 
       // --- cushion the cat sits on ---
@@ -1630,11 +1630,11 @@ function createStaringContestGame() {
 
       // status line + result
       ctx.textAlign = 'center';
-      ctx.font = 'bold 14px monospace';
+      ctx.font = 'bold 17px monospace';
       if (phase === 'staring') {
         ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
         ctx.fillText('- DON\'T MOVE. DON\'T PRESS ANYTHING. -', cx, 440);
-        ctx.font = '11px monospace';
+        ctx.font = '14px monospace';
         ctx.fillStyle = '#9a90a8';
         ctx.fillText(`HOLDING STILL: ${elapsed.toFixed(1)}s`, cx, 462);
       } else if (phase === 'result' || phase === 'done') {
@@ -1646,7 +1646,7 @@ function createStaringContestGame() {
           ctx.fillText('YOU BLINKED. THE CAT WINS.', cx, 440);
         }
         if (phase === 'done') {
-          ctx.font = '11px monospace';
+          ctx.font = '14px monospace';
           ctx.fillStyle = '#9a90a8';
           ctx.fillText('PRESS E TO LEAVE', cx, 462);
           ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
@@ -1801,15 +1801,15 @@ function createPizzaBuildGame() {
 
       ctx.textAlign = 'center';
       ctx.fillStyle = '#e0b040';
-      ctx.font = 'bold 22px monospace';
+      ctx.font = 'bold 26px monospace';
       ctx.fillText('BUILD A PIZZA', cx, 52);
       ctx.fillStyle = '#f4ecd8';
-      ctx.font = '12px monospace';
+      ctx.font = '15px monospace';
       ctx.fillText(`SCORE ${score}   ORDER ${Math.min(round, ROUNDS)}/${ROUNDS}   COMBO x${combo}`, cx, 74);
 
       if (phase !== 'done') {
         ctx.fillStyle = '#e0603a';
-        ctx.font = 'bold 15px monospace';
+        ctx.font = 'bold 18px monospace';
         ctx.fillText(`ORDER UP: ${target.label}`, cx, 106);
       }
 
@@ -1846,24 +1846,24 @@ function createPizzaBuildGame() {
       const bottomY = cy + wheelR + iconR + 40;
       ctx.textAlign = 'center';
       ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
-      ctx.font = 'bold 14px monospace';
+      ctx.font = 'bold 17px monospace';
       if (phase === 'spin') ctx.fillText('- TAP E WHEN IT HITS THE MARKER -', cx, bottomY);
       else if (phase === 'result') ctx.fillText(lastLabel, cx, bottomY);
       else if (phase === 'done') {
         const tip = score >= 240 ? 'PERFECT SHIFT! TONY SLIPS YOU A BIG TIP!'
           : score >= 150 ? 'SOLID SHIFT -- NICE WORK.'
           : 'ROOKIE MISTAKES -- PRACTICE MAKES PERFECT.';
-        ctx.font = 'bold 13px monospace';
+        ctx.font = 'bold 16px monospace';
         ctx.fillText(tip, cx, bottomY);
-        ctx.font = 'bold 14px monospace';
+        ctx.font = 'bold 17px monospace';
         ctx.fillText(`FINAL SCORE: ${score} - PRESS E TO LEAVE`, cx, bottomY + 24);
-        ctx.font = '11px monospace';
+        ctx.font = '14px monospace';
         ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
         ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('buildpizza')}`, cx, bottomY + 42);
       }
 
       ctx.fillStyle = '#6a6070';
-      ctx.font = '10px monospace';
+      ctx.font = '13px monospace';
       ctx.fillText('X to walk away anytime', cx, phase === 'done' ? bottomY + 66 : bottomY + 24);
     },
   };
@@ -2036,10 +2036,10 @@ function createClawMachineGame() {
 
       ctx.textAlign = 'center';
       ctx.fillStyle = '#e0b040';
-      ctx.font = 'bold 22px monospace';
+      ctx.font = 'bold 26px monospace';
       ctx.fillText('CLAW MACHINE', VIEW_W / 2, 56);
       ctx.fillStyle = '#f4ecd8';
-      ctx.font = '12px monospace';
+      ctx.font = '15px monospace';
       ctx.fillText(`SCORE ${score}   CAUGHT ${caught}   TRIES LEFT ${Math.max(0, triesLeft)}`, VIEW_W / 2, 78);
 
       // glass case
@@ -2058,7 +2058,7 @@ function createClawMachineGame() {
       ctx.fillStyle = '#8a6438';
       ctx.fillRect(CHUTE_X - 12, RAIL_Y - 42, 24, 16);
       ctx.fillStyle = '#f4ecd8';
-      ctx.font = 'bold 9px monospace';
+      ctx.font = 'bold 12px monospace';
       ctx.fillText('WIN', CHUTE_X, RAIL_Y - 52);
 
       flowers.forEach((f) => drawFlower(f, FLOOR_Y));
@@ -2068,13 +2068,13 @@ function createClawMachineGame() {
       pops.forEach((p) => {
         ctx.globalAlpha = Math.max(0, p.life / 0.7);
         ctx.fillStyle = p.color;
-        ctx.font = 'bold 13px monospace';
+        ctx.font = 'bold 16px monospace';
         ctx.fillText(p.text, p.x, p.y - 10);
         ctx.globalAlpha = 1;
       });
 
       ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#8cff5f' : '#f4ecd8';
-      ctx.font = 'bold 14px monospace';
+      ctx.font = 'bold 17px monospace';
       if (phase === 'done') {
         ctx.fillText(`OUT OF TRIES! FINAL SCORE: ${score} - PRESS E TO LEAVE`, VIEW_W / 2, 420);
       } else if (phase === 'aim') {
@@ -2082,13 +2082,13 @@ function createClawMachineGame() {
       }
 
       if (phase === 'done') {
-        ctx.font = '11px monospace';
+        ctx.font = '14px monospace';
         ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
         ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('clawmachine')}`, VIEW_W / 2, 438);
       }
 
       ctx.fillStyle = '#6a6070';
-      ctx.font = '10px monospace';
+      ctx.font = '13px monospace';
       ctx.fillText('X to walk away anytime', VIEW_W / 2, phase === 'done' ? 456 : 444);
     },
   };
@@ -9889,7 +9889,7 @@ function drawPlayerIceCream(spriteTopY) {
 function drawHUD() {
   ctx.fillStyle = 'rgba(10,8,14,0.75)';
   ctx.fillRect(8, 8, 320, 44);
-  ctx.font = 'bold 11px monospace';
+  ctx.font = 'bold 14px monospace';
   ctx.textAlign = 'left';
   ctx.fillStyle = '#c8c0d8';
   ctx.fillText('SAMPLES', 18, 26);
@@ -9920,7 +9920,7 @@ function drawHUD() {
 }
 
 function pill(text, cx, cy) {
-  ctx.font = 'bold 13px monospace';
+  ctx.font = 'bold 16px monospace';
   const w = ctx.measureText(text).width + 24;
   ctx.fillStyle = 'rgba(10,8,14,0.8)';
   ctx.fillRect(cx - w / 2, cy - 14, w, 26);
@@ -9943,13 +9943,13 @@ function drawDialog() {
   ctx.lineWidth = 2;
   ctx.strokeRect(26, y + 2, VIEW_W - 52, h - 4);
   ctx.textAlign = 'left';
-  ctx.font = 'bold 16px monospace';
+  ctx.font = 'bold 19px monospace';
   ctx.fillStyle = '#e0b040';
   ctx.fillText(dialog.name, 44, y + 32);
   ctx.fillStyle = '#f4ecd8';
-  ctx.font = '19px monospace';
-  wrapText(dialog.lines[dialog.i], 44, y + 62, VIEW_W - 96, 26);
-  ctx.font = '13px monospace';
+  ctx.font = '21px monospace';
+  wrapText(dialog.lines[dialog.i], 44, y + 62, VIEW_W - 96, 28);
+  ctx.font = '16px monospace';
   ctx.fillStyle = '#9a90a8';
   ctx.textAlign = 'right';
   ctx.fillText('[E] ▶', VIEW_W - 44, y + h - 14);
@@ -9979,16 +9979,16 @@ function drawPortalPopup() {
 
   ctx.textAlign = 'center';
   ctx.fillStyle = '#f4ecd8';
-  ctx.font = '15px monospace';
+  ctx.font = '18px monospace';
   const lines = wrapLinesCentered(
     'More lands are being created. More vinyl awaits. Check back later homie!',
     boxW - 48
   );
   const startY = boxY + 30;
-  lines.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, startY + i * 20));
+  lines.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, startY + i * 22));
 
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
-  ctx.font = 'bold 14px monospace';
+  ctx.font = 'bold 17px monospace';
   ctx.fillText('Press [E] or tap screen to return', VIEW_W / 2, boxY + boxH - 16);
 }
 
@@ -10010,7 +10010,7 @@ function drawHotkeysPopup() {
 
   ctx.textAlign = 'center';
   ctx.fillStyle = '#e0b040';
-  ctx.font = 'bold 20px monospace';
+  ctx.font = 'bold 22px monospace';
   ctx.fillText('HOT KEYS', VIEW_W / 2, boxY + 34);
 
   const rows = [
@@ -10032,16 +10032,16 @@ function drawHotkeysPopup() {
   rows.forEach(([keyLabel, desc], i) => {
     const y = startY + i * lh;
     ctx.fillStyle = '#e0b040';
-    ctx.font = 'bold 13px monospace';
+    ctx.font = 'bold 16px monospace';
     ctx.fillText(`[${keyLabel}]`, listX, y);
     ctx.fillStyle = '#f4ecd8';
-    ctx.font = '13px monospace';
+    ctx.font = '16px monospace';
     ctx.fillText(desc, listX + keyColW, y);
   });
 
   ctx.textAlign = 'center';
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
-  ctx.font = 'bold 14px monospace';
+  ctx.font = 'bold 17px monospace';
   ctx.fillText('- PRESS [H] OR [E] TO CLOSE -', VIEW_W / 2, boxY + boxH - 16);
 }
 
@@ -10072,11 +10072,11 @@ function drawFifaPopup() {
 
   ctx.textAlign = 'center';
   ctx.fillStyle = '#f4ecd8';
-  ctx.font = '16px monospace';
+  ctx.font = '19px monospace';
   ctx.fillText('Time for a quick friendly!', VIEW_W / 2, boxY + 36);
 
   ctx.fillStyle = '#e0b040';
-  ctx.font = 'bold 26px monospace';
+  ctx.font = 'bold 29px monospace';
   ctx.fillText(`Back in ${secondsLeft}...`, VIEW_W / 2, boxY + 74);
 }
 
@@ -10402,30 +10402,30 @@ function drawRecordCardFallback() {
   ctx.fill();
 
   ctx.textAlign = 'center';
-  ctx.font = 'bold 18px monospace';
+  ctx.font = 'bold 20px monospace';
   ctx.fillStyle = '#f4ecd8';
   ctx.fillText('★ RECORD FOUND ★', x + w / 2, y + 36);
   ctx.textAlign = 'left';
   const tx = sx + ss + 130;
-  ctx.font = 'bold 16px monospace';
+  ctx.font = 'bold 19px monospace';
   ctx.fillStyle = r.color === '#e8e4dc' ? '#f4ecd8' : r.color;
   wrapText('"' + r.title + '"', tx, sy + 14, w - (tx - x) - 24, 20);
-  ctx.font = '13px monospace';
+  ctx.font = '16px monospace';
   ctx.fillStyle = '#c8c0d8';
   ctx.fillText(r.artist + ' · ' + r.year, tx, sy + 58);
   ctx.fillStyle = '#f4ecd8';
-  ctx.font = 'bold 13px monospace';
+  ctx.font = 'bold 16px monospace';
   ctx.fillText('SAMPLE: ' + r.sample, tx, sy + 86);
-  ctx.font = '12px monospace';
+  ctx.font = '15px monospace';
   ctx.fillStyle = '#9a90a8';
   wrapText('New layer added to the beat. Listen!', tx, sy + 110, w - (tx - x) - 24, 16);
 
-  ctx.font = '12px monospace';
+  ctx.font = '15px monospace';
   ctx.fillStyle = '#c8c0d8';
   wrapText(r.flavor, x + 36, y + h - 52, w - 72, 16);
   ctx.textAlign = 'right';
   ctx.fillStyle = '#9a90a8';
-  ctx.font = '11px monospace';
+  ctx.font = '14px monospace';
   ctx.fillText('[E] ▶', x + w - 20, y + h - 12);
 }
 
@@ -10453,7 +10453,7 @@ function drawCrate() {
 
   ctx.textAlign = 'center';
   ctx.fillStyle = '#e0b040';
-  ctx.font = 'bold 24px monospace';
+  ctx.font = 'bold 27px monospace';
   ctx.fillText('THE CRATE', VIEW_W / 2, boxY + 38);
 
   const ids = crateWorldIds();
@@ -10465,11 +10465,11 @@ function drawCrate() {
 
   // world tab row -- left/right (arrows, d-pad, or dedicated buttons in
   // future control schemes) cycles through every world in WORLD_DEFS
-  ctx.font = 'bold 18px monospace';
+  ctx.font = 'bold 20px monospace';
   ctx.fillStyle = '#f4ecd8';
   const tabY = boxY + 70;
   ctx.fillText(`\u25C0  ${def.name.toUpperCase()}  \u25B6`, VIEW_W / 2, tabY);
-  ctx.font = '12px monospace';
+  ctx.font = '15px monospace';
   ctx.fillStyle = '#9a90a8';
   ctx.fillText(
     `${foundInWorld} / ${padOrder.length} found here  \u00b7  world ${crateWorldIndex + 1} of ${ids.length}`,
@@ -10495,7 +10495,7 @@ function drawCrate() {
     }
     ctx.textAlign = 'center';
     ctx.fillStyle = found ? '#181418' : '#4a4258';
-    ctx.font = 'bold 13px monospace';
+    ctx.font = 'bold 16px monospace';
     ctx.fillText(found ? r.pad : '?', x + sq / 2, gridY + sq / 2 + 5);
   });
 
@@ -10515,25 +10515,25 @@ function drawCrate() {
 
     const tx = panelX + artS + 24;
     ctx.textAlign = 'left';
-    ctx.font = 'bold 16px monospace';
+    ctx.font = 'bold 19px monospace';
     ctx.fillStyle = selRecord.color === '#e8e4dc' ? '#f4ecd8' : selRecord.color;
     wrapText('"' + selRecord.title + '"', tx, panelY + 16, panelW - artS - 24, 20);
-    ctx.font = '13px monospace';
+    ctx.font = '16px monospace';
     ctx.fillStyle = '#c8c0d8';
     ctx.fillText(selRecord.artist + ' \u00b7 ' + selRecord.year, tx, panelY + 60);
     ctx.fillStyle = '#f4ecd8';
-    ctx.font = 'bold 12px monospace';
+    ctx.font = 'bold 15px monospace';
     ctx.fillText('SAMPLE: ' + selRecord.sample, tx, panelY + 82);
 
-    ctx.font = '12px monospace';
+    ctx.font = '15px monospace';
     ctx.fillStyle = '#c8c0d8';
     wrapText(selRecord.flavor, panelX, panelY + artS + 22, panelW, 16);
   } else {
     ctx.textAlign = 'left';
-    ctx.font = 'bold 16px monospace';
+    ctx.font = 'bold 19px monospace';
     ctx.fillStyle = '#6a6278';
     ctx.fillText('??? \u2014 not yet found', panelX, panelY + 40);
-    ctx.font = '12px monospace';
+    ctx.font = '15px monospace';
     ctx.fillStyle = '#4a4258';
     ctx.fillText('Dig around ' + def.name + ' to turn this one up.', panelX, panelY + 62);
   }
@@ -10546,12 +10546,12 @@ function drawCrate() {
     totalFound += p.filter((id) => collected.has(recKey(wid, id))).length;
   });
   ctx.textAlign = 'center';
-  ctx.font = '12px monospace';
+  ctx.font = '15px monospace';
   ctx.fillStyle = '#9a90a8';
   ctx.fillText(`${totalFound} / ${totalSlots} records found across all worlds`, VIEW_W / 2, boxY + boxH - 46);
 
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
-  ctx.font = 'bold 14px monospace';
+  ctx.font = 'bold 17px monospace';
   ctx.fillText('[\u25C0\u25B6] world   [\u25B2\u25BC] browse   [E] close', VIEW_W / 2, boxY + boxH - 18);
 }
 
@@ -10574,11 +10574,11 @@ function drawTrophyCase() {
 
   ctx.textAlign = 'center';
   ctx.fillStyle = '#e0b040';
-  ctx.font = 'bold 24px monospace';
+  ctx.font = 'bold 27px monospace';
   ctx.fillText('TROPHY CASE', VIEW_W / 2, boxY + 38);
 
   const playedCount = MINIGAME_TROPHIES.filter((t) => bestFor(t.id) !== undefined).length;
-  ctx.font = '12px monospace';
+  ctx.font = '15px monospace';
   ctx.fillStyle = '#9a90a8';
   ctx.fillText(`${playedCount} / ${MINIGAME_TROPHIES.length} personal bests set`, VIEW_W / 2, boxY + 60);
 
@@ -10599,12 +10599,12 @@ function drawTrophyCase() {
     }
 
     ctx.textAlign = 'left';
-    ctx.font = 'bold 14px monospace';
+    ctx.font = 'bold 17px monospace';
     ctx.fillStyle = active ? '#e0b040' : (best !== undefined ? '#f4ecd8' : '#5a5462');
     ctx.fillText((active ? '\u25B8 ' : '') + t.label, listX, y);
 
     ctx.textAlign = 'right';
-    ctx.font = '13px monospace';
+    ctx.font = '16px monospace';
     ctx.fillStyle = best !== undefined ? '#8cff5f' : '#4a4258';
     ctx.fillText(formatTrophyValue(t.id, best), listX + listW - 14, y);
   });
@@ -10616,30 +10616,30 @@ function drawTrophyCase() {
   const panelY = listY + 6;
 
   ctx.textAlign = 'left';
-  ctx.font = 'bold 18px monospace';
+  ctx.font = 'bold 20px monospace';
   ctx.fillStyle = '#e0b040';
   ctx.fillText(sel.label, panelX, panelY);
 
-  ctx.font = '12px monospace';
+  ctx.font = '15px monospace';
   ctx.fillStyle = '#c8c0d8';
   wrapText(sel.flavor, panelX, panelY + 26, panelW, 16);
 
-  ctx.font = 'bold 13px monospace';
+  ctx.font = 'bold 16px monospace';
   ctx.fillStyle = '#9a90a8';
   ctx.fillText('PERSONAL BEST', panelX, panelY + 78);
-  ctx.font = 'bold 32px monospace';
+  ctx.font = 'bold 34px monospace';
   ctx.fillStyle = selBest !== undefined ? '#8cff5f' : '#4a4258';
   ctx.fillText(selBest !== undefined ? formatTrophyValue(sel.id, selBest) : 'NOT SET', panelX, panelY + 114);
 
   if (selBest === undefined) {
-    ctx.font = '12px monospace';
+    ctx.font = '15px monospace';
     ctx.fillStyle = '#6a6278';
     ctx.fillText('Play this one to set your first best.', panelX, panelY + 140);
   }
 
   ctx.textAlign = 'center';
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
-  ctx.font = 'bold 14px monospace';
+  ctx.font = 'bold 17px monospace';
   ctx.fillText('[\u25B2\u25BC] browse   [E] close', VIEW_W / 2, boxY + boxH - 18);
 }
 
@@ -10769,13 +10769,13 @@ function drawTitleHotkeysPage(time) {
 
   ctx.textAlign = 'center';
   ctx.fillStyle = '#e0b040';
-  ctx.font = 'bold 24px monospace';
+  ctx.font = 'bold 27px monospace';
   ctx.fillText('HOT KEYS', VIEW_W / 2, boxY + 42);
 
   // same muted color the old title-screen controls list used, so it never
   // reads as a continuation of the story copy on page 0
   ctx.fillStyle = '#9a90a8';
-  ctx.font = '13px monospace';
+  ctx.font = '16px monospace';
   const controls = [
     'ARROWS / WASD, OR THE ON-SCREEN D-PAD .... move',
     'E, OR THE ON-SCREEN E BUTTON ... talk / dig crates / read',
@@ -10785,14 +10785,14 @@ function drawTitleHotkeysPage(time) {
     'M, OR ON-SCREEN "MUTE" ....................... mute',
     'X, OR ON-SCREEN "X" ................... buy from carts',
   ];
-  controls.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, boxY + 80 + i * 24));
+  controls.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, boxY + 80 + i * 28));
 
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
-  ctx.font = 'bold 16px monospace';
+  ctx.font = 'bold 19px monospace';
   ctx.fillText('- PRESS E TO CONTINUE -', VIEW_W / 2, boxY + boxH - 44);
 
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#8a6420' : '#5a5245';
-  ctx.font = 'bold 13px monospace';
+  ctx.font = 'bold 16px monospace';
   ctx.fillText('[\u25C0] OR [H] BACK TO TITLE', VIEW_W / 2, boxY + boxH - 18);
 }
 
@@ -10853,12 +10853,12 @@ function drawMenuBox(title, hint) {
 
   ctx.textAlign = 'center';
   ctx.fillStyle = '#e0b040';
-  ctx.font = 'bold 18px monospace';
+  ctx.font = 'bold 20px monospace';
   ctx.fillText(title, VIEW_W / 2, boxY + 34);
 
   if (hint) {
     ctx.fillStyle = '#9a90a8';
-    ctx.font = '12px monospace';
+    ctx.font = '15px monospace';
     ctx.fillText(hint, VIEW_W / 2, boxY + boxH - 16);
   }
 
@@ -10870,11 +10870,11 @@ function drawMenuBox(title, hint) {
 // and dimmer just under the main label (used for slot summaries).
 function drawMenuRow(label, cy, active, subtext) {
   ctx.textAlign = 'center';
-  ctx.font = 'bold 20px monospace';
+  ctx.font = 'bold 22px monospace';
   ctx.fillStyle = active ? '#e0b040' : '#f4ecd8';
   ctx.fillText((active ? '\u25B8 ' : '') + label + (active ? ' \u25C2' : ''), VIEW_W / 2, cy);
   if (subtext) {
-    ctx.font = '13px monospace';
+    ctx.font = '16px monospace';
     ctx.fillStyle = active ? 'rgba(224,176,64,0.85)' : 'rgba(244,236,216,0.6)';
     ctx.fillText(subtext, VIEW_W / 2, cy + 20);
   }
