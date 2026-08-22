@@ -2298,6 +2298,13 @@ window.addEventListener('keydown', (e) => {
       // On the title screen itself, [H] just flips to/from the Hot Keys
       // page instead -- same key, same idea, no separate state needed.
       else if (state === 'title') { titlePage = titlePage === 0 ? 1 : 0; }
+      // On the history slideshow, [H] pages forward the same as [E] (and
+      // wraps back to digChoice from the last slide), so it's a consistent
+      // "advance" key across every title-flow screen.
+      else if (state === 'history') {
+        if (historyPage < HISTORY_PAGES.length - 1) historyPage += 1;
+        else { state = 'digChoice'; digChoiceIndex = 2; }
+      }
     }
     if (k === 'escape' && state === 'hotkeys') { state = hotkeysReturnState; }
     if (k === 'v') {
@@ -2398,8 +2405,8 @@ let selectIndex = 2; // highlighted portrait for keyboard/E users; defaults to c
 let selectMove = 0;  // edge-triggered -1/0/1 from arrow keys, consumed in update()
 
 // ---- title menu: START DIGGING / CONTINUE DIGGING -> slot chooser --------
-// digChoice: 0 = START DIGGING, 1 = CONTINUE DIGGING.
-const DIG_CHOICES = ['START DIGGING', 'CONTINUE DIGGING'];
+// digChoice: 0 = START DIGGING, 1 = CONTINUE DIGGING, 2 = WHAT IS DIGGING?
+const DIG_CHOICES = ['START DIGGING', 'CONTINUE DIGGING', 'WHAT IS DIGGING?'];
 let digChoiceIndex = 0;
 // pendingMode carries the player's dig-choice pick through the slot
 // chooser and into the character-select screen, where it decides whether
@@ -2412,6 +2419,9 @@ let slotChoiceIndex = 0;
 // second E on the SAME slot confirms it. Moving the selection or backing
 // out clears the arm.
 let armedOverwriteSlot = null;
+// Page index (0-3) for the "WHAT IS DIGGING?" history slideshow -- see
+// openHistory() and the 'history' state in update()/render().
+let historyPage = 0;
 
 // Opens the START/CONTINUE popup fresh -- used by the title screen's [E]
 // prompt and by the 'N' key / NEW button as a way back into it mid-game.
@@ -2421,6 +2431,18 @@ function openDigChoice() {
   armedOverwriteSlot = null;
   music.setMenuBreak(true);
 }
+
+// Opens the "WHAT IS DIGGING?" history slideshow from the digChoice screen.
+// The player pages forward through the 4 slides with [E] (or the on-screen
+// E button); [X] backs out early. Landing on the last slide and pressing
+// [E] again returns to digChoice, same as backing out -- see the 'history'
+// block in update().
+function openHistory() {
+  state = 'history';
+  historyPage = 0;
+  music.setMenuBreak(true);
+}
+
 
 function openSlotChoose(mode) {
   state = 'slotChoose';
@@ -2498,6 +2520,19 @@ const titleMenuPg1Img = new Image();
 titleMenuPg1Img.src = 'assets/menu_title_pg_1.png';
 const titleMenuPg2Img = new Image();
 titleMenuPg2Img.src = 'assets/menu_title_pg_2.png';
+// The "WHAT IS DIGGING?" history slideshow, opened from the digChoice
+// screen (see openHistory()). Four full-art slides sharing the exact same
+// chroma-green backdrop/frame style as the title-menu pages above, so they
+// get keyed and drawn the same way -- see buildKeyedHistoryPage/drawHistory().
+const historyImg1 = new Image();
+historyImg1.src = 'assets/menu_title_history_1.png';
+const historyImg2 = new Image();
+historyImg2.src = 'assets/menu_title_history_2.png';
+const historyImg3 = new Image();
+historyImg3.src = 'assets/menu_title_history_3.png';
+const historyImg4 = new Image();
+historyImg4.src = 'assets/menu_title_history_4.png';
+const HISTORY_PAGES = [historyImg1, historyImg2, historyImg3, historyImg4];
 // Full-art backgrounds for the two title-menu popups (dig-choice and
 // slot-chooser). The row text/highlight/slot data is still drawn live on
 // top each frame -- see drawDigChoice/drawSlotChoose -- so these images
@@ -3339,7 +3374,7 @@ const player = {
   tempItem: null, tempItemTimer: 0,
 };
 const collected = new Set();
-let state = 'splash'; // splash | title | digChoice | slotChoose | select | play | dialog | record | win | portal | fifa | minigame | hotkeys | crate | trophies
+let state = 'splash'; // splash | title | digChoice | history | slotChoose | select | play | dialog | record | win | portal | fifa | minigame | hotkeys | crate | trophies
 // State to snap back to when the [H] hotkeys popup is closed -- currently
 // always 'play' since that's the only state H can be opened from, but kept
 // as its own var in case another state wants to offer the popup later.
@@ -4342,7 +4377,7 @@ function createTouchControls() {
       // directly, the same way the keydown listener does for a physical
       // keyboard — held/synthetic key state alone never reaches update()'s
       // selectMove check.
-      if (state === 'select' || state === 'title') {
+      if (state === 'select' || state === 'title' || state === 'history') {
         if (k === 'arrowleft') selectMove = -1;
         if (k === 'arrowright') selectMove = 1;
       }
@@ -4498,22 +4533,42 @@ function update(dt) {
   if (state === 'splash') {
     if (interactPressed) { state = 'title'; titlePage = 0; music.setMenuBreak(true); }
   } else if (state === 'title') {
-    // Left/right (physical arrows, on-screen d-pad, or [H]) flips between
-    // the two title pages; [E] always starts the dig-choice flow no matter
-    // which page is showing.
+    // Left/right (physical arrows, on-screen d-pad, or [H]) still flips
+    // between the two title pages directly; [E] instead steps through them
+    // in order -- page 1 (story/start) advances to page 2 (hot keys), and
+    // page 2 is what starts the dig-choice flow.
     if (selectMove) {
       titlePage = Math.max(0, Math.min(1, titlePage + selectMove));
       selectMove = 0;
     }
-    if (interactPressed) openDigChoice();
+    if (interactPressed) {
+      if (titlePage === 0) titlePage = 1; // page 1 (story) -> page 2 (hot keys) first
+      else openDigChoice(); // page 2 (hot keys) -> START DIGGING / CONTINUE DIGGING
+    }
     else if (buyPressed && titlePage === 1) titlePage = 0; // X = back to the main page
   } else if (state === 'digChoice') {
     if (menuMove) {
       digChoiceIndex = Math.max(0, Math.min(DIG_CHOICES.length - 1, digChoiceIndex + menuMove));
       menuMove = 0;
     }
-    if (interactPressed) openSlotChoose(digChoiceIndex === 0 ? 'new' : 'continue');
+    if (interactPressed) {
+      if (digChoiceIndex === 2) openHistory();
+      else openSlotChoose(digChoiceIndex === 0 ? 'new' : 'continue');
+    }
     else if (buyPressed) { state = 'title'; titlePage = 0; music.setMenuBreak(true); } // X = back
+  } else if (state === 'history') {
+    // [\u2190]/[\u2192] (or the on-screen d-pad) let the player flip back and
+    // forth freely to re-read a slide; [E] pages forward and, from the
+    // last slide, returns to digChoice; [X] backs out to digChoice early.
+    if (selectMove) {
+      historyPage = Math.max(0, Math.min(HISTORY_PAGES.length - 1, historyPage + selectMove));
+      selectMove = 0;
+    }
+    if (interactPressed) {
+      if (historyPage < HISTORY_PAGES.length - 1) historyPage += 1;
+      else { state = 'digChoice'; digChoiceIndex = 2; }
+    }
+    else if (buyPressed) { state = 'digChoice'; digChoiceIndex = 2; } // X = back out early
   } else if (state === 'slotChoose') {
     if (menuMove) {
       const newIndex = Math.max(0, Math.min(SAVE_SLOTS.length - 1, slotChoiceIndex + menuMove));
@@ -4824,6 +4879,7 @@ function render(time) {
   if (state === 'splash') drawSplash();
   if (state === 'title') drawTitle(time);
   if (state === 'digChoice') drawDigChoice(time);
+  if (state === 'history') drawHistory(time);
   if (state === 'slotChoose') drawSlotChoose(time);
   if (state === 'select') drawCharacterSelect(time);
   if (state === 'dialog') drawDialog();
@@ -10908,14 +10964,13 @@ function drawSplash() {
 const titleMenuKeyed = [null, null];
 const TITLE_MENU_IMGS = [titleMenuPg1Img, titleMenuPg2Img];
 
-// Build the chroma-keyed version of the given page's art once its image
-// loads: any pixel that is the backdrop's chroma-green (green dominant &
-// strong) is made transparent so the drifting sky/clouds show through
-// behind the UI art.
-function buildKeyedTitleMenu(page) {
-  if (titleMenuKeyed[page]) return;
-  const img = TITLE_MENU_IMGS[page];
-  if (!img.complete || !img.naturalWidth) return;
+// Removes the backdrop's chroma-green from `img` onto a same-size offscreen
+// canvas: any pixel that is green-dominant & strong is made transparent, so
+// the drifting sky/clouds behind it show through. Shared by the title-menu
+// pages (buildKeyedTitleMenu) and the "WHAT IS DIGGING?" history slides
+// (buildKeyedHistoryPage), since both sets of art share the same
+// chroma-green backdrop/frame style.
+function chromaKeyToCanvas(img) {
   const w = img.naturalWidth, h = img.naturalHeight;
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
@@ -10928,7 +10983,27 @@ function buildKeyedTitleMenu(page) {
     if (grn > 140 && (grn - b) > 90 && (grn - r) > 55) d[i + 3] = 0;
   }
   g.putImageData(id, 0, 0);
-  titleMenuKeyed[page] = c;
+  return c;
+}
+
+// Build the chroma-keyed version of the given title-menu page's art once
+// its image loads.
+function buildKeyedTitleMenu(page) {
+  if (titleMenuKeyed[page]) return;
+  const img = TITLE_MENU_IMGS[page];
+  if (!img.complete || !img.naturalWidth) return;
+  titleMenuKeyed[page] = chromaKeyToCanvas(img);
+}
+
+// Same idea as titleMenuKeyed/buildKeyedTitleMenu, but for the 4-slide
+// "WHAT IS DIGGING?" history slideshow (see openHistory(), the 'history'
+// state in update(), and drawHistory() below).
+const historyPageKeyed = [null, null, null, null];
+function buildKeyedHistoryPage(page) {
+  if (historyPageKeyed[page]) return;
+  const img = HISTORY_PAGES[page];
+  if (!img.complete || !img.naturalWidth) return;
+  historyPageKeyed[page] = chromaKeyToCanvas(img);
 }
 
 // Slowly drifting cloud background shared by the title screen and the
@@ -10968,7 +11043,6 @@ function drawTitle(time) {
     const dw = mw * s, dh = mh * s;
     ctx.drawImage(keyed, (VIEW_W - dw) / 2, (VIEW_H - dh) / 2, dw, dh);
     if (titlePage === 0) {
-      drawTitleNavHint((VIEW_H + dh) / 2);
       drawTitleSaveHint();
     } else {
       drawTitleBackHint((VIEW_H + dh) / 2);
@@ -10997,14 +11071,12 @@ function drawTitle(time) {
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
   ctx.font = 'bold 18px monospace';
   ctx.fillText('- PRESS E TO CONTINUE -', VIEW_W / 2, 340);
-  drawTitleNavHint(346);
   drawTitleSaveHint();
 }
 
 // Small reminder shown on the title screen's Hot Keys page (1), pointing
-// players back to the main page. Mirrors the flashing cadence of
-// drawTitleNavHint, kept unboxed to match how this line looked on the old
-// text-only Hot Keys page.
+// players back to the main page. Kept unboxed to match how this line
+// looked on the old text-only Hot Keys page.
 function drawTitleBackHint(boxBottomY) {
   ctx.textAlign = 'center';
   const flashOn = Math.floor(performance.now() / 400) % 2;
@@ -11063,36 +11135,6 @@ function drawTitleHotkeysFallback(time) {
   ctx.fillText('[\u25C0] OR [H] BACK TO TITLE', VIEW_W / 2, boxY + boxH - 18);
 }
 
-// Flashing reminder shown on the title screen's main page (0), pointing
-// players at the new Hot Keys page. Flashes on the same on/off cadence as
-// the other title-screen prompts so it reads as part of the family.
-// boxBottomY is the y-coordinate of whatever it should sit just below;
-// clamped so it never runs off the bottom of the screen.
-function drawTitleNavHint(boxBottomY) {
-  ctx.textAlign = 'center';
-  const flashOn = Math.floor(performance.now() / 400) % 2;
-  const color = flashOn ? '#e0b040' : '#f4ecd8';
-  ctx.font = 'bold 18px monospace';
-  const y = Math.min(boxBottomY + 30, VIEW_H - 34);
-  const label = '[\u25B6] OR [H] TO VIEW HOT KEYS';
-
-  // Flashing border box around the text so it reads as a callout rather
-  // than blending into the other dim title-screen prompts.
-  const textW = ctx.measureText(label).width;
-  const padX = 16, padY = 10;
-  const boxW = textW + padX * 2;
-  const boxH = 28;
-  const boxX = VIEW_W / 2 - boxW / 2;
-  const boxY = y - boxH + padY - 4;
-
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(boxX, boxY, boxW, boxH);
-
-  ctx.fillStyle = color;
-  ctx.fillText(label, VIEW_W / 2, y);
-}
-
 // Small persistent reminder, shown under the main prompt on the title
 // screen only, that at least one save exists.
 function drawTitleSaveHint() {
@@ -11101,6 +11143,37 @@ function drawTitleSaveHint() {
   ctx.fillStyle = 'rgba(244,236,216,0.75)';
   ctx.font = '12px monospace';
   ctx.fillText('[E] to dig for gold, choose a slot', VIEW_W / 2, VIEW_H - 10);
+}
+
+// ---------------------------------------------------------------- "WHAT IS DIGGING?" history slideshow
+// Opened from the digChoice screen (see openHistory()). Four full-art
+// slides sharing the drifting-cloud sky and chroma-key treatment used by
+// the title-menu pages (drawDriftingSky/chromaKeyToCanvas), so the sky
+// reads as the same continuous backdrop as everywhere else in the title
+// flow. [\u2190]/[\u2192] (or the d-pad) page back and forth freely; [E] pages
+// forward and wraps back to digChoice from the last slide; [X] backs out
+// early -- see the 'history' block in update().
+function drawHistory(time) {
+  drawDriftingSky(time);
+  buildKeyedHistoryPage(historyPage);
+  const keyed = historyPageKeyed[historyPage];
+
+  if (keyed) {
+    const mw = keyed.width, mh = keyed.height;
+    const s = Math.min(VIEW_W / mw, VIEW_H / mh);
+    const dw = mw * s, dh = mh * s;
+    ctx.drawImage(keyed, (VIEW_W - dw) / 2, (VIEW_H - dh) / 2, dw, dh);
+  }
+
+  // Small unboxed progress/nav hint, unflashing (matches the title screen's
+  // current style now that its flashing callout is gone).
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(244,236,216,0.75)';
+  ctx.font = 'bold 13px monospace';
+  const navLabel = historyPage < HISTORY_PAGES.length - 1
+    ? `${historyPage + 1} / ${HISTORY_PAGES.length}   [\u25C0\u25B6] REREAD   [E] OR [H] NEXT   [X] BACK`
+    : `${historyPage + 1} / ${HISTORY_PAGES.length}   [\u25C0\u25B6] REREAD   [E], [H], OR [X] BACK TO MENU`;
+  ctx.fillText(navLabel, VIEW_W / 2, VIEW_H - 10);
 }
 
 // ---------------------------------------------------------------- dig-choice / slot-choose popups
@@ -11149,7 +11222,7 @@ function drawMenuRow(label, cy, active, subtext) {
 
 function drawDigChoiceFallback() {
   const { boxY } = drawMenuBox("WHAT'S THE MOVE?", '[\u2191\u2193] choose   [E] select   [X] back');
-  const rowY = [boxY + 110, boxY + 170];
+  const rowY = [boxY + 90, boxY + 140, boxY + 190];
   DIG_CHOICES.forEach((label, i) => drawMenuRow(label, rowY[i], i === digChoiceIndex));
 }
 
@@ -11221,14 +11294,14 @@ function drawDigChoice(time) {
   if (!menuPopupSplashImg.complete || !menuPopupSplashImg.naturalWidth) { drawDigChoiceFallback(); return; }
   const { boxX, boxW, boxY, boxH } = drawMenuPopupBackground(time, "WHAT'S THE MOVE?");
   const cx = boxX + boxW / 2;
-  const rowY = [boxY + boxH * 0.32, boxY + boxH * 0.58];
+  const rowY = [boxY + boxH * 0.22, boxY + boxH * 0.5, boxY + boxH * 0.78];
   DIG_CHOICES.forEach((label, i) => {
     const active = i === digChoiceIndex;
     if (active) {
       // padded highlight box: extra breathing room above/below the text
       // baseline, and inset a bit from the panel's own edges, so the gold
       // border doesn't hug the letters or the frame.
-      const rh = boxH * 0.24;
+      const rh = boxH * 0.2;
       const boxCY = rowY[i] - 4; // nudge up: fillText's y is the baseline, not the glyph's visual center
       const inset = boxW * 0.05;
       const hx = boxX + inset, hw = boxW - inset * 2;
