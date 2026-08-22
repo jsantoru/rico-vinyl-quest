@@ -3219,6 +3219,12 @@ const shops = {
               'Green Door Studio might have some old session reels too.'],
       foundLine: 'Big tune! That\'s the kind of find that makes Reggae Night legendary.' },
     crates: [ { nectarsSeed: 0 }, { nectarsSeed: 1 }, { nectarsSeed: 2 } ],
+    // Pulled off the default left/right-wall spots (cols 1/12, rows 4/6),
+    // which sat right behind the bar counter drawn in drawNectarsInterior
+    // (cols 1-2, rows 4-6) and were half-hidden behind it. Lined up instead
+    // along the bottom wall, clear of the door at (6,9) so the entrance
+    // stays walkable, and clear of Truth/Humble at row 6 above.
+    crateSpots: [[3,8],[7,8],[10,8]],
     darkClub: true,
     // Truth & Humble, grabbing a quick slice before the freestyle cypher
     // later tonight at Green Door Studio.
