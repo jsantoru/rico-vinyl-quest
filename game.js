@@ -2306,8 +2306,15 @@ anthillBillboardImg.src = 'assets/anthill_billboard.png';
 const nectarsNeonImg = new Image();
 nectarsNeonImg.src = 'assets/nectars_neon.png';
 
-const titleMenuImg = new Image();
-titleMenuImg.src = 'assets/menu_title.png';
+// The title screen's two full-art pages: page 0 is the original
+// story/start screen, page 1 is the Hot Keys reference. Each is its own
+// baked PNG (logo, copy, and "press [E]" prompt all included) sharing the
+// same chroma-green backdrop, which gets keyed out in buildKeyedTitleMenu()
+// so the drifting sky/clouds show through behind both -- see drawTitle().
+const titleMenuPg1Img = new Image();
+titleMenuPg1Img.src = 'assets/menu_title_pg_1.png';
+const titleMenuPg2Img = new Image();
+titleMenuPg2Img.src = 'assets/menu_title_pg_2.png';
 // Full-art backgrounds for the two title-menu popups (dig-choice and
 // slot-chooser). The row text/highlight/slot data is still drawn live on
 // top each frame -- see drawDigChoice/drawSlotChoose -- so these images
@@ -10662,18 +10669,24 @@ function drawSplash() {
   ctx.fillText('- PRESS E OR TAP TO BEGIN -', VIEW_W / 2, VIEW_H - 26);
 }
 
-let titleMenuKeyed = null; // offscreen canvas with the chroma-green removed
+// Offscreen canvases with the chroma-green removed, one per title-screen
+// page (index 0 = story/start, index 1 = hot keys). Built lazily below.
+const titleMenuKeyed = [null, null];
+const TITLE_MENU_IMGS = [titleMenuPg1Img, titleMenuPg2Img];
 
-// Build the chroma-keyed menu once the image loads: any pixel that is the
-// backdrop's chroma-green (green dominant & strong) is made transparent so the
-// drifting sky/clouds show through behind the UI art.
-function buildKeyedTitleMenu() {
-  if (titleMenuKeyed || !titleMenuImg.complete || !titleMenuImg.naturalWidth) return;
-  const w = titleMenuImg.naturalWidth, h = titleMenuImg.naturalHeight;
+// Build the chroma-keyed version of the given page's art once its image
+// loads: any pixel that is the backdrop's chroma-green (green dominant &
+// strong) is made transparent so the drifting sky/clouds show through
+// behind the UI art.
+function buildKeyedTitleMenu(page) {
+  if (titleMenuKeyed[page]) return;
+  const img = TITLE_MENU_IMGS[page];
+  if (!img.complete || !img.naturalWidth) return;
+  const w = img.naturalWidth, h = img.naturalHeight;
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const g = c.getContext('2d');
-  g.drawImage(titleMenuImg, 0, 0);
+  g.drawImage(img, 0, 0);
   const id = g.getImageData(0, 0, w, h);
   const d = id.data;
   for (let i = 0; i < d.length; i += 4) {
@@ -10681,7 +10694,7 @@ function buildKeyedTitleMenu() {
     if (grn > 140 && (grn - b) > 90 && (grn - r) > 55) d[i + 3] = 0;
   }
   g.putImageData(id, 0, 0);
-  titleMenuKeyed = c;
+  titleMenuKeyed[page] = c;
 }
 
 // Slowly drifting cloud background shared by the title screen and the
@@ -10704,28 +10717,34 @@ function drawDriftingSky(time) {
 }
 
 // The title screen is two pages sharing one backdrop (the drifting-cloud
-// sky, plus the same framed menu art once it's loaded): page 0 is the
-// original story/start screen, page 1 is the Hot Keys reference. Both are
-// reachable any time via left/right, the on-screen d-pad, or [H] -- see the
-// 'title' block in update() and the keydown handler.
+// sky, plus each page's own framed menu art once it's loaded): page 0 is
+// the original story/start screen (menu_title_pg_1.png), page 1 is the Hot
+// Keys reference (menu_title_pg_2.png). Both are reachable any time via
+// left/right, the on-screen d-pad, or [H] -- see the 'title' block in
+// update() and the keydown handler.
 function drawTitle(time) {
-  if (titlePage === 1) { drawTitleHotkeysPage(time); return; }
-
-  buildKeyedTitleMenu();
+  buildKeyedTitleMenu(titlePage);
+  const keyed = titleMenuKeyed[titlePage];
 
   // Menu ready: chroma-keyed menu centered over a slowly drifting sky.
-  if (titleMenuKeyed) {
+  if (keyed) {
     drawDriftingSky(time);
-    const mw = titleMenuKeyed.width, mh = titleMenuKeyed.height;
+    const mw = keyed.width, mh = keyed.height;
     const s = Math.min(VIEW_W / mw, VIEW_H / mh);
     const dw = mw * s, dh = mh * s;
-    ctx.drawImage(titleMenuKeyed, (VIEW_W - dw) / 2, (VIEW_H - dh) / 2, dw, dh);
-    drawTitleNavHint((VIEW_H + dh) / 2);
-    drawTitleSaveHint();
+    ctx.drawImage(keyed, (VIEW_W - dw) / 2, (VIEW_H - dh) / 2, dw, dh);
+    if (titlePage === 0) {
+      drawTitleNavHint((VIEW_H + dh) / 2);
+      drawTitleSaveHint();
+    } else {
+      drawTitleBackHint((VIEW_H + dh) / 2);
+    }
     return;
   }
 
-  // fallback text-only title (used until the menu image loads)
+  // fallback text-only title (used until the current page's art loads)
+  if (titlePage === 1) { drawTitleHotkeysFallback(time); return; }
+
   ctx.fillStyle = 'rgba(8,6,12,0.93)';
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   ctx.textAlign = 'center';
@@ -10748,14 +10767,28 @@ function drawTitle(time) {
   drawTitleSaveHint();
 }
 
-// The Hot Keys page shares the exact same drifting-cloud backdrop as page
-// 0 (drawDriftingSky) -- just framed by the same bordered menu-box look the
-// rest of the game's popups use (drawHotkeysPopup, drawMenuBox) instead of
-// the story art, so the full key list has room to breathe. The list itself
-// keeps its original muted color from the old title screen on purpose, so
-// it still reads as its own thing and never looks like a continuation of
-// the story/copy on page 0.
-function drawTitleHotkeysPage(time) {
+// Small reminder shown on the title screen's Hot Keys page (1), pointing
+// players back to the main page. Mirrors the flashing cadence of
+// drawTitleNavHint, kept unboxed to match how this line looked on the old
+// text-only Hot Keys page.
+function drawTitleBackHint(boxBottomY) {
+  ctx.textAlign = 'center';
+  const flashOn = Math.floor(performance.now() / 400) % 2;
+  ctx.fillStyle = flashOn ? '#8a6420' : '#5a5245';
+  ctx.font = 'bold 16px monospace';
+  const y = Math.min(boxBottomY + 30, VIEW_H - 18);
+  ctx.fillText('[\u25C0] OR [H] BACK TO TITLE', VIEW_W / 2, y);
+}
+
+// Text-only fallback for the Hot Keys page, used only for the brief window
+// before menu_title_pg_2.png has loaded. Shares the exact same
+// drifting-cloud backdrop as page 0 (drawDriftingSky) -- just framed by the
+// same bordered menu-box look the rest of the game's popups use
+// (drawHotkeysPopup, drawMenuBox) instead of the story art, so the full key
+// list has room to breathe. The list itself keeps its original muted color
+// from the old title screen on purpose, so it still reads as its own thing
+// and never looks like a continuation of the story/copy on page 0.
+function drawTitleHotkeysFallback(time) {
   drawDriftingSky(time);
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
