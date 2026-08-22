@@ -241,6 +241,21 @@ function worldPadOrder() { return worldDef().padOrder; }
 function recKey(worldId, id) { return worldId + ':' + id; }
 function worldComplete() { return worldPadOrder().every(id => collected.has(recKey(currentWorldId(), id))); }
 
+// Reactive NPC dialogue -- lets an NPC's `lines` array mix in plain strings
+// with callback functions (() => string|null) that check live game state
+// (`collected`, `completedWorlds`) and return a line only when it applies
+// ("heard you found the Cherry Cola 45"). A callback returning null/
+// undefined is dropped entirely, so an unmet condition just leaves that
+// slot out rather than showing a gap or a placeholder. Dialogue always
+// restarts at line 0 (see doInteract()), so callbacks are re-evaluated
+// fresh every single time a conversation opens -- an NPC's gossip updates
+// itself the moment the relevant record or world gets found, with zero
+// extra bookkeeping. Costs one array entry per reactive line; no new
+// state, no visuals.
+function resolveLines(rawLines) {
+  return rawLines.map((l) => (typeof l === 'function' ? l() : l)).filter((l) => l != null);
+}
+
 // All player-visible world ids, in WORLD_DEFS order, skipping any marked
 // `locked` (worlds still under construction, not yet reachable in-game --
 // see the comment on WORLD_DEFS.swamp). Adding a new finished world is all
@@ -400,6 +415,67 @@ const MINIGAME_ACTIONS = {
   beatjam: () => enterMinigame(createBeatJamGame()),
 };
 
+// ---- trophy case: personal bests for the 8 scored mini-games --------------
+// One entry per scored mini-game (beatjam is a freeform jam session with no
+// score, so it sits this one out). `unit` controls how drawTrophyCase() and
+// each mini-game's own 'done' screen format the stored number -- 'pts' for
+// the seven point-scored games, 's' for the staring contest, which tracks
+// longest time held still instead of a points total. `flavor` is a one-line
+// blurb shown in the case's detail panel, same spirit as a record's flavor
+// text in drawCrate().
+const MINIGAME_TROPHIES = [
+  { id: 'darts', label: 'Darts', unit: 'pts',
+    flavor: 'Three throws, dead center or bust.' },
+  { id: 'beatmatch', label: 'Beat Match', unit: 'pts',
+    flavor: 'Five beats, tap it right on the click.' },
+  { id: 'whackpigeon', label: 'Whack-a-Pigeon', unit: 'pts',
+    flavor: 'Eight rounds of quick reflexes on the ledge.' },
+  { id: 'cratedig', label: 'Crate Digging', unit: 'pts',
+    flavor: 'Grab the sleeve right as the needle passes it.' },
+  { id: 'speedsweep', label: 'Speed Sweep', unit: 'pts',
+    flavor: 'Clear as much dust as you can before time\'s up.' },
+  { id: 'staringcontest', label: 'Staring Contest', unit: 's',
+    flavor: 'How long can you hold still before it blinks -- or you do.' },
+  { id: 'buildpizza', label: 'Build A Pizza', unit: 'pts',
+    flavor: 'Grab the right topping right as it passes the marker.' },
+  { id: 'clawmachine', label: 'Claw Machine', unit: 'pts',
+    flavor: 'Six tries to walk off with the good flowers.' },
+];
+
+function trophyMetaFor(id) { return MINIGAME_TROPHIES.find((t) => t.id === id); }
+function bestFor(id) { return personalBests[id]; }
+function formatTrophyValue(id, value) {
+  const meta = trophyMetaFor(id);
+  if (value === undefined || value === null) return '--';
+  return meta && meta.unit === 's' ? `${value.toFixed(1)}s` : `${value}`;
+}
+
+// Called once, right when a mini-game's own `phase` flips to 'done' (see
+// each createXGame() above), never on every 'done' frame -- callers guard
+// that with their own local `bestRecorded` flag. Updates personalBests in
+// place and silently checkpoints the save (same pattern as the world-
+// complete autosave in the 'record' state) so a best survives a reload.
+// Returns true when this run set a new best, so the mini-game's 'done'
+// screen can flash "NEW BEST!".
+function recordMinigameScore(id, value) {
+  const prev = personalBests[id];
+  if (prev === undefined || value > prev) {
+    personalBests[id] = value;
+    saveGame();
+    return true;
+  }
+  return false;
+}
+
+// Opens the Trophy Case (see drawTrophyCase()) from 'play', same open/close
+// shape as openCrate() -- [T] toggles it, [Esc]/E/X close it.
+function openTrophyCase() {
+  if (state !== 'play') return;
+  trophyReturnState = state;
+  trophyIndex = 0;
+  state = 'trophies';
+}
+
 // Darts: a two-tap power/accuracy throw, same trick classic golf games use.
 // Tap 1 (E) locks the power while a needle sweeps left-right. Tap 2 (E)
 // locks the accuracy while a second needle sweeps across the dartboard's
@@ -415,6 +491,7 @@ function createDartsGame() {
   let score = 0;
   let lastScoreLabel = '';
   let resultTimer = 0;
+  let bestRecorded = false, isNewBest = false;
 
   const cx = VIEW_W / 2, cy = 230, boardR = 120;
   const RINGS = [
@@ -462,6 +539,7 @@ function createDartsGame() {
           else { phase = 'power'; power = 0; powerDir = 1; }
         }
       } else if (phase === 'done') {
+        if (!bestRecorded) { isNewBest = recordMinigameScore('darts', score); bestRecorded = true; }
         if (interactPressed) exitMinigame();
       }
       // X always bails out early, no matter the phase
@@ -522,9 +600,15 @@ function createDartsGame() {
       else if (phase === 'result') ctx.fillText(lastScoreLabel, cx, 452);
       else if (phase === 'done') ctx.fillText(`FINAL SCORE: ${score} - PRESS E TO LEAVE`, cx, 452);
 
+      if (phase === 'done') {
+        ctx.font = '11px monospace';
+        ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
+        ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('darts')}`, cx, 470);
+      }
+
       ctx.fillStyle = '#6a6070';
       ctx.font = '10px monospace';
-      ctx.fillText('X to walk away anytime', cx, 476);
+      ctx.fillText('X to walk away anytime', cx, phase === 'done' ? 488 : 476);
     },
   };
 }
@@ -546,6 +630,7 @@ function createBeatMatchGame() {
   let combo = 0;
   let lastHitLabel = '';
   let resultTimer = 0;
+  let bestRecorded = false, isNewBest = false;
 
   const barW = 280, barX = VIEW_W / 2 - barW / 2, barY = 300, barH = 22;
   const barCx = barX + barW / 2;
@@ -579,6 +664,7 @@ function createBeatMatchGame() {
           else { round++; speed += 0.15; pos = -1; dir = 1; phase = 'wait'; }
         }
       } else if (phase === 'done') {
+        if (!bestRecorded) { isNewBest = recordMinigameScore('beatmatch', score); bestRecorded = true; }
         if (interactPressed) exitMinigame();
       }
       // X always bails out early, no matter the phase
@@ -618,9 +704,15 @@ function createBeatMatchGame() {
       else if (phase === 'result') ctx.fillText(lastHitLabel, VIEW_W / 2, 360);
       else if (phase === 'done') ctx.fillText(`FINAL SCORE: ${score} - PRESS E TO LEAVE`, VIEW_W / 2, 360);
 
+      if (phase === 'done') {
+        ctx.font = '11px monospace';
+        ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
+        ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('beatmatch')}`, VIEW_W / 2, 378);
+      }
+
       ctx.fillStyle = '#6a6070';
       ctx.font = '10px monospace';
-      ctx.fillText('X to walk away anytime', VIEW_W / 2, 384);
+      ctx.fillText('X to walk away anytime', VIEW_W / 2, phase === 'done' ? 396 : 384);
     },
   };
 }
@@ -784,6 +876,7 @@ function createWhackPigeonGame() {
   let upWindow = 1.1;        // seconds the pigeon stays up; shrinks each round
   let holeIndex = 0;
   let flapT = 0;             // local anim clock for the pigeon bob/flap
+  let bestRecorded = false, isNewBest = false;
 
   const cx = VIEW_W / 2;
   const HOLES = [
@@ -873,6 +966,7 @@ function createWhackPigeonGame() {
           }
         }
       } else if (phase === 'done') {
+        if (!bestRecorded) { isNewBest = recordMinigameScore('whackpigeon', score); bestRecorded = true; }
         if (interactPressed) exitMinigame();
       }
       // X always bails out early, no matter the phase
@@ -926,9 +1020,15 @@ function createWhackPigeonGame() {
       else if (phase === 'result') ctx.fillText(lastHitLabel, cx, 420);
       else if (phase === 'done') ctx.fillText(`FINAL SCORE: ${score} - PRESS E TO LEAVE`, cx, 420);
 
+      if (phase === 'done') {
+        ctx.font = '11px monospace';
+        ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
+        ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('whackpigeon')}`, cx, 438);
+      }
+
       ctx.fillStyle = '#6a6070';
       ctx.font = '10px monospace';
-      ctx.fillText('X to walk away anytime', cx, 444);
+      ctx.fillText('X to walk away anytime', cx, phase === 'done' ? 456 : 444);
     },
   };
 }
@@ -955,6 +1055,7 @@ function createCrateDiggingGame() {
   let grabbedIndex = -1;
   let lastOutcome = null;
   let resultTimer = 0;
+  let bestRecorded = false, isNewBest = false;
   const tally = { rare: 0, mixtape: 0, dud: 0 };
 
   const stackX = VIEW_W / 2 - 100, stackW = 200;
@@ -1006,6 +1107,7 @@ function createCrateDiggingGame() {
           }
         }
       } else if (phase === 'done') {
+        if (!bestRecorded) { isNewBest = recordMinigameScore('cratedig', score); bestRecorded = true; }
         if (interactPressed) exitMinigame();
       }
       // X always bails out early, no matter the phase
@@ -1078,11 +1180,13 @@ function createCrateDiggingGame() {
         ctx.fillStyle = '#9a90a8';
         ctx.font = '11px monospace';
         ctx.fillText(`${tally.rare} rare 45${tally.rare === 1 ? '' : 's'}, ${tally.mixtape} mixtape${tally.mixtape === 1 ? '' : 's'}, ${tally.dud} dud${tally.dud === 1 ? '' : 's'}`, VIEW_W / 2, 448);
+        ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
+        ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('cratedig')}`, VIEW_W / 2, 464);
       }
 
       ctx.fillStyle = '#6a6070';
       ctx.font = '10px monospace';
-      ctx.fillText('X to walk away anytime', VIEW_W / 2, phase === 'dig' ? 454 : 470);
+      ctx.fillText('X to walk away anytime', VIEW_W / 2, phase === 'dig' ? 454 : 486);
     },
   };
 }
@@ -1112,6 +1216,7 @@ function createSpeedSweepGame() {
   let pileId = 0;
   let spawnTimer = 0.5;
   let pops = []; // brief "+pts" pop effects where a pile just got swept
+  let bestRecorded = false, isNewBest = false;
 
   // Weighted so small piles are the bread-and-butter and the occasional
   // big pile is worth stopping for -- same weighted-pick trick as the
@@ -1213,6 +1318,7 @@ function createSpeedSweepGame() {
         pops.forEach((p) => { p.life -= dt; p.y -= dt * 24; });
         pops = pops.filter((p) => p.life > 0);
       } else if (phase === 'done') {
+        if (!bestRecorded) { isNewBest = recordMinigameScore('speedsweep', score); bestRecorded = true; }
         if (interactPressed) exitMinigame();
       }
       // X always bails out early, no matter the phase
@@ -1282,9 +1388,15 @@ function createSpeedSweepGame() {
       if (phase === 'sweep') ctx.fillText('- HOLD \u25c0 \u25b6 TO MOVE, TAP E TO SWEEP -', VIEW_W / 2, 420);
       else ctx.fillText(`TIME'S UP! FINAL SCORE: ${score} - PRESS E TO LEAVE`, VIEW_W / 2, 420);
 
+      if (phase === 'done') {
+        ctx.font = '11px monospace';
+        ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
+        ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('speedsweep')}`, VIEW_W / 2, 438);
+      }
+
       ctx.fillStyle = '#6a6070';
       ctx.font = '10px monospace';
-      ctx.fillText('X to walk away anytime', VIEW_W / 2, 444);
+      ctx.fillText('X to walk away anytime', VIEW_W / 2, phase === 'done' ? 456 : 444);
     },
   };
 }
@@ -1314,6 +1426,7 @@ function createStaringContestGame() {
   let blinkT = 0;           // >0 while the blink animation is playing
   let idleT = 0;            // free-running clock for tail/whisker idle motion
   let resultTimer = 0;
+  let bestRecorded = false, isNewBest = false;
 
   function loseByGivingIn() {
     if (phase !== 'staring') return;
@@ -1351,6 +1464,7 @@ function createStaringContestGame() {
         resultTimer -= dt;
         if (resultTimer <= 0 || interactPressed || buyPressed) phase = 'done';
       } else if (phase === 'done') {
+        if (!bestRecorded) { isNewBest = recordMinigameScore('staringcontest', elapsed); bestRecorded = true; }
         if (interactPressed || buyPressed) exitMinigame();
       }
     },
@@ -1504,6 +1618,8 @@ function createStaringContestGame() {
           ctx.font = '11px monospace';
           ctx.fillStyle = '#9a90a8';
           ctx.fillText('PRESS E TO LEAVE', cx, 462);
+          ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
+          ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${formatTrophyValue('staringcontest', bestFor('staringcontest'))}`, cx, 480);
         }
       }
     },
@@ -1581,6 +1697,7 @@ function createPizzaBuildGame() {
   let target = TOPPINGS[Math.floor(Math.random() * N)];
   let lastLabel = '';
   let resultTimer = 0;
+  let bestRecorded = false, isNewBest = false;
 
   function pickTarget() {
     let next;
@@ -1641,6 +1758,7 @@ function createPizzaBuildGame() {
           }
         }
       } else if (phase === 'done') {
+        if (!bestRecorded) { isNewBest = recordMinigameScore('buildpizza', score); bestRecorded = true; }
         if (interactPressed) exitMinigame();
       }
       // X always bails out early, no matter the phase
@@ -1708,11 +1826,14 @@ function createPizzaBuildGame() {
         ctx.fillText(tip, cx, bottomY);
         ctx.font = 'bold 14px monospace';
         ctx.fillText(`FINAL SCORE: ${score} - PRESS E TO LEAVE`, cx, bottomY + 24);
+        ctx.font = '11px monospace';
+        ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
+        ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('buildpizza')}`, cx, bottomY + 42);
       }
 
       ctx.fillStyle = '#6a6070';
       ctx.font = '10px monospace';
-      ctx.fillText('X to walk away anytime', cx, phase === 'done' ? bottomY + 48 : bottomY + 24);
+      ctx.fillText('X to walk away anytime', cx, phase === 'done' ? bottomY + 66 : bottomY + 24);
     },
   };
 }
@@ -1769,6 +1890,7 @@ function createClawMachineGame() {
   let clawX = VIEW_W / 2, clawY = RAIL_Y;
   let held = null;           // flower currently gripped, or null
   let pops = [];             // "+pts" / "SLIPPED!" / "MISS" pop effects
+  let bestRecorded = false, isNewBest = false;
 
   // Common exit for the drop/rise/deliver branches: back to aiming if
   // there's a try and a flower left to go for, otherwise the round's over.
@@ -1870,6 +1992,7 @@ function createClawMachineGame() {
           afterAttempt();
         }
       } else if (phase === 'done') {
+        if (!bestRecorded) { isNewBest = recordMinigameScore('clawmachine', score); bestRecorded = true; }
         if (interactPressed) exitMinigame();
       }
 
@@ -1927,9 +2050,15 @@ function createClawMachineGame() {
         ctx.fillText('- HOLD \u25c0 \u25b6 TO AIM, TAP E TO DROP -', VIEW_W / 2, 420);
       }
 
+      if (phase === 'done') {
+        ctx.font = '11px monospace';
+        ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
+        ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('clawmachine')}`, VIEW_W / 2, 438);
+      }
+
       ctx.fillStyle = '#6a6070';
       ctx.font = '10px monospace';
-      ctx.fillText('X to walk away anytime', VIEW_W / 2, 444);
+      ctx.fillText('X to walk away anytime', VIEW_W / 2, phase === 'done' ? 456 : 444);
     },
   };
 }
@@ -1964,6 +2093,14 @@ window.addEventListener('keydown', (e) => {
       else if (state === 'crate') state = crateReturnState;
     }
     if (k === 'escape' && state === 'crate') { state = crateReturnState; }
+    if (k === 't') {
+      // [T] opens the Trophy Case any time during gameplay, and closes it
+      // again on a second press -- same open/close pattern as [V] for The
+      // Crate and [H] for hotkeys.
+      if (state === 'play') openTrophyCase();
+      else if (state === 'trophies') state = trophyReturnState;
+    }
+    if (k === 'escape' && state === 'trophies') { state = trophyReturnState; }
     if (k === 'arrowleft') selectMove = -1;
     if (k === 'arrowright') selectMove = 1;
     if (k === 'arrowup') menuMove = -1;
@@ -2373,6 +2510,9 @@ function makeOverworld() {
         'You ever really listen to "Terrapin Station"? Like really sit with it? Man, 1977, Cornell, no wait, the Barton Hall run, I mean the studio cut, well actually...',
         'That one bootleg with the thirty-minute "Dark Star" — okay so it is technically two "Dark Star"s stitched together, but hear me out —',
         'Oh, and do not get me started on Phish. Trey is a genius. That "Tweezer" into "Piper" at the Deer Creek show? I was THERE, man, I was—',
+        () => collected.has(recKey('town', 'cola'))
+          ? 'Oh hey — heard you found the Cherry Cola 45. Rosie\'s been playing it behind the counter all week. Good bassline, man.'
+          : null,
         'Anyway... peace! I am out!'
       ] },
     { id: 'willie', tx: 5, ty: 8, name: 'WILLIE',
@@ -2380,6 +2520,9 @@ function makeOverworld() {
         'Hey now, welcome to the wall! I\'m Willie — painter, free spirit, full of love and creativity.',
         'I paint what I feel about the day — the state of things, the color of people, all of it.',
         'Stay a while. Hang, create, talk some good bullshit about life. This wall\'s got room for one more coat.',
+        () => completedWorlds.has('town')
+          ? 'Word is you found every last record hiding around this town. That\'s a whole mural\'s worth of story right there.'
+          : null,
         'Every color\'s a story, and yours is one of the good ones.'
       ] },
   ];
@@ -2641,6 +2784,9 @@ const shops = {
         lines: [
           'Yo — Kanga on the ones and twos. Got a crate of dubs right here, all killer, no filler.',
           'That frog record on top? Don\'t ask, don\'t sleep on it either. Certified heat.',
+          () => collected.has(recKey('town', 'elm'))
+            ? 'Hold up — you actually pulled Elm Street Funk out of our own crates? Right under my nose. Respect.'
+            : null,
           'Third Thursdays I run this booth till the breaker trips. Come through.',
         ] },
       { id: 'zach', tx: 2, ty: 3, name: 'SKYSPLITTERINK', sprite: 'zach',
@@ -2649,6 +2795,9 @@ const shops = {
           'Zach — but around here everybody just says SkySplitterInk. Sound engineer, producer, full-time studio rat.',
           'I\'ve had a hand in more Vermont hip hop than I can count. If it came out of this scene, chances are it passed through these speakers.',
           'People call me a magician with sound. I just call it paying attention — EQ, levels, the pocket. It all matters.',
+          () => collected.size >= 3
+            ? 'Heard you\'ve been deep in the crates all over town. Respect — that\'s basically what digging for samples feels like.'
+            : null,
           'This whole independent scene runs on people showing up for each other. I just try to make everybody\'s stuff sound as good as it deserves to.',
           'Got the MPC, got the notebook, got the headphones warmed up. Always cooking something back here.',
         ] },
@@ -2691,7 +2840,10 @@ const shops = {
     keeper: { name: 'EDNA', shirt: '#d87a9a', skin: '#c89268',
       lines: ['Thirty-four years on this floor, honey. I could pour coffee in my sleep. Some nights I do.',
               'I called the morning shift the day I started, and nobody\'s pried it out of my hands since.',
-              'Menu\'s simple: burgers, fries, milkshakes. Don\'t make me explain a milkshake to you.'],
+              'Menu\'s simple: burgers, fries, milkshakes. Don\'t make me explain a milkshake to you.',
+              () => collected.has(recKey('town', 'white'))
+                ? 'Somebody told me you found that White Label. No sleeve, no name — good ears, honey. That one\'s a legend around here.'
+                : null],
       foundLine: 'Well butter my biscuit — is that a record? Keep on truckin\', kid.' },
     crates: [],
     diner: true,
@@ -2834,6 +2986,9 @@ const shops = {
         lines: [
           'Yo. Mavstar. Some call me Magnus Ver Mavusson — I\'ve been pulling this scene uphill since before you had bars.',
           'Grabbing a slice quick. Gotta keep the energy up — Green Door\'s calling and the crew doesn\'t wait.',
+          () => collected.has(recKey('town', 'elm'))
+            ? 'Hold on — heard you already dug through the crates over at Green Door. Damn, you beat me there.'
+            : null,
           'Every cypher I\'m in, I\'m sharpening something. Perfect ain\'t a destination, it\'s the whole walk.',
           'Vermont don\'t get enough credit for the pen game up here. I\'m out to fix that, one bar at a time.',
           'Catch me at Green Door later — mic\'s open, and I never let it stay quiet for long.',
@@ -2922,6 +3077,9 @@ const shops = {
         'Now she\'s pointing dramatically at absolutely nobody in particular, belting out "You Oughta Know." Riveting stuff.',
         'She croons her way through "Hand in My Pocket" — one hand, fittingly, still in her pocket the entire time.',
         'Spinning in a slow circle now, mid-chorus of "Head Over Feet." You clap along whether you meant to or not.',
+        () => completedWorlds.has('town')
+          ? 'Somebody in the front row shouted that you found every record in town. She dedicates the next verse to you. Whether you asked for it or not.'
+          : null,
         'Somewhere between a whisper and a wail, she works through "Uninvited." Nobody invited this. Here we are anyway.',
         'Big finish: she closes it out on "Thank U," bowing so low her sequined cape nearly hits the floor.',
       ] },
@@ -2952,7 +3110,7 @@ const player = {
   tempItem: null, tempItemTimer: 0,
 };
 const collected = new Set();
-let state = 'splash'; // splash | title | digChoice | slotChoose | select | play | dialog | record | win | portal | fifa | minigame | hotkeys | crate
+let state = 'splash'; // splash | title | digChoice | slotChoose | select | play | dialog | record | win | portal | fifa | minigame | hotkeys | crate | trophies
 // State to snap back to when the [H] hotkeys popup is closed -- currently
 // always 'play' since that's the only state H can be opened from, but kept
 // as its own var in case another state wants to offer the popup later.
@@ -2965,6 +3123,16 @@ let hotkeysReturnState = 'play';
 let crateReturnState = 'play';
 let crateWorldIndex = 0;
 let crateSlotIndex = 0;
+// Trophy Case -- personal-best tracker for the 8 mini-games (see
+// MINIGAME_TROPHIES + recordMinigameScore() below and drawTrophyCase()).
+// personalBests maps a mini-game id to the best value reached so far; it
+// rides along in the save file exactly like `collected`, so bests are
+// per-slot, same as everything else about a playthrough. trophyIndex
+// tracks which of the 8 rows the player is currently browsing, resetting
+// to 0 whenever the case is opened fresh.
+let personalBests = {};
+let trophyReturnState = 'play';
+let trophyIndex = 0;
 // Which of the title screen's two pages is showing: 0 = the main title
 // (story + start prompt), 1 = the Hot Keys page. Toggled with left/right
 // (or [H]) while state === 'title'; reset to 0 any time the player lands
@@ -3054,6 +3222,7 @@ function saveGame(showToast) {
       dir: player.dir,
       collected: [...collected],
       completedWorlds: [...completedWorlds],
+      bests: personalBests,
     };
     localStorage.setItem(slotKey(currentSlot), JSON.stringify(data));
     if (showToast) toast = { text: 'Game Saved', t: 1.2 };
@@ -3101,6 +3270,7 @@ function loadGame(slot) {
   (data.collected || []).forEach((id) => collected.add(migrateRecordId(id)));
   completedWorlds.clear();
   (data.completedWorlds || []).forEach((id) => completedWorlds.add(id));
+  personalBests = { ...(data.bests || {}) };
 
   state = 'play';
   music.setMenuBreak(false);
@@ -3116,6 +3286,7 @@ function newGame(slot) {
   try { localStorage.removeItem(slotKey(slot)); } catch (err) { console.warn('newGame clear failed:', err); }
   collected.clear();
   completedWorlds.clear();
+  personalBests = {};
   player.map = 'town';
   player.x = 19.5 * TILE;
   player.y = 12.5 * TILE;
@@ -3536,7 +3707,7 @@ function doInteract() {
   if (target.type === 'keeper') {
     const k = target.data;
     const shopRecord = Object.values(maps[player.map].crates).find(c => c.record)?.record;
-    const lines = shopRecord && collected.has(recKey(currentWorldId(), shopRecord)) ? [k.foundLine] : k.lines;
+    const lines = shopRecord && collected.has(recKey(currentWorldId(), shopRecord)) ? [k.foundLine] : resolveLines(k.lines);
     dialog = { name: k.name, lines, i: 0 };
     state = 'dialog';
   } else if (target.type === 'crate') {
@@ -3574,7 +3745,7 @@ function doInteract() {
     state = 'dialog';
   } else if (target.type === 'npc') {
     const n = target.data;
-    dialog = { name: n.name, lines: n.lines, i: 0 };
+    dialog = { name: n.name, lines: resolveLines(n.lines), i: 0 };
     state = 'dialog';
   } else if (target.type === 'newspaper') {
     const story = VERMONT_NEWS[Math.floor(Math.random() * VERMONT_NEWS.length)];
@@ -4182,6 +4353,14 @@ function update(dt) {
       menuMove = 0;
     }
     if (interactPressed || buyPressed) state = crateReturnState;
+  } else if (state === 'trophies') {
+    // Up/down browses the 8 rows; E, X, [T] and [Esc] all just close the
+    // case, same read-only-popup pattern as 'crate' and 'hotkeys'.
+    if (menuMove) {
+      trophyIndex = Math.max(0, Math.min(MINIGAME_TROPHIES.length - 1, trophyIndex + menuMove));
+      menuMove = 0;
+    }
+    if (interactPressed || buyPressed) state = trophyReturnState;
   } else if (state === 'fifa') {
     if (performance.now() - fifaStartTime >= 5000) {
       state = fifaReturnState;
@@ -4414,6 +4593,7 @@ function render(time) {
   if (state === 'portal') drawPortalPopup();
   if (state === 'hotkeys') drawHotkeysPopup();
   if (state === 'crate') drawCrate();
+  if (state === 'trophies') drawTrophyCase();
   if (state === 'fifa') drawFifaPopup();
   if (state === 'minigame' && activeMinigame) activeMinigame.draw();
   if (toast) drawToast();
@@ -9782,7 +9962,7 @@ function drawHotkeysPopup() {
   ctx.fillStyle = 'rgba(8,6,12,0.72)';
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
 
-  const boxW = 460, boxH = 340, boxX = (VIEW_W - boxW) / 2, boxY = (VIEW_H - boxH) / 2;
+  const boxW = 460, boxH = 368, boxX = (VIEW_W - boxW) / 2, boxY = (VIEW_H - boxH) / 2;
   ctx.fillStyle = 'rgba(10,8,14,0.95)';
   ctx.fillRect(boxX, boxY, boxW, boxH);
   ctx.strokeStyle = '#f4ecd8';
@@ -9805,6 +9985,7 @@ function drawHotkeysPopup() {
     ['K', 'quicksave'],
     ['N', 'back to start / new game'],
     ['V', 'open The Crate (record collection)'],
+    ['T', 'open the Trophy Case (mini-game bests)'],
     ['H', 'toggle this hot-keys popup'],
   ];
   const listX = boxX + 30, keyColW = 150, startY = boxY + 66, lh = 24;
@@ -10333,6 +10514,94 @@ function drawCrate() {
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
   ctx.font = 'bold 14px monospace';
   ctx.fillText('[\u25C0\u25B6] world   [\u25B2\u25BC] browse   [E] close', VIEW_W / 2, boxY + boxH - 18);
+}
+
+// The Trophy Case -- a personal-bests list for the 8 scored mini-games (see
+// MINIGAME_TROPHIES + personalBests near the top of the file). Same bordered-
+// popup language as drawCrate() and drawHotkeysPopup(): a row list on the
+// left half the player browses with up/down, a detail panel on the right for
+// whichever row is selected. Rows with no personalBests entry yet just show
+// "--" instead of a score, same "not yet found" idea as an empty Crate slot.
+function drawTrophyCase() {
+  ctx.fillStyle = 'rgba(6,4,10,0.88)';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+  const boxW = 720, boxH = 440, boxX = (VIEW_W - boxW) / 2, boxY = (VIEW_H - boxH) / 2;
+  ctx.fillStyle = '#1c1626';
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+  ctx.strokeStyle = '#e0b040';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(boxX + 2, boxY + 2, boxW - 4, boxH - 4);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#e0b040';
+  ctx.font = 'bold 24px monospace';
+  ctx.fillText('TROPHY CASE', VIEW_W / 2, boxY + 38);
+
+  const playedCount = MINIGAME_TROPHIES.filter((t) => bestFor(t.id) !== undefined).length;
+  ctx.font = '12px monospace';
+  ctx.fillStyle = '#9a90a8';
+  ctx.fillText(`${playedCount} / ${MINIGAME_TROPHIES.length} personal bests set`, VIEW_W / 2, boxY + 60);
+
+  // row list -- left column, one row per mini-game
+  const listX = boxX + 34, listY = boxY + 84, rowH = 38;
+  const listW = 300;
+  MINIGAME_TROPHIES.forEach((t, i) => {
+    const y = listY + i * rowH;
+    const best = bestFor(t.id);
+    const active = i === trophyIndex;
+
+    if (active) {
+      ctx.fillStyle = 'rgba(224,176,64,0.14)';
+      ctx.fillRect(listX - 10, y - 22, listW, rowH - 6);
+      ctx.strokeStyle = Math.floor(performance.now() / 300) % 2 ? '#e0b040' : '#f4ecd8';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(listX - 10, y - 22, listW, rowH - 6);
+    }
+
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillStyle = active ? '#e0b040' : (best !== undefined ? '#f4ecd8' : '#5a5462');
+    ctx.fillText((active ? '\u25B8 ' : '') + t.label, listX, y);
+
+    ctx.textAlign = 'right';
+    ctx.font = '13px monospace';
+    ctx.fillStyle = best !== undefined ? '#8cff5f' : '#4a4258';
+    ctx.fillText(formatTrophyValue(t.id, best), listX + listW - 14, y);
+  });
+
+  // detail panel -- right half, describes whichever row is selected
+  const sel = MINIGAME_TROPHIES[trophyIndex];
+  const selBest = bestFor(sel.id);
+  const panelX = listX + listW + 26, panelW = boxX + boxW - 40 - panelX;
+  const panelY = listY + 6;
+
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 18px monospace';
+  ctx.fillStyle = '#e0b040';
+  ctx.fillText(sel.label, panelX, panelY);
+
+  ctx.font = '12px monospace';
+  ctx.fillStyle = '#c8c0d8';
+  wrapText(sel.flavor, panelX, panelY + 26, panelW, 16);
+
+  ctx.font = 'bold 13px monospace';
+  ctx.fillStyle = '#9a90a8';
+  ctx.fillText('PERSONAL BEST', panelX, panelY + 78);
+  ctx.font = 'bold 32px monospace';
+  ctx.fillStyle = selBest !== undefined ? '#8cff5f' : '#4a4258';
+  ctx.fillText(selBest !== undefined ? formatTrophyValue(sel.id, selBest) : 'NOT SET', panelX, panelY + 114);
+
+  if (selBest === undefined) {
+    ctx.font = '12px monospace';
+    ctx.fillStyle = '#6a6278';
+    ctx.fillText('Play this one to set your first best.', panelX, panelY + 140);
+  }
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
+  ctx.font = 'bold 14px monospace';
+  ctx.fillText('[\u25B2\u25BC] browse   [E] close', VIEW_W / 2, boxY + boxH - 18);
 }
 
 function drawSplash() {
