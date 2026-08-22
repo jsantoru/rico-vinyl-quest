@@ -757,8 +757,14 @@ function createBeatMatchGame() {
 // sounds musical instead of one dead note on repeat.
 function createBeatJamGame() {
   const TIME_LIMIT = 30;
-  const cx = VIEW_W / 2, cy = 280;
-  const OFFSET = 108, PAD = 88;
+  // Pads enlarged for mobile touch play: pushed down a bit from the header
+  // (title/hits/timer stay put at the top) and grown as large as the
+  // available vertical space allows, with the "TAP A PAD" footer text
+  // moved further down to make room. OFFSET (center-to-pad distance) is
+  // kept just above PAD (pad width/height) so the four pads sit with a
+  // small gap between them and never overlap.
+  const cx = VIEW_W / 2, cy = 330;
+  const OFFSET = 126, PAD = 116;
   const KEY_NOTES = [60, 63, 65, 67, 70]; // short minor-pentatonic run for the Keys pad
 
   const PADS = [
@@ -864,20 +870,20 @@ function createBeatJamGame() {
         ctx.strokeRect(x - PAD / 2, y - PAD / 2, PAD, PAD);
 
         ctx.fillStyle = lit ? '#181418' : '#f4ecd8';
-        ctx.font = 'bold 13px monospace';
-        ctx.fillText(p.label, x, y + 3);
-        ctx.font = '11px monospace';
-        ctx.fillText(p.hint, x, y - 16);
+        ctx.font = 'bold 20px monospace';
+        ctx.fillText(p.label, x, y + 8);
+        ctx.font = '18px monospace';
+        ctx.fillText(p.hint, x, y - 26);
       });
 
       ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#8cff5f' : '#f4ecd8';
       ctx.font = 'bold 14px monospace';
-      if (phase === 'jam') ctx.fillText('- \u25B2\u25BC\u25C0\u25B6 OR TAP A PAD TO PLAY -', cx, 460);
-      else ctx.fillText("TIME'S UP! NICE SET - PRESS E TO LEAVE", cx, 460);
+      if (phase === 'jam') ctx.fillText('- \u25B2\u25BC\u25C0\u25B6 OR TAP A PAD TO PLAY -', cx, 562);
+      else ctx.fillText("TIME'S UP! NICE SET - PRESS E TO LEAVE", cx, 562);
 
       ctx.fillStyle = '#6a6070';
       ctx.font = '10px monospace';
-      ctx.fillText('X to walk away anytime', cx, 484);
+      ctx.fillText('X to walk away anytime', cx, 584);
     },
   };
 }
@@ -2836,7 +2842,7 @@ const shops = {
     // along the bottom-left wall (1,8)/(2,8)/(3,8).
     minigames: [
       { id: 'beatmatch', tx: 5, ty: 3, label: 'PLAY BEAT MATCH' },
-      { id: 'beatjam', tx: 6, ty: 7, label: 'FREESTYLE BEAT JAM' },
+      { id: 'beatjam', tx: 9, ty: 7, label: 'FREESTYLE BEAT JAM' },
     ],
   }),
   wax: makeShop('wax', {
