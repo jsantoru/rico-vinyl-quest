@@ -36,7 +36,12 @@ python3 -m http.server 8000
 
 ## Tech
 
-- Single HTML page + vanilla JS canvas, no dependencies.
+- Single HTML page + vanilla JS canvas, no network dependencies.
+- Darts offers two boards, picked each visit: the classic 2D canvas
+  version, or a Three.js remake (spotlit pub corner, real throw arcs,
+  darts that stick where they score). Both share the exact same two-tap
+  gameplay, scoring, and trophy. `lib/three.min.js` is vendored and only
+  loaded the first time a player picks 3D, so base load time is untouched.
 - `assets/rico.png` — 4-direction, 3-frame walk cycle sprite sheet.
 - Music is generated live with the Web Audio API; each collected sample
   enables another layer in a 92 BPM two-bar loop.
