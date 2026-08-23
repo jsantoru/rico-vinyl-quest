@@ -3164,6 +3164,34 @@ function createCrateDigging3DGame() {
 // scoring, no rounds, no combo, just "how much can you clear before time's
 // up". Same single-action contract as the other mini-games (E to act, X to
 // bail anytime), same dark-overlay/monospace look. Canvas primitives only.
+// The shop floor (fill + plank-seam gridlines + border) never changes frame
+// to frame -- same rect, same lines, same colors -- so it's wasteful (and,
+// on slower devices, visibly stutter-inducing) to re-issue ~35 individual
+// beginPath()/stroke() calls for it every single frame. Bake it once into an
+// offscreen canvas and just blit that with a single drawImage() per frame
+// instead. Built lazily on first use and cached for the lifetime of the page
+// since the geometry it depends on (FLOOR_LEFT/RIGHT/Y, VIEW_W) is constant.
+let speedSweepFloorCache = null;
+function getSpeedSweepFloorCanvas(floorLeft, floorRight, floorTop, floorH) {
+  if (speedSweepFloorCache) return speedSweepFloorCache;
+  const off = document.createElement('canvas');
+  off.width = VIEW_W;
+  off.height = VIEW_H;
+  const fctx = off.getContext('2d');
+  fctx.fillStyle = '#a8946e';
+  fctx.fillRect(floorLeft - 40, floorTop, floorRight - floorLeft + 80, floorH);
+  fctx.strokeStyle = 'rgba(90,70,40,0.4)';
+  fctx.lineWidth = 1;
+  for (let px = floorLeft - 40; px <= floorRight + 40; px += 22) {
+    fctx.beginPath(); fctx.moveTo(px, floorTop); fctx.lineTo(px, floorTop + floorH); fctx.stroke();
+  }
+  fctx.strokeStyle = '#5c4a30';
+  fctx.lineWidth = 3;
+  fctx.strokeRect(floorLeft - 40, floorTop, floorRight - floorLeft + 80, floorH);
+  speedSweepFloorCache = off;
+  return off;
+}
+
 function createSpeedSweepGame() {
   const TIME_LIMIT = 24;           // seconds on the clock
   const FLOOR_Y = 300;             // baseline the dust/broom sit on
@@ -3312,18 +3340,11 @@ function createSpeedSweepGame() {
       ctx.font = 'bold 14px monospace';
       ctx.fillText(`${Math.ceil(timeLeft)}s`, VIEW_W / 2, barY + 24);
 
-      // shop floor strip
+      // shop floor strip -- pre-baked once (see getSpeedSweepFloorCanvas) and
+      // blitted with a single drawImage() instead of redrawing ~35 individual
+      // line strokes every frame, which was the source of the stutter.
       const floorTop = FLOOR_Y - 70, floorH = 150;
-      ctx.fillStyle = '#a8946e';
-      ctx.fillRect(FLOOR_LEFT - 40, floorTop, FLOOR_RIGHT - FLOOR_LEFT + 80, floorH);
-      ctx.strokeStyle = 'rgba(90,70,40,0.4)';
-      ctx.lineWidth = 1;
-      for (let px = FLOOR_LEFT - 40; px <= FLOOR_RIGHT + 40; px += 22) {
-        ctx.beginPath(); ctx.moveTo(px, floorTop); ctx.lineTo(px, floorTop + floorH); ctx.stroke();
-      }
-      ctx.strokeStyle = '#5c4a30';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(FLOOR_LEFT - 40, floorTop, FLOOR_RIGHT - FLOOR_LEFT + 80, floorH);
+      ctx.drawImage(getSpeedSweepFloorCanvas(FLOOR_LEFT, FLOOR_RIGHT, floorTop, floorH), 0, 0);
 
       // dust piles
       piles.forEach((p) => {
