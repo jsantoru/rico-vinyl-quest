@@ -450,18 +450,22 @@ function exitMinigame() {
 // hitbox pick up every entry in a map's `minigames` list automatically -- no
 // per-game wiring needed anywhere else.
 const MINIGAME_ACTIONS = {
-  // Darts is the first mini-game with two renderers: the original canvas
-  // version and a Three.js remake. A tiny chooser screen runs first so the
-  // player picks per-visit; see createDartsModeSelect().
+  // Darts, Beat Match, Crate Digging, Whack-a-Pigeon, and Beat Jam each have
+  // two renderers: the original canvas version and a Three.js remake. A
+  // tiny chooser screen runs first so the player picks per-visit; see
+  // createModeSelectMenu() -- this is now the standard shape for any
+  // mini-game that gets a 3D version, and the default shape for brand new
+  // mini-games going forward (see the note above createModeSelectMenu for
+  // the template).
   darts: () => enterMinigame(createDartsModeSelect()),
-  beatmatch: () => enterMinigame(createBeatMatchGame()),
-  whackpigeon: () => enterMinigame(createWhackPigeonGame()),
-  cratedig: () => enterMinigame(createCrateDiggingGame()),
+  beatmatch: () => enterMinigame(createBeatMatchModeSelect()),
+  whackpigeon: () => enterMinigame(createWhackPigeonModeSelect()),
+  cratedig: () => enterMinigame(createCrateDiggingModeSelect()),
   speedsweep: () => enterMinigame(createSpeedSweepGame()),
   staringcontest: () => enterMinigame(createStaringContestGame()),
   buildpizza: () => enterMinigame(createPizzaBuildGame()),
   clawmachine: () => enterMinigame(createClawMachineGame()),
-  beatjam: () => enterMinigame(createBeatJamGame()),
+  beatjam: () => enterMinigame(createBeatJamModeSelect()),
   scratchdj: () => enterMinigame(createScratchDJGame()),
 };
 
@@ -698,35 +702,71 @@ function loadThreeJS() {
   document.head.appendChild(s);
 }
 
-// ---- darts mode chooser ---------------------------------------------------
-// Runs as a mini-game itself (same update/draw contract) so the sign and
-// the tap shortcut needed no changes: entering "darts" now lands here, and
-// picking a mode swaps `activeMinigame` in place -- state stays 'minigame'
-// and minigameReturnState is preserved. Up/down (or tapping a card) picks,
-// E confirms, X walks away. If Three.js fails to load or WebGL is
-// unavailable, the error screen offers classic as the fallback.
-function createDartsModeSelect() {
+// ---- shared 3D renderer cache ----------------------------------------------
+// One offscreen WebGL renderer/canvas per mini-game id, created once and
+// reused across visits (context creation is the slow part) while the scene
+// itself is rebuilt on entry and disposed on exit by each game. Any new 3D
+// mini-game should grab its renderer through this instead of hand-rolling
+// its own module-level renderer/canvas pair.
+const minigame3DRenderers = {};
+function getMinigame3DRenderer(key) {
+  const T = window.THREE;
+  let entry = minigame3DRenderers[key];
+  if (!entry) {
+    const canvas = document.createElement('canvas');
+    canvas.width = VIEW_W;
+    canvas.height = VIEW_H;
+    // preserveDrawingBuffer guarantees drawImage() always sees the frame we
+    // just rendered, whatever the browser's compositing timing.
+    const renderer = new T.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+    renderer.setSize(VIEW_W, VIEW_H, false);
+    renderer.outputEncoding = T.sRGBEncoding;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = T.PCFSoftShadowMap;
+    entry = { renderer, canvas };
+    minigame3DRenderers[key] = entry;
+  }
+  return entry;
+}
+
+// ---- generic "CLASSIC vs 3D" mode chooser ----------------------------------
+// Runs as a mini-game itself (same update/draw contract) so the arcade sign
+// and the tap shortcut need no per-game changes: entering the mini-game
+// lands here, and picking a mode swaps `activeMinigame` in place -- state
+// stays 'minigame' and minigameReturnState is preserved. Up/down (or
+// tapping a card) picks, E confirms, X walks away. If Three.js fails to
+// load or WebGL is unavailable, the error screen offers classic as the
+// fallback.
+//
+// This is now the STANDARD shape for a mini-game that has a 3D version, and
+// the default template for any brand-new mini-game: build the classic 2D
+// version first if you like, but ship it behind createModeSelectMenu() with
+// a 3D companion rather than wiring MINIGAME_ACTIONS straight to a single
+// renderer. `createClassic`/`createThreeD` are zero-arg factories, same
+// contract as every other entry in MINIGAME_ACTIONS.
+function createModeSelectMenu(opts) {
+  // opts: { title, classicSub, threeDSub, createClassic, createThreeD, pickLabel }
   let phase = 'choose'; // 'choose' | 'loading' | 'error'
   let index = 0;
   let loadDots = 0;
   const OPTIONS = [
-    { title: 'CLASSIC', sub: 'The original two-tap board' },
-    { title: '3D', sub: 'Step up to the oche -- full 3D' },
+    { title: 'CLASSIC', sub: opts.classicSub },
+    { title: '3D', sub: opts.threeDSub },
   ];
   const cardW = 380, cardH = 92, cardX = VIEW_W / 2 - cardW / 2;
   const cardY = (i) => 210 + i * (cardH + 26);
 
   function startPick() {
-    if (index === 0) { activeMinigame = createDartsGame(); return; }
+    if (index === 0) { activeMinigame = opts.createClassic(); return; }
     loadThreeJS();
     phase = threeLoadState === 'error' ? 'error' : 'loading';
   }
 
   function startThreeD() {
     try {
-      activeMinigame = createDarts3DGame();
+      activeMinigame = opts.createThreeD();
     } catch (err) {
-      console.error('3D darts failed to start:', err);
+      console.error(opts.title + ' 3D failed to start:', err);
       phase = 'error';
     }
   }
@@ -743,7 +783,7 @@ function createDartsModeSelect() {
         if (threeLoadState === 'error') phase = 'error';
         if (buyPressed) exitMinigame();
       } else if (phase === 'error') {
-        if (interactPressed) { activeMinigame = createDartsGame(); return; }
+        if (interactPressed) { activeMinigame = opts.createClassic(); return; }
         if (buyPressed) exitMinigame();
       }
     },
@@ -759,7 +799,7 @@ function createDartsModeSelect() {
           }
         }
       } else if (phase === 'error') {
-        activeMinigame = createDartsGame();
+        activeMinigame = opts.createClassic();
       }
     },
     draw() {
@@ -768,7 +808,7 @@ function createDartsModeSelect() {
       ctx.textAlign = 'center';
       ctx.fillStyle = '#e0b040';
       ctx.font = 'bold 26px monospace';
-      ctx.fillText('DARTS', VIEW_W / 2, 100);
+      ctx.fillText(opts.title, VIEW_W / 2, 100);
 
       if (phase === 'loading') {
         ctx.fillStyle = '#f4ecd8';
@@ -794,7 +834,7 @@ function createDartsModeSelect() {
 
       ctx.fillStyle = '#9a90a8';
       ctx.font = '15px monospace';
-      ctx.fillText('PICK YOUR BOARD', VIEW_W / 2, 152);
+      ctx.fillText(opts.pickLabel || 'PICK YOUR MODE', VIEW_W / 2, 152);
 
       for (let i = 0; i < OPTIONS.length; i++) {
         const y = cardY(i), selected = i === index;
@@ -827,6 +867,18 @@ function createDartsModeSelect() {
   };
 }
 
+// ---- darts mode chooser -----------------------------------------------------
+function createDartsModeSelect() {
+  return createModeSelectMenu({
+    title: 'DARTS',
+    pickLabel: 'PICK YOUR BOARD',
+    classicSub: 'The original two-tap board',
+    threeDSub: 'Step up to the oche -- full 3D',
+    createClassic: () => createDartsGame(),
+    createThreeD: () => createDarts3DGame(),
+  });
+}
+
 // ---- Darts 3D -------------------------------------------------------------
 // The Three.js remake of darts. Identical gameplay contract to the classic
 // version -- same two-tap power/aim, same sweep speeds, same
@@ -840,25 +892,10 @@ function createDartsModeSelect() {
 //
 // The renderer (and its WebGL context) is created once and cached across
 // visits -- context creation is the slow part -- while the scene itself is
-// rebuilt on entry and fully disposed on exit.
-let darts3DRenderer = null;
-let darts3DCanvas = null;
-
+// rebuilt on entry and fully disposed on exit. See getMinigame3DRenderer().
 function createDarts3DGame() {
   const T = window.THREE;
-  if (!darts3DRenderer) {
-    darts3DCanvas = document.createElement('canvas');
-    darts3DCanvas.width = VIEW_W;
-    darts3DCanvas.height = VIEW_H;
-    // preserveDrawingBuffer guarantees drawImage() always sees the frame we
-    // just rendered, whatever the browser's compositing timing.
-    darts3DRenderer = new T.WebGLRenderer({ canvas: darts3DCanvas, antialias: true, preserveDrawingBuffer: true });
-    darts3DRenderer.setSize(VIEW_W, VIEW_H, false);
-    darts3DRenderer.outputEncoding = T.sRGBEncoding;
-    darts3DRenderer.shadowMap.enabled = true;
-    darts3DRenderer.shadowMap.type = T.PCFSoftShadowMap;
-  }
-  const renderer = darts3DRenderer;
+  const { renderer, canvas: darts3DCanvas } = getMinigame3DRenderer('darts');
 
   // ---- gameplay state: mirrors createDartsGame exactly
   const ROUNDS = 3;
@@ -1340,6 +1377,315 @@ function createBeatMatchGame() {
   };
 }
 
+// ---- beat match mode chooser -----------------------------------------------
+function createBeatMatchModeSelect() {
+  return createModeSelectMenu({
+    title: 'BEAT MATCH',
+    pickLabel: 'PICK YOUR BOOTH',
+    classicSub: 'The original sweeping timing bar',
+    threeDSub: 'Step up to the decks -- full 3D',
+    createClassic: () => createBeatMatchGame(),
+    createThreeD: () => createBeatMatch3DGame(),
+  });
+}
+
+// ---- Beat Match 3D ----------------------------------------------------------
+// The Three.js remake of Beat Match. Identical gameplay contract to the
+// classic version -- same sweep speed/ramp, same hitFor() judging, same
+// round count, same 'beatmatch' trophy -- only the rendering changed: a
+// neon DJ booth with a spinning turntable and a glowing orb that slides
+// along a suspended light rail in place of the flat timing bar. The scene
+// renders to an offscreen WebGL canvas (see getMinigame3DRenderer()) that
+// gets blitted into the main 2D canvas each frame, so input handling, CSS
+// scaling, and the rAF loop are all untouched, and the HUD is drawn over
+// the blit with the same monospace styling every other mini-game uses.
+function createBeatMatch3DGame() {
+  const T = window.THREE;
+  const { renderer, canvas: bm3DCanvas } = getMinigame3DRenderer('beatmatch');
+
+  // ---- gameplay state: mirrors createBeatMatchGame exactly
+  const ROUNDS = 5;
+  let phase = 'wait';        // 'wait' | 'result' | 'done'
+  let pos = -1, dir = 1;     // -1..1 sweep position along the rail
+  let speed = 1.15;
+  let round = 1;
+  let score = 0;
+  let combo = 0;
+  let lastHitLabel = '';
+  let resultTimer = 0;
+  let bestRecorded = false, isNewBest = false;
+  let t = 0;
+
+  function hitFor(p) {
+    const d = Math.abs(p);
+    if (d <= 0.08) return { label: 'PERFECT!', pts: 50, color: 0xffffff };
+    if (d <= 0.22) return { label: 'GOOD', pts: 25, color: 0xe0b040 };
+    if (d <= 0.45) return { label: 'OK', pts: 10, color: 0x9a90a8 };
+    return { label: 'MISS', pts: 0, color: 0x6a6070 };
+  }
+
+  // ---- scene ----
+  const RAIL_POS = new T.Vector3(0, 1.75, -3.2);
+  const RAIL_LEN = 3.0; // world-unit rail length, matches the classic bar's role
+  const scene = new T.Scene();
+  scene.background = new T.Color(0x0a0714);
+  scene.fog = new T.Fog(0x0a0714, 6, 16);
+
+  const camera = new T.PerspectiveCamera(55, VIEW_W / VIEW_H, 0.1, 30);
+  const CAM_POS = new T.Vector3(0, 1.35, 0.6);
+  const CAM_Z_IN = -0.35;
+  let camZ = CAM_POS.z;
+  camera.position.copy(CAM_POS);
+  camera.lookAt(RAIL_POS.x, RAIL_POS.y - 0.3, RAIL_POS.z);
+
+  // room: dark booth walls/floor, same purple family as the rest of the world
+  const wallMat = new T.MeshStandardMaterial({ color: 0x150f1c, roughness: 1 });
+  const wall = new T.Mesh(new T.PlaneGeometry(12, 7), wallMat);
+  wall.position.set(0, 2.6, -4.0);
+  wall.receiveShadow = true;
+  scene.add(wall);
+
+  const floorMat = new T.MeshStandardMaterial({ color: 0x1c1422, roughness: 0.9, metalness: 0.1 });
+  const floor = new T.Mesh(new T.PlaneGeometry(12, 14), floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(0, 0, -2);
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  // turntable: a spinning platter facing the player, speed tied to combo
+  const deck = new T.Group();
+  deck.position.set(0, 0.62, -1.6);
+  const platter = new T.Mesh(
+    new T.CylinderGeometry(0.42, 0.42, 0.05, 40),
+    new T.MeshStandardMaterial({ color: 0x14101a, roughness: 0.5, metalness: 0.4 })
+  );
+  platter.castShadow = true;
+  deck.add(platter);
+  const platterRing = new T.Mesh(
+    new T.TorusGeometry(0.42, 0.012, 10, 40),
+    new T.MeshStandardMaterial({ color: 0x4ad0ff, emissive: 0x1a5570, roughness: 0.4 })
+  );
+  platterRing.rotation.x = Math.PI / 2;
+  platterRing.position.y = 0.026;
+  deck.add(platterRing);
+  const tonearm = new T.Mesh(
+    new T.BoxGeometry(0.5, 0.03, 0.03),
+    new T.MeshStandardMaterial({ color: 0xd8d8e0, metalness: 0.7, roughness: 0.3 })
+  );
+  tonearm.position.set(0.32, 0.05, -0.32);
+  tonearm.rotation.y = -0.5;
+  deck.add(tonearm);
+  scene.add(deck);
+
+  // speaker stacks flanking the deck, tops pulse with the sweep
+  const speakerMat = new T.MeshStandardMaterial({ color: 0x1a1220, roughness: 0.85 });
+  const speakers = [-1.9, 1.9].map((x) => {
+    const spk = new T.Mesh(new T.BoxGeometry(0.55, 1.5, 0.55), speakerMat);
+    spk.position.set(x, 0.75, -2.6);
+    spk.castShadow = true;
+    spk.receiveShadow = true;
+    scene.add(spk);
+    const cone = new T.Mesh(
+      new T.CircleGeometry(0.16, 24),
+      new T.MeshStandardMaterial({ color: 0xe04858, emissive: 0x400810, roughness: 0.6 })
+    );
+    cone.position.set(x, 1.25, -2.32);
+    scene.add(cone);
+    return cone;
+  });
+
+  // suspended neon rail: the beat-match "timing bar" reimagined as a light
+  // fixture above the deck. GOOD band + PERFECT band are separate emissive
+  // segments so the target zones read at a glance, same proportions as the
+  // classic bar (0.44 width GOOD, 0.16 width PERFECT, both centered).
+  const railTrack = new T.Mesh(
+    new T.BoxGeometry(RAIL_LEN + 0.2, 0.05, 0.05),
+    new T.MeshStandardMaterial({ color: 0x2a2030, roughness: 0.7 })
+  );
+  railTrack.position.copy(RAIL_POS);
+  scene.add(railTrack);
+  const goodBand = new T.Mesh(
+    new T.BoxGeometry(RAIL_LEN * 0.44, 0.09, 0.09),
+    new T.MeshStandardMaterial({ color: 0xe0a030, emissive: 0x4a3010, transparent: true, opacity: 0.55, roughness: 0.5 })
+  );
+  goodBand.position.copy(RAIL_POS);
+  scene.add(goodBand);
+  const perfectBand = new T.Mesh(
+    new T.BoxGeometry(RAIL_LEN * 0.16, 0.11, 0.11),
+    new T.MeshStandardMaterial({ color: 0xf4ecd8, emissive: 0x888078, transparent: true, opacity: 0.7, roughness: 0.4 })
+  );
+  perfectBand.position.copy(RAIL_POS);
+  scene.add(perfectBand);
+
+  // hanging support cables, purely cosmetic
+  [-RAIL_LEN / 2 - 0.1, RAIL_LEN / 2 + 0.1].forEach((x) => {
+    const cable = new T.Mesh(
+      new T.CylinderGeometry(0.008, 0.008, 1.1, 6),
+      new T.MeshStandardMaterial({ color: 0x241a2a, roughness: 0.9 })
+    );
+    cable.position.set(x, RAIL_POS.y + 0.55, RAIL_POS.z);
+    scene.add(cable);
+  });
+
+  // glowing orb: slides along the rail with `pos`, flashes hit color on result
+  const orb = new T.Mesh(
+    new T.SphereGeometry(0.09, 20, 20),
+    new T.MeshStandardMaterial({ color: 0x4ad0ff, emissive: 0x0f3a4a, emissiveIntensity: 1.2, roughness: 0.3 })
+  );
+  orb.castShadow = true;
+  scene.add(orb);
+  const orbGlow = new T.PointLight(0x4ad0ff, 0.9, 4);
+  scene.add(orbGlow);
+
+  function orbX(p) { return RAIL_POS.x + p * (RAIL_LEN / 2 - 0.05); }
+  orb.position.set(orbX(pos), RAIL_POS.y, RAIL_POS.z);
+  orbGlow.position.copy(orb.position);
+
+  // lights: dim ambient plus the two accent colors the classic HUD uses
+  scene.add(new T.AmbientLight(0x302840, 0.7));
+  const spot = new T.SpotLight(0xffe2c0, 0.9, 14, 0.5, 0.5);
+  spot.position.set(0, 3.4, -1.0);
+  spot.target = deck;
+  spot.castShadow = true;
+  spot.shadow.mapSize.set(1024, 1024);
+  scene.add(spot);
+
+  // impact feedback state
+  let shakeT = 0;
+  let impactRing = null, impactT = 0;
+
+  function onHit(res) {
+    score += res.pts;
+    combo = res.pts > 0 ? combo + 1 : 0;
+    lastHitLabel = res.label;
+    orb.material.color.setHex(res.color);
+    orb.material.emissive.setHex(res.color);
+    orbGlow.color.setHex(res.color);
+    shakeT = res.pts > 0 ? 0.16 : 0.22;
+    if (impactRing) disposeImpactRing();
+    impactRing = new T.Mesh(
+      new T.TorusGeometry(0.09, 0.012, 8, 32),
+      new T.MeshBasicMaterial({ color: res.color, transparent: true, opacity: 0.9 })
+    );
+    impactRing.position.copy(orb.position);
+    scene.add(impactRing);
+    impactT = 0;
+    phase = 'result';
+    resultTimer = 0.7;
+  }
+
+  function disposeImpactRing() {
+    if (!impactRing) return;
+    scene.remove(impactRing);
+    impactRing.geometry.dispose();
+    impactRing.material.dispose();
+    impactRing = null;
+  }
+
+  // Full teardown -- called right before every exitMinigame().
+  function cleanup() {
+    disposeImpactRing();
+    scene.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
+        else obj.material.dispose();
+      }
+    });
+    scene.clear();
+  }
+  function leave() { cleanup(); exitMinigame(); }
+
+  return {
+    update(dt) {
+      t += dt;
+
+      if (phase === 'wait') {
+        pos += dir * dt * speed;
+        if (pos >= 1) { pos = 1; dir = -1; }
+        if (pos <= -1) { pos = -1; dir = 1; }
+        if (interactPressed) onHit(hitFor(pos));
+      } else if (phase === 'result') {
+        resultTimer -= dt;
+        if (resultTimer <= 0) {
+          if (round >= ROUNDS) { phase = 'done'; }
+          else {
+            round++; speed += 0.15; pos = -1; dir = 1; phase = 'wait';
+            orb.material.color.setHex(0x4ad0ff);
+            orb.material.emissive.setHex(0x0f3a4a);
+            orbGlow.color.setHex(0x4ad0ff);
+            disposeImpactRing();
+          }
+        }
+      } else if (phase === 'done') {
+        if (!bestRecorded) { isNewBest = recordMinigameScore('beatmatch', score); bestRecorded = true; }
+        if (interactPressed) { leave(); return; }
+      }
+
+      orb.position.set(orbX(pos), RAIL_POS.y, RAIL_POS.z);
+      orbGlow.position.copy(orb.position);
+
+      // deck spins faster with a hot combo, and pulses on each result
+      deck.rotation.y += dt * (0.6 + combo * 0.35);
+      const pulse = 0.7 + Math.sin(t * 4) * 0.15;
+      speakers.forEach((cone) => { cone.material.emissiveIntensity = pulse; });
+
+      if (impactRing) {
+        impactT += dt;
+        const k = Math.min(1, impactT / 0.35);
+        impactRing.scale.setScalar(1 + k * 3);
+        impactRing.material.opacity = 0.9 * (1 - k);
+      }
+
+      // camera: dolly in slightly on a result, gentle idle sway, decaying shake
+      const wantZ = (phase === 'result' || phase === 'done') ? CAM_Z_IN : CAM_POS.z;
+      camZ += (wantZ - camZ) * Math.min(1, dt * 5);
+      const sway = Math.sin(t * 0.7) * 0.02;
+      camera.position.set(CAM_POS.x + sway, CAM_POS.y + Math.sin(t * 0.9) * 0.01, camZ);
+      if (shakeT > 0) {
+        shakeT -= dt;
+        const s = Math.max(0, shakeT / 0.22) * 0.025;
+        camera.position.x += (Math.random() - 0.5) * s;
+        camera.position.y += (Math.random() - 0.5) * s;
+      }
+      camera.lookAt(RAIL_POS.x, RAIL_POS.y - 0.3, RAIL_POS.z);
+
+      // X always bails out early, no matter the phase
+      if (buyPressed) { leave(); return; }
+    },
+    draw() {
+      renderer.render(scene, camera);
+      ctx.drawImage(bm3DCanvas, 0, 0);
+
+      // HUD: same layout and styling as the classic version
+      const cx = VIEW_W / 2;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#4ad0ff';
+      ctx.font = 'bold 26px monospace';
+      ctx.fillText('BEAT MATCH 3D', cx, 60);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = '15px monospace';
+      ctx.fillText(`SCORE ${score}   BEAT ${Math.min(round, ROUNDS)}/${ROUNDS}   COMBO x${combo}`, cx, 84);
+
+      ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#4ad0ff' : '#f4ecd8';
+      ctx.font = 'bold 17px monospace';
+      if (phase === 'wait') ctx.fillText('- TAP E ON THE BEAT -', cx, 520);
+      else if (phase === 'result') ctx.fillText(lastHitLabel, cx, 520);
+      else if (phase === 'done') ctx.fillText(`FINAL SCORE: ${score} - PRESS E TO LEAVE`, cx, 520);
+
+      if (phase === 'done') {
+        ctx.font = '14px monospace';
+        ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
+        ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('beatmatch')}`, cx, 542);
+      }
+
+      ctx.fillStyle = '#6a6070';
+      ctx.font = '13px monospace';
+      ctx.fillText('X to walk away anytime', cx, phase === 'done' ? 562 : 544);
+    },
+  };
+}
+
 // Beat Jam: a freeform MPC-style pad session, not a scored mini-game at
 // all -- four beat pads (Kick, Snare, Hi-Hat, Keys) arranged in a cross
 // that lines up 1:1 with the d-pad/arrow keys, so \u25B2\u25BC\u25C0\u25B6
@@ -1472,6 +1818,289 @@ function createBeatJamGame() {
         ctx.fillText(p.label, x, y + 8);
         ctx.font = '20px monospace';
         ctx.fillText(p.hint, x, y - 26);
+      });
+
+      ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#8cff5f' : '#f4ecd8';
+      ctx.font = 'bold 17px monospace';
+      if (phase === 'jam') ctx.fillText('- \u25B2\u25BC\u25C0\u25B6 OR TAP A PAD TO PLAY -', cx, 562);
+      else ctx.fillText("TIME'S UP! NICE SET - PRESS E TO LEAVE", cx, 562);
+
+      ctx.fillStyle = '#6a6070';
+      ctx.font = '13px monospace';
+      ctx.fillText('X to walk away anytime', cx, 584);
+    },
+  };
+}
+
+// ---- beat jam mode chooser --------------------------------------------------
+function createBeatJamModeSelect() {
+  return createModeSelectMenu({
+    title: 'BEAT JAM',
+    pickLabel: 'PICK YOUR RIG',
+    classicSub: 'The original flat four-pad MPC',
+    threeDSub: 'Get hands-on with the machine -- full 3D',
+    createClassic: () => createBeatJamGame(),
+    createThreeD: () => createBeatJam3DGame(),
+  });
+}
+
+// ---- Beat Jam 3D --------------------------------------------------------------
+// The Three.js remake of Beat Jam. Identical freeform contract to the
+// classic version -- same four pads, same d-pad/arrow-key mapping, same
+// kick/snare/hat/keys synths, same 30-second no-score jam window -- only
+// the rendering changed: a real drum-machine chassis on a stand with four
+// physical pads that depress and light up when hit, instead of flat
+// squares. onPointerDown keeps using the exact same view-space hit zones
+// as the classic version (see padAt()) so touch play is untouched; only
+// what's drawn under those zones is new. Renders to an offscreen WebGL
+// canvas (see getMinigame3DRenderer()) blitted into the main 2D canvas
+// each frame, so input handling, CSS scaling, and the rAF loop are all
+// untouched, and the HUD is drawn over the blit with the same monospace
+// styling every other mini-game uses.
+function createBeatJam3DGame() {
+  const T = window.THREE;
+  const { renderer, canvas: jam3DCanvas } = getMinigame3DRenderer('beatjam');
+
+  const TIME_LIMIT = 30;
+  const cx = VIEW_W / 2, cy = 330;
+  const OFFSET = 126, PAD = 116;
+  const KEY_NOTES = [60, 63, 65, 67, 70];
+
+  const PADS = [
+    { id: 'snare', label: 'SNARE',  hint: '\u25B2', key: 'arrowup',    dx: 0,       dy: -OFFSET, color: 0x4ad0ff, flash: 0 },
+    { id: 'kick',  label: 'KICK',   hint: '\u25BC', key: 'arrowdown',  dx: 0,       dy: OFFSET,  color: 0xe0603a, flash: 0 },
+    { id: 'hihat', label: 'HI-HAT', hint: '\u25C0', key: 'arrowleft',  dx: -OFFSET, dy: 0,       color: 0xe0b040, flash: 0 },
+    { id: 'keys',  label: 'KEYS',   hint: '\u25B6', key: 'arrowright', dx: OFFSET,  dy: 0,       color: 0x8cff5f, flash: 0 },
+  ];
+
+  let timeLeft = TIME_LIMIT;
+  let hits = 0;
+  let keyIdx = 0;
+  let phase = 'jam'; // jam | done
+  let t = 0;
+  const prevKey = {};
+
+  // ---- scene ----
+  const MPC_POS = new T.Vector3(0, 1.25, -2.5);
+  const scene = new T.Scene();
+  scene.background = new T.Color(0x0c0a12);
+  scene.fog = new T.Fog(0x0c0a12, 6, 16);
+
+  const camera = new T.PerspectiveCamera(50, VIEW_W / VIEW_H, 0.1, 30);
+  const CAM_POS = new T.Vector3(0, 1.3, 0.85);
+  camera.position.copy(CAM_POS);
+  camera.lookAt(MPC_POS.x, MPC_POS.y, MPC_POS.z);
+
+  const wall = new T.Mesh(
+    new T.PlaneGeometry(12, 7),
+    new T.MeshStandardMaterial({ color: 0x18101e, roughness: 1 })
+  );
+  wall.position.set(0, 2.6, -4.0);
+  wall.receiveShadow = true;
+  scene.add(wall);
+  const floor = new T.Mesh(
+    new T.PlaneGeometry(12, 14),
+    new T.MeshStandardMaterial({ color: 0x201828, roughness: 0.95 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(0, 0, -2);
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  // drum-machine chassis: a dark panel with a raised bezel, facing the
+  // player like a wall-mounted MPC -- keeps the cross layout screen-facing
+  // so it maps cleanly onto the same tap zones the classic version uses.
+  const chassisGroup = new T.Group();
+  chassisGroup.position.copy(MPC_POS);
+  scene.add(chassisGroup);
+  const bezel = new T.Mesh(
+    new T.BoxGeometry(1.3, 1.3, 0.16),
+    new T.MeshStandardMaterial({ color: 0x241a2a, roughness: 0.6, metalness: 0.25 })
+  );
+  bezel.castShadow = true;
+  bezel.receiveShadow = true;
+  chassisGroup.add(bezel);
+  const bezelTrim = new T.Mesh(
+    new T.TorusGeometry(0.58, 0.02, 8, 4),
+    new T.MeshStandardMaterial({ color: 0x5a4a6a, roughness: 0.4, metalness: 0.5 })
+  );
+  bezelTrim.rotation.z = Math.PI / 4;
+  bezelTrim.position.z = 0.081;
+  chassisGroup.add(bezelTrim);
+
+  // one pad per PADS entry, positioned proportionally to the classic
+  // OFFSET layout and colored to match; each depresses on hit
+  const WORLD_OFFSET = 0.32, WORLD_PAD = 0.42;
+  const padMeshes = {};
+  PADS.forEach((p) => {
+    const mat = new T.MeshStandardMaterial({ color: 0x2c2436, emissive: 0x000000, roughness: 0.55, metalness: 0.15 });
+    const pad = new T.Mesh(new T.BoxGeometry(WORLD_PAD, WORLD_PAD, 0.1), mat);
+    pad.position.set(
+      (p.dx / OFFSET) * WORLD_OFFSET,
+      -(p.dy / OFFSET) * WORLD_OFFSET,
+      0.08 + 0.05
+    );
+    pad.castShadow = true;
+    pad.receiveShadow = true;
+    chassisGroup.add(pad);
+    padMeshes[p.id] = pad;
+  });
+
+  // lights: dim ambient + a spot on the chassis, plus a soft rim light
+  scene.add(new T.AmbientLight(0x302840, 0.75));
+  const spot = new T.SpotLight(0xffe2c0, 0.9, 14, 0.55, 0.5);
+  spot.position.set(0, 3.2, -1.4);
+  spot.target = chassisGroup;
+  spot.castShadow = true;
+  spot.shadow.mapSize.set(1024, 1024);
+  scene.add(spot);
+
+  let shakeT = 0;
+  let flashRings = [];
+
+  function triggerPad(p) {
+    p.flash = 1;
+    hits++;
+    const mesh = padMeshes[p.id];
+    mesh.userData.pressT = 0.001; // kicks off the press-in animation
+    const worldPos = new T.Vector3();
+    mesh.getWorldPosition(worldPos);
+    worldPos.z += 0.06;
+    const ring = new T.Mesh(
+      new T.TorusGeometry(0.22, 0.012, 8, 28),
+      new T.MeshBasicMaterial({ color: p.color, transparent: true, opacity: 0.9 })
+    );
+    ring.position.copy(worldPos);
+    scene.add(ring);
+    flashRings.push({ mesh: ring, life: 0 });
+    shakeT = Math.min(shakeT + 0.05, 0.14);
+
+    if (!music.ctx) return;
+    const time = music.ctx.currentTime + 0.02;
+    if (p.id === 'kick') music.kick(time);
+    else if (p.id === 'snare') music.snare(time);
+    else if (p.id === 'hihat') music.hat(time, false, 0.16);
+    else if (p.id === 'keys') {
+      music.note(time, 'triangle', KEY_NOTES[keyIdx % KEY_NOTES.length], 0.22, 0.09, 0.08);
+      keyIdx++;
+    }
+  }
+
+  function padAt(vx, vy) {
+    return PADS.find((p) => {
+      const x = cx + p.dx, y = cy + p.dy;
+      return Math.abs(vx - x) < PAD / 2 && Math.abs(vy - y) < PAD / 2;
+    });
+  }
+
+  // Full teardown -- called right before every exitMinigame().
+  function cleanup() {
+    flashRings.forEach((r) => { scene.remove(r.mesh); r.mesh.geometry.dispose(); r.mesh.material.dispose(); });
+    flashRings = [];
+    scene.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
+        else obj.material.dispose();
+      }
+    });
+    scene.clear();
+  }
+  function leave() { cleanup(); exitMinigame(); }
+
+  return {
+    // Same view-space hit zones as the classic version -- see padAt() above.
+    onPointerDown(vx, vy) {
+      if (phase !== 'jam') return;
+      const p = padAt(vx, vy);
+      if (p) triggerPad(p);
+    },
+    update(dt) {
+      t += dt;
+      if (buyPressed) { leave(); return; }
+
+      if (phase === 'jam') {
+        timeLeft -= dt;
+        if (timeLeft <= 0) { timeLeft = 0; phase = 'done'; }
+
+        PADS.forEach((p) => {
+          const down = !!keys[p.key];
+          if (down && !prevKey[p.key]) triggerPad(p);
+          prevKey[p.key] = down;
+          p.flash = Math.max(0, p.flash - dt * 3.2);
+        });
+      } else if (phase === 'done') {
+        if (interactPressed) { leave(); return; }
+      }
+
+      // pads glow with their color while lit and ease back to neutral,
+      // with a quick press-in/out motion driven by the same flash timer
+      PADS.forEach((p) => {
+        const mesh = padMeshes[p.id];
+        mesh.material.emissive.setHex(p.flash > 0 ? p.color : 0x000000);
+        mesh.material.emissiveIntensity = p.flash;
+        const restZ = 0.08 + 0.05;
+        const pressedZ = restZ - 0.035;
+        const targetZ = p.flash > 0.6 ? pressedZ : restZ;
+        mesh.position.z += (targetZ - mesh.position.z) * Math.min(1, dt * 14);
+      });
+
+      flashRings = flashRings.filter((r) => {
+        r.life += dt;
+        const k = Math.min(1, r.life / 0.35);
+        r.mesh.scale.setScalar(1 + k * 2.4);
+        r.mesh.material.opacity = 0.9 * (1 - k);
+        if (k >= 1) { scene.remove(r.mesh); r.mesh.geometry.dispose(); r.mesh.material.dispose(); return false; }
+        return true;
+      });
+
+      // gentle idle sway plus a tiny shake on each hit, decaying fast so
+      // rapid mashing reads as a steady vibration rather than a jolt
+      const sway = Math.sin(t * 0.55) * 0.012;
+      camera.position.set(CAM_POS.x + sway, CAM_POS.y + Math.sin(t * 0.75) * 0.007, CAM_POS.z);
+      if (shakeT > 0) {
+        shakeT -= dt;
+        const s = Math.max(0, shakeT / 0.14) * 0.015;
+        camera.position.x += (Math.random() - 0.5) * s;
+        camera.position.y += (Math.random() - 0.5) * s;
+      }
+      camera.lookAt(MPC_POS.x, MPC_POS.y, MPC_POS.z);
+    },
+    draw() {
+      renderer.render(scene, camera);
+      ctx.drawImage(jam3DCanvas, 0, 0);
+
+      // HUD: same layout and styling as the classic version
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#e0b040';
+      ctx.font = 'bold 26px monospace';
+      ctx.fillText('BEAT JAM 3D', cx, 56);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = '15px monospace';
+      ctx.fillText(`HITS ${hits}`, cx, 78);
+
+      const barW = 260, barX = cx - barW / 2, barY = 92;
+      ctx.fillStyle = 'rgba(244,236,216,0.15)';
+      ctx.fillRect(barX, barY, barW, 8);
+      const frac = timeLeft / TIME_LIMIT;
+      ctx.fillStyle = frac > 0.3 ? '#8cff5f' : '#e0603a';
+      ctx.fillRect(barX, barY, barW * Math.max(0, frac), 8);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = 'bold 14px monospace';
+      ctx.fillText(`${Math.ceil(timeLeft)}s`, cx, barY + 24);
+
+      // pad labels/hints over the 3D chassis, same positions as the
+      // classic version's flat squares
+      PADS.forEach((p) => {
+        const x = cx + p.dx, y = cy + p.dy;
+        const lit = p.flash > 0;
+        ctx.fillStyle = lit ? '#181418' : '#f4ecd8';
+        ctx.globalAlpha = lit ? 0.5 + p.flash * 0.5 : 0.9;
+        ctx.font = 'bold 20px monospace';
+        ctx.fillText(p.label, x, y + 8);
+        ctx.font = '18px monospace';
+        ctx.fillText(p.hint, x, y - 26);
+        ctx.globalAlpha = 1;
       });
 
       ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#8cff5f' : '#f4ecd8';
@@ -1662,6 +2291,388 @@ function createWhackPigeonGame() {
   };
 }
 
+// ---- whack-a-pigeon mode chooser -------------------------------------------
+function createWhackPigeonModeSelect() {
+  return createModeSelectMenu({
+    title: 'WHACK-A-PIGEON',
+    pickLabel: 'PICK YOUR LOFT',
+    classicSub: 'The original flat six-hole ledge',
+    threeDSub: 'Get up in the rafters -- full 3D',
+    createClassic: () => createWhackPigeonGame(),
+    createThreeD: () => createWhackPigeon3DGame(),
+  });
+}
+
+// ---- Whack-a-Pigeon 3D -------------------------------------------------------
+// The Three.js remake of Whack-a-Pigeon. Identical gameplay contract to the
+// classic version -- same PERFECT/GOOD/OK reaction banding, same shrinking
+// up-window, same round count, same 'whackpigeon' trophy -- only the
+// rendering changed: a real stone choir-loft ledge with six holes you're
+// looking into, a low-poly pigeon that pops up and flaps in place of the
+// drawn sprite, and a whack that scatters feathers instead of just a hit
+// label. Renders to an offscreen WebGL canvas (see getMinigame3DRenderer())
+// blitted into the main 2D canvas each frame, so input handling, CSS
+// scaling, and the rAF loop are all untouched, and the HUD is drawn over
+// the blit with the same monospace styling every other mini-game uses.
+function createWhackPigeon3DGame() {
+  const T = window.THREE;
+  const { renderer, canvas: wap3DCanvas } = getMinigame3DRenderer('whackpigeon');
+
+  // ---- gameplay state: mirrors createWhackPigeonGame exactly
+  const ROUNDS = 8;
+  let phase = 'up';          // 'up' | 'result' | 'done'
+  let round = 1;
+  let score = 0;
+  let combo = 0;
+  let lastHitLabel = '';
+  let resultTimer = 0;
+  let upTimer = 0;
+  let upWindow = 1.1;
+  let holeIndex = 0;
+  let t = 0;
+  let bestRecorded = false, isNewBest = false;
+
+  // 2x3 grid of holes on the ledge, world-space equivalent of the classic
+  // screen-space layout (top row / bottom row, left-center-right)
+  const HOLES = [
+    { dx: -0.5, dy: 0.26 }, { dx: 0, dy: 0.26 }, { dx: 0.5, dy: 0.26 },
+    { dx: -0.5, dy: -0.26 }, { dx: 0, dy: -0.26 }, { dx: 0.5, dy: -0.26 },
+  ];
+
+  function pickHole() {
+    let next = Math.floor(Math.random() * HOLES.length);
+    if (HOLES.length > 1 && next === holeIndex) next = (next + 1) % HOLES.length;
+    return next;
+  }
+  holeIndex = pickHole();
+
+  function hitFor(frac) {
+    if (frac <= 0.35) return { label: 'PERFECT!', pts: 50 };
+    if (frac <= 0.65) return { label: 'GOOD', pts: 25 };
+    return { label: 'OK', pts: 10 };
+  }
+
+  // ---- scene ----
+  const LEDGE_POS = new T.Vector3(0, 1.15, -2.6);
+  const scene = new T.Scene();
+  scene.background = new T.Color(0x0a0c10);
+  scene.fog = new T.Fog(0x0a0c10, 6, 16);
+
+  const camera = new T.PerspectiveCamera(55, VIEW_W / VIEW_H, 0.1, 30);
+  const CAM_POS = new T.Vector3(0, 1.35, 0.75);
+  const CAM_Z_IN = -0.15;
+  let camZ = CAM_POS.z;
+  camera.position.copy(CAM_POS);
+  camera.lookAt(LEDGE_POS.x, LEDGE_POS.y, LEDGE_POS.z);
+
+  // stone backdrop + floor, cool choir-loft palette
+  const wall = new T.Mesh(
+    new T.PlaneGeometry(12, 7),
+    new T.MeshStandardMaterial({ color: 0x161a1c, roughness: 1 })
+  );
+  wall.position.set(0, 2.6, -4.0);
+  wall.receiveShadow = true;
+  scene.add(wall);
+  const floor = new T.Mesh(
+    new T.PlaneGeometry(12, 14),
+    new T.MeshStandardMaterial({ color: 0x1c2020, roughness: 0.95 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(0, 0, -2);
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  // ledge: a stone slab with six holes recessed into its face
+  const ledgeGroup = new T.Group();
+  ledgeGroup.position.copy(LEDGE_POS);
+  scene.add(ledgeGroup);
+  const ledgeMat = new T.MeshStandardMaterial({ color: 0x3a3c40, roughness: 0.85 });
+  const slab = new T.Mesh(new T.BoxGeometry(1.9, 1.1, 0.4), ledgeMat);
+  slab.castShadow = true;
+  slab.receiveShadow = true;
+  ledgeGroup.add(slab);
+
+  // hole rims + dark recesses, plus a countdown ring per hole that shrinks
+  // and shifts green->red as the up-window runs out
+  const holeMeshes = HOLES.map((h) => {
+    const recess = new T.Mesh(
+      new T.CircleGeometry(0.16, 24),
+      new T.MeshStandardMaterial({ color: 0x0c0e10, roughness: 0.9 })
+    );
+    recess.position.set(h.dx, h.dy, 0.201);
+    ledgeGroup.add(recess);
+    const rim = new T.Mesh(
+      new T.TorusGeometry(0.16, 0.012, 8, 28),
+      new T.MeshStandardMaterial({ color: 0x241a2a, roughness: 0.8 })
+    );
+    rim.position.set(h.dx, h.dy, 0.205);
+    ledgeGroup.add(rim);
+    const countdown = new T.Mesh(
+      new T.TorusGeometry(0.19, 0.01, 8, 28),
+      new T.MeshBasicMaterial({ color: 0x8cff5f, transparent: true, opacity: 0 })
+    );
+    countdown.position.set(h.dx, h.dy, 0.21);
+    ledgeGroup.add(countdown);
+    return { recess, rim, countdown };
+  });
+
+  // pigeon: built from primitives so it needs no new assets, same
+  // grey/gold/cream palette the drawn sprite used
+  const pigeonMats = {
+    body: new T.MeshStandardMaterial({ color: 0x8a8a94, roughness: 0.8 }),
+    head: new T.MeshStandardMaterial({ color: 0xa8a8b2, roughness: 0.8 }),
+    beak: new T.MeshStandardMaterial({ color: 0xe0a030, roughness: 0.6 }),
+    eye: new T.MeshBasicMaterial({ color: 0x181418 }),
+    wing: new T.MeshStandardMaterial({ color: 0x6a6a76, roughness: 0.85 }),
+    chest: new T.MeshStandardMaterial({ color: 0xd8c890, roughness: 0.8 }),
+  };
+  function makePigeon() {
+    const g = new T.Group();
+    const body = new T.Mesh(new T.SphereGeometry(0.11, 16, 12), pigeonMats.body);
+    body.scale.set(1, 0.85, 1.15);
+    body.castShadow = true;
+    g.add(body);
+    const head = new T.Mesh(new T.SphereGeometry(0.06, 14, 10), pigeonMats.head);
+    head.position.set(0, 0.09, 0.11);
+    g.add(head);
+    const beak = new T.Mesh(new T.ConeGeometry(0.018, 0.06, 8), pigeonMats.beak);
+    beak.rotation.x = Math.PI / 2;
+    beak.position.set(0, 0.08, 0.19);
+    g.add(beak);
+    const eyeL = new T.Mesh(new T.SphereGeometry(0.01, 8, 8), pigeonMats.eye);
+    eyeL.position.set(0.045, 0.1, 0.15);
+    g.add(eyeL);
+    const eyeR = eyeL.clone();
+    eyeR.position.x = -0.045;
+    g.add(eyeR);
+    const wingL = new T.Mesh(new T.SphereGeometry(0.08, 12, 8), pigeonMats.wing);
+    wingL.scale.set(0.6, 1, 1.6);
+    wingL.position.set(0.09, 0.02, -0.02);
+    g.add(wingL);
+    const wingR = wingL.clone();
+    wingR.position.x = -0.09;
+    g.add(wingR);
+    const chest = new T.Mesh(new T.SphereGeometry(0.06, 12, 10), pigeonMats.chest);
+    chest.position.set(0, -0.02, 0.1);
+    g.add(chest);
+    g.userData.wings = [wingL, wingR];
+    return g;
+  }
+  let pigeon = makePigeon();
+  ledgeGroup.add(pigeon);
+  let popFrac = 0;      // 0 = hidden in hole, 1 = fully popped up
+  let flyOffT = 0;       // used only during the 'FLEW OFF!' escape animation
+
+  function placePigeon() {
+    const h = HOLES[holeIndex];
+    const hiddenY = h.dy - 0.28;
+    const upY = h.dy + 0.02;
+    const bob = Math.sin(t * 10) * 0.012 * popFrac;
+    pigeon.position.set(h.dx, hiddenY + (upY - hiddenY) * popFrac + bob - flyOffT * flyOffT * 0.6, 0.32 + flyOffT * 0.3);
+    pigeon.userData.wings.forEach((w, i) => {
+      w.rotation.z = Math.sin(t * 16 + i * Math.PI) * 0.5 * (0.4 + popFrac);
+    });
+  }
+
+  // lights: cool ambient + a warm lantern spot on the ledge, plus the
+  // game's green accent as a soft rim light
+  scene.add(new T.AmbientLight(0x303840, 0.75));
+  const spot = new T.SpotLight(0xffe2c0, 0.95, 14, 0.5, 0.5);
+  spot.position.set(0, 3.4, -1.2);
+  spot.target = ledgeGroup;
+  spot.castShadow = true;
+  spot.shadow.mapSize.set(1024, 1024);
+  scene.add(spot);
+  const rim = new T.PointLight(0x8cff5f, 0.4, 6);
+  rim.position.set(0, 1.6, -1.8);
+  scene.add(rim);
+
+  let shakeT = 0;
+  let impactRing = null, impactT = 0;
+
+  function disposeImpactRing() {
+    if (!impactRing) return;
+    scene.remove(impactRing);
+    impactRing.geometry.dispose();
+    impactRing.material.dispose();
+    impactRing = null;
+  }
+
+  // a little feather-burst -- three small flattened spheres flung outward,
+  // reusing the wing material so no new assets are needed
+  let feathers = [];
+  function burstFeathers(worldPos) {
+    feathers.forEach((f) => { scene.remove(f.mesh); f.mesh.geometry.dispose(); f.mesh.material.dispose(); });
+    feathers = [];
+    for (let i = 0; i < 5; i++) {
+      const mesh = new T.Mesh(
+        new T.SphereGeometry(0.02, 6, 6),
+        new T.MeshStandardMaterial({ color: 0x6a6a76, roughness: 0.85, transparent: true, opacity: 1 })
+      );
+      mesh.scale.set(1, 0.3, 1.6);
+      mesh.position.copy(worldPos);
+      scene.add(mesh);
+      const ang = (i / 5) * Math.PI * 2 + Math.random() * 0.4;
+      feathers.push({ mesh, vx: Math.cos(ang) * 0.7, vy: 0.5 + Math.random() * 0.4, vz: Math.sin(ang) * 0.3, life: 0 });
+    }
+  }
+
+  function whack() {
+    const res = hitFor(upTimer / upWindow);
+    score += res.pts;
+    combo++;
+    lastHitLabel = res.label;
+    shakeT = res.label === 'PERFECT!' ? 0.22 : 0.12;
+    const worldPos = new T.Vector3();
+    pigeon.getWorldPosition(worldPos);
+    burstFeathers(worldPos);
+    disposeImpactRing();
+    impactRing = new T.Mesh(
+      new T.TorusGeometry(0.1, 0.012, 8, 28),
+      new T.MeshBasicMaterial({ color: 0x8cff5f, transparent: true, opacity: 0.9 })
+    );
+    impactRing.position.copy(worldPos);
+    scene.add(impactRing);
+    impactT = 0;
+    popFrac = 0; // whacked pigeon drops immediately
+    phase = 'result';
+    resultTimer = 0.6;
+  }
+
+  function flyOff() {
+    lastHitLabel = 'FLEW OFF!';
+    combo = 0;
+    shakeT = 0;
+    phase = 'result';
+    resultTimer = 0.6;
+  }
+
+  // Full teardown -- called right before every exitMinigame().
+  function cleanup() {
+    disposeImpactRing();
+    feathers.forEach((f) => { scene.remove(f.mesh); f.mesh.geometry.dispose(); f.mesh.material.dispose(); });
+    feathers = [];
+    scene.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
+        else obj.material.dispose();
+      }
+    });
+    scene.clear();
+  }
+  function leave() { cleanup(); exitMinigame(); }
+
+  return {
+    update(dt) {
+      t += dt;
+
+      if (phase === 'up') {
+        upTimer += dt;
+        popFrac = Math.min(1, popFrac + dt * 8); // quick pop-in, cosmetic only
+        if (interactPressed) whack();
+        else if (upTimer >= upWindow) flyOff();
+      } else if (phase === 'result') {
+        resultTimer -= dt;
+        if (lastHitLabel === 'FLEW OFF!') flyOffT = Math.min(1, flyOffT + dt * 2.2);
+        if (resultTimer <= 0) {
+          if (round >= ROUNDS) { phase = 'done'; }
+          else {
+            round++;
+            upWindow = Math.max(0.5, upWindow - 0.07);
+            holeIndex = pickHole();
+            upTimer = 0;
+            popFrac = 0;
+            flyOffT = 0;
+            phase = 'up';
+          }
+        }
+      } else if (phase === 'done') {
+        if (!bestRecorded) { isNewBest = recordMinigameScore('whackpigeon', score); bestRecorded = true; }
+        if (interactPressed) { leave(); return; }
+      }
+
+      placePigeon();
+      pigeon.visible = phase !== 'done' && popFrac > 0.01;
+
+      // countdown rings shrink and shift green->red while a hole is active
+      holeMeshes.forEach((hm, i) => {
+        if (i === holeIndex && phase === 'up') {
+          const frac = 1 - upTimer / upWindow;
+          hm.countdown.material.opacity = 0.9;
+          hm.countdown.scale.setScalar(0.7 + frac * 0.5);
+          const col = frac > 0.35 ? 0x8cff5f : 0xe0603a;
+          hm.countdown.material.color.setHex(col);
+        } else {
+          hm.countdown.material.opacity = Math.max(0, hm.countdown.material.opacity - dt * 4);
+        }
+      });
+
+      feathers.forEach((f) => {
+        f.life += dt;
+        f.mesh.position.x += f.vx * dt;
+        f.mesh.position.y += (f.vy - f.life * 1.8) * dt;
+        f.mesh.position.z += f.vz * dt;
+        f.mesh.rotation.z += dt * 6;
+        f.mesh.material.opacity = Math.max(0, 1 - f.life * 1.3);
+      });
+
+      if (impactRing) {
+        impactT += dt;
+        const k = Math.min(1, impactT / 0.35);
+        impactRing.scale.setScalar(1 + k * 2.4);
+        impactRing.material.opacity = 0.9 * (1 - k);
+      }
+
+      // camera: quick punch-in on a whack, gentle idle sway, decaying shake
+      const wantZ = phase === 'result' && lastHitLabel !== 'FLEW OFF!' ? CAM_Z_IN : CAM_POS.z;
+      camZ += (wantZ - camZ) * Math.min(1, dt * 6);
+      const sway = Math.sin(t * 0.6) * 0.015;
+      camera.position.set(CAM_POS.x + sway, CAM_POS.y + Math.sin(t * 0.8) * 0.008, camZ);
+      if (shakeT > 0) {
+        shakeT -= dt;
+        const s = Math.max(0, shakeT / 0.22) * 0.03;
+        camera.position.x += (Math.random() - 0.5) * s;
+        camera.position.y += (Math.random() - 0.5) * s;
+      }
+      camera.lookAt(LEDGE_POS.x, LEDGE_POS.y, LEDGE_POS.z);
+
+      // X always bails out early, no matter the phase
+      if (buyPressed) { leave(); return; }
+    },
+    draw() {
+      renderer.render(scene, camera);
+      ctx.drawImage(wap3DCanvas, 0, 0);
+
+      // HUD: same layout and styling as the classic version
+      const cx = VIEW_W / 2;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#8cff5f';
+      ctx.font = 'bold 26px monospace';
+      ctx.fillText('WHACK-A-PIGEON 3D', cx, 60);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = '15px monospace';
+      ctx.fillText(`SCORE ${score}   ROUND ${Math.min(round, ROUNDS)}/${ROUNDS}   COMBO x${combo}`, cx, 84);
+
+      ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#8cff5f' : '#f4ecd8';
+      ctx.font = 'bold 17px monospace';
+      if (phase === 'up') ctx.fillText('- TAP E TO WHACK IT -', cx, 520);
+      else if (phase === 'result') ctx.fillText(lastHitLabel, cx, 520);
+      else if (phase === 'done') ctx.fillText(`FINAL SCORE: ${score} - PRESS E TO LEAVE`, cx, 520);
+
+      if (phase === 'done') {
+        ctx.font = '14px monospace';
+        ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
+        ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('whackpigeon')}`, cx, 542);
+      }
+
+      ctx.fillStyle = '#6a6070';
+      ctx.font = '13px monospace';
+      ctx.fillText('X to walk away anytime', cx, phase === 'done' ? 562 : 544);
+    },
+  };
+}
+
 // Crate Digging: a needle sweeps down through a vertical stack of drawn
 // record sleeves; tap E to grab whichever one it's over. Every sleeve looks
 // the same (plain cardboard) until it's grabbed, then it flips over to
@@ -1816,6 +2827,331 @@ function createCrateDiggingGame() {
       ctx.fillStyle = '#6a6070';
       ctx.font = '13px monospace';
       ctx.fillText('X to walk away anytime', VIEW_W / 2, phase === 'dig' ? 454 : 486);
+    },
+  };
+}
+
+// ---- crate digging mode chooser --------------------------------------------
+function createCrateDiggingModeSelect() {
+  return createModeSelectMenu({
+    title: 'CRATE DIGGING',
+    pickLabel: 'PICK YOUR CRATE',
+    classicSub: 'The original flat sleeve stack',
+    threeDSub: 'Get your hands in the crate -- full 3D',
+    createClassic: () => createCrateDiggingGame(),
+    createThreeD: () => createCrateDigging3DGame(),
+  });
+}
+
+// ---- Crate Digging 3D -------------------------------------------------------
+// The Three.js remake of Crate Digging. Identical gameplay contract to the
+// classic version -- same weighted outcome pool, same sweep speed/ramp,
+// same round count, same 'cratedig' trophy -- only the rendering changed:
+// a real wooden crate holding six record sleeves you're looking down into,
+// a tonearm-style needle sweeping down the stack, and a grabbed sleeve that
+// pops forward and flips to reveal its color, with feedback scaled to how
+// good the find was. Renders to an offscreen WebGL canvas (see
+// getMinigame3DRenderer()) blitted into the main 2D canvas each frame, so
+// input handling, CSS scaling, and the rAF loop are all untouched, and the
+// HUD is drawn over the blit with the same monospace styling every other
+// mini-game uses.
+function createCrateDigging3DGame() {
+  const T = window.THREE;
+  const { renderer, canvas: crate3DCanvas } = getMinigame3DRenderer('cratedig');
+
+  // ---- gameplay state: mirrors createCrateDiggingGame exactly
+  const ROUNDS = 5;
+  const SLOTS = 6;
+  let phase = 'dig';        // 'dig' | 'result' | 'done'
+  let round = 1;
+  let score = 0;
+  let needlePos = 0, dir = 1;
+  let speed = 0.5;
+  let slots = [];
+  let grabbedIndex = -1;
+  let lastOutcome = null;
+  let resultTimer = 0;
+  let bestRecorded = false, isNewBest = false;
+  let t = 0;
+  const tally = { rare: 0, mixtape: 0, dud: 0 };
+
+  const OUTCOMES = [
+    { type: 'rare',    label: 'RARE 45!',       sub: 'A genuine find.',            pts: 100, color: 0xe0b040, weight: 1 },
+    { type: 'mixtape', label: 'SOMEONE\'S MIXTAPE', sub: 'Handwritten label, no track list.', pts: 30, color: 0x4870d0, weight: 2 },
+    { type: 'dud',     label: 'SCRATCHED DUD',  sub: 'Straight to the bargain bin.', pts: 0,   color: 0x6a6070, weight: 3 },
+  ];
+  function pickOutcome() {
+    const total = OUTCOMES.reduce((s, o) => s + o.weight, 0);
+    let r = Math.random() * total;
+    for (const o of OUTCOMES) { if (r < o.weight) return o; r -= o.weight; }
+    return OUTCOMES[OUTCOMES.length - 1];
+  }
+  function newStack() { slots = Array.from({ length: SLOTS }, pickOutcome); }
+  newStack();
+
+  // ---- scene ----
+  const CRATE_POS = new T.Vector3(0, 1.15, -2.6);
+  const CRATE_W = 1.5, CRATE_H = 1.9;
+  const scene = new T.Scene();
+  scene.background = new T.Color(0x0c0810);
+  scene.fog = new T.Fog(0x0c0810, 6, 16);
+
+  const camera = new T.PerspectiveCamera(52, VIEW_W / VIEW_H, 0.1, 30);
+  const CAM_POS = new T.Vector3(0, 1.35, 0.7);
+  const CAM_Z_IN = -0.3;
+  let camZ = CAM_POS.z;
+  camera.position.copy(CAM_POS);
+  camera.lookAt(CRATE_POS.x, CRATE_POS.y, CRATE_POS.z);
+
+  // shop backdrop: wall + floor, same purple family as the rest of the world
+  const wall = new T.Mesh(
+    new T.PlaneGeometry(12, 7),
+    new T.MeshStandardMaterial({ color: 0x1a1224, roughness: 1 })
+  );
+  wall.position.set(0, 2.6, -4.0);
+  wall.receiveShadow = true;
+  scene.add(wall);
+  const floor = new T.Mesh(
+    new T.PlaneGeometry(12, 14),
+    new T.MeshStandardMaterial({ color: 0x241a28, roughness: 0.95 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(0, 0, -2);
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  // wooden crate frame around the stack
+  const crateMat = new T.MeshStandardMaterial({ color: 0x7a5a34, roughness: 0.8 });
+  const crateGroup = new T.Group();
+  crateGroup.position.copy(CRATE_POS);
+  scene.add(crateGroup);
+  const frameThick = 0.07;
+  [
+    [0, CRATE_H / 2 + frameThick / 2, 0, CRATE_W + frameThick * 2, frameThick, 0.4],   // top
+    [0, -CRATE_H / 2 - frameThick / 2, 0, CRATE_W + frameThick * 2, frameThick, 0.4],  // bottom
+    [-CRATE_W / 2 - frameThick / 2, 0, 0, frameThick, CRATE_H, 0.4],                    // left
+    [CRATE_W / 2 + frameThick / 2, 0, 0, frameThick, CRATE_H, 0.4],                     // right
+  ].forEach(([x, y, z, w, h, d]) => {
+    const bar = new T.Mesh(new T.BoxGeometry(w, h, d), crateMat);
+    bar.position.set(x, y, z - 0.17);
+    bar.castShadow = true;
+    bar.receiveShadow = true;
+    crateGroup.add(bar);
+  });
+  const crateBack = new T.Mesh(
+    new T.PlaneGeometry(CRATE_W, CRATE_H),
+    new T.MeshStandardMaterial({ color: 0x14101a, roughness: 0.9 })
+  );
+  crateBack.position.set(0, 0, -0.37);
+  crateBack.receiveShadow = true;
+  crateGroup.add(crateBack);
+
+  // six sleeve slots stacked top to bottom, front face plain cardboard
+  // (alternating shades) until grabbed, then flip color to the outcome
+  const slotH = CRATE_H / SLOTS;
+  const sleeveMeshes = [];
+  for (let i = 0; i < SLOTS; i++) {
+    const sleeve = new T.Mesh(
+      new T.BoxGeometry(CRATE_W - 0.1, slotH - 0.03, 0.16),
+      new T.MeshStandardMaterial({ color: i % 2 === 0 ? 0x9a8058 : 0x8a7048, roughness: 0.85 })
+    );
+    sleeve.position.set(0, CRATE_H / 2 - slotH / 2 - i * slotH, -0.1);
+    sleeve.castShadow = true;
+    sleeve.receiveShadow = true;
+    crateGroup.add(sleeve);
+    sleeveMeshes.push(sleeve);
+  }
+
+  // sweeping needle: a glowing bar that travels down the crate, with a
+  // tonearm-style tip poking out the left side, 1:1 with the classic needle
+  const needle = new T.Mesh(
+    new T.BoxGeometry(CRATE_W + 0.5, 0.02, 0.02),
+    new T.MeshBasicMaterial({ color: 0xe04858 })
+  );
+  crateGroup.add(needle);
+  const needleTip = new T.Mesh(
+    new T.ConeGeometry(0.06, 0.14, 3),
+    new T.MeshBasicMaterial({ color: 0xe04858 })
+  );
+  needleTip.rotation.z = Math.PI / 2;
+  crateGroup.add(needleTip);
+
+  function needleY() { return CRATE_H / 2 - needlePos * CRATE_H; }
+  needle.position.y = needleY();
+  needleTip.position.set(-CRATE_W / 2 - 0.32, needleY(), 0);
+
+  // lights: warm spot into the crate, dim ambient, matching darts' palette
+  scene.add(new T.AmbientLight(0x352c40, 0.8));
+  const spot = new T.SpotLight(0xffe2c0, 1.0, 14, 0.5, 0.45);
+  spot.position.set(0, 3.4, -1.2);
+  spot.target = crateGroup;
+  spot.castShadow = true;
+  spot.shadow.mapSize.set(1024, 1024);
+  scene.add(spot);
+
+  let shakeT = 0;
+  let impactRing = null, impactT = 0;
+
+  function disposeImpactRing() {
+    if (!impactRing) return;
+    scene.remove(impactRing);
+    impactRing.geometry.dispose();
+    impactRing.material.dispose();
+    impactRing = null;
+  }
+
+  function grabSlot() {
+    grabbedIndex = Math.min(SLOTS - 1, Math.floor(needlePos * SLOTS));
+    lastOutcome = slots[grabbedIndex];
+    score += lastOutcome.pts;
+    tally[lastOutcome.type]++;
+
+    const mesh = sleeveMeshes[grabbedIndex];
+    mesh.material.color.setHex(lastOutcome.color);
+    mesh.material.emissive = new T.Color(lastOutcome.color);
+    mesh.material.emissiveIntensity = 0.3;
+
+    // rare finds pop forward harder and shake the camera more -- the "feel"
+    // scales with how good the pull was, same spirit as darts' impact shake
+    const popZ = lastOutcome.type === 'rare' ? 0.32 : lastOutcome.type === 'mixtape' ? 0.2 : 0.1;
+    mesh.userData.popZ = popZ;
+    shakeT = lastOutcome.type === 'rare' ? 0.3 : lastOutcome.type === 'mixtape' ? 0.16 : 0.08;
+
+    disposeImpactRing();
+    const worldPos = new T.Vector3();
+    mesh.getWorldPosition(worldPos);
+    impactRing = new T.Mesh(
+      new T.TorusGeometry(0.14, 0.014, 8, 32),
+      new T.MeshBasicMaterial({ color: lastOutcome.color, transparent: true, opacity: 0.9 })
+    );
+    impactRing.position.copy(worldPos);
+    impactRing.position.z += 0.05;
+    scene.add(impactRing);
+    impactT = 0;
+
+    phase = 'result';
+    resultTimer = 1.0;
+  }
+
+  function resetSlot(i) {
+    const mesh = sleeveMeshes[i];
+    mesh.material.color.setHex(i % 2 === 0 ? 0x9a8058 : 0x8a7048);
+    mesh.material.emissiveIntensity = 0;
+    mesh.userData.popZ = 0;
+    mesh.position.z = -0.1;
+  }
+
+  // Full teardown -- called right before every exitMinigame().
+  function cleanup() {
+    disposeImpactRing();
+    scene.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
+        else obj.material.dispose();
+      }
+    });
+    scene.clear();
+  }
+  function leave() { cleanup(); exitMinigame(); }
+
+  return {
+    update(dt) {
+      t += dt;
+
+      if (phase === 'dig') {
+        needlePos += dir * dt * speed;
+        if (needlePos >= 1) { needlePos = 1; dir = -1; }
+        if (needlePos <= 0) { needlePos = 0; dir = 1; }
+        if (interactPressed) grabSlot();
+      } else if (phase === 'result') {
+        resultTimer -= dt;
+        if (resultTimer <= 0) {
+          if (round >= ROUNDS) { phase = 'done'; }
+          else {
+            resetSlot(grabbedIndex);
+            round++;
+            speed += 0.1;
+            needlePos = 0; dir = 1;
+            grabbedIndex = -1;
+            newStack();
+            disposeImpactRing();
+            phase = 'dig';
+          }
+        }
+      } else if (phase === 'done') {
+        if (!bestRecorded) { isNewBest = recordMinigameScore('cratedig', score); bestRecorded = true; }
+        if (interactPressed) { leave(); return; }
+      }
+
+      needle.position.y = needleY();
+      needle.visible = phase === 'dig';
+      needleTip.position.y = needleY();
+      needleTip.visible = phase === 'dig';
+
+      // grabbed sleeve eases forward out of the crate, then eases back on reset
+      sleeveMeshes.forEach((mesh) => {
+        const targetZ = -0.1 + (mesh.userData.popZ || 0);
+        mesh.position.z += (targetZ - mesh.position.z) * Math.min(1, dt * 8);
+      });
+
+      if (impactRing) {
+        impactT += dt;
+        const k = Math.min(1, impactT / 0.4);
+        impactRing.scale.setScalar(1 + k * 3);
+        impactRing.material.opacity = 0.9 * (1 - k);
+      }
+
+      // camera: dolly in on a result, gentle idle sway, decaying impact shake
+      const wantZ = (phase === 'result' || phase === 'done') ? CAM_Z_IN : CAM_POS.z;
+      camZ += (wantZ - camZ) * Math.min(1, dt * 5);
+      const sway = Math.sin(t * 0.6) * 0.015;
+      camera.position.set(CAM_POS.x + sway, CAM_POS.y + Math.sin(t * 0.8) * 0.008, camZ);
+      if (shakeT > 0) {
+        shakeT -= dt;
+        const s = Math.max(0, shakeT / 0.3) * 0.035;
+        camera.position.x += (Math.random() - 0.5) * s;
+        camera.position.y += (Math.random() - 0.5) * s;
+      }
+      camera.lookAt(CRATE_POS.x, CRATE_POS.y, CRATE_POS.z);
+
+      // X always bails out early, no matter the phase
+      if (buyPressed) { leave(); return; }
+    },
+    draw() {
+      renderer.render(scene, camera);
+      ctx.drawImage(crate3DCanvas, 0, 0);
+
+      // HUD: same layout and styling as the classic version
+      const cx = VIEW_W / 2;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#e0b040';
+      ctx.font = 'bold 26px monospace';
+      ctx.fillText('CRATE DIGGING 3D', cx, 56);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = '15px monospace';
+      ctx.fillText(`SCORE ${score}   DIG ${Math.min(round, ROUNDS)}/${ROUNDS}`, cx, 78);
+
+      ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
+      ctx.font = 'bold 17px monospace';
+      if (phase === 'dig') ctx.fillText('- TAP E TO GRAB ONE -', cx, 520);
+      else if (phase === 'result') {
+        ctx.fillText(lastOutcome.label, cx, 520);
+        ctx.fillStyle = '#9a90a8';
+        ctx.font = '14px monospace';
+        ctx.fillText(lastOutcome.sub, cx, 538);
+      } else if (phase === 'done') {
+        ctx.fillText(`FINAL SCORE: ${score} - PRESS E TO LEAVE`, cx, 520);
+        ctx.fillStyle = '#9a90a8';
+        ctx.font = '14px monospace';
+        ctx.fillText(`${tally.rare} rare 45${tally.rare === 1 ? '' : 's'}, ${tally.mixtape} mixtape${tally.mixtape === 1 ? '' : 's'}, ${tally.dud} dud${tally.dud === 1 ? '' : 's'}`, cx, 538);
+        ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
+        ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('cratedig')}`, cx, 554);
+      }
+
+      ctx.fillStyle = '#6a6070';
+      ctx.font = '13px monospace';
+      ctx.fillText('X to walk away anytime', cx, phase === 'dig' ? 544 : 576);
     },
   };
 }
