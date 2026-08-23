@@ -1,0 +1,13 @@
+{
+  "appId": "com.ricovq.game",
+  "appName": "Rico's Vinyl Quest",
+  "webDir": ".",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0
+    }
+  }
+}

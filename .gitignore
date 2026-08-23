@@ -1,0 +1,10 @@
+node_modules/
+dist/
+build/
+.DS_Store
+*.log
+android/
+ios/
+www/
+.capacitor/
+CapacitorDistribution.json
