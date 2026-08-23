@@ -451,12 +451,13 @@ function exitMinigame() {
 // per-game wiring needed anywhere else.
 const MINIGAME_ACTIONS = {
   // Darts, Beat Match, Crate Digging, Whack-a-Pigeon, and Beat Jam each have
-  // two renderers: the original canvas version and a Three.js remake. A
-  // tiny chooser screen runs first so the player picks per-visit; see
-  // createModeSelectMenu() -- this is now the standard shape for any
-  // mini-game that gets a 3D version, and the default shape for brand new
-  // mini-games going forward (see the note above createModeSelectMenu for
-  // the template).
+  // two renderers: the original canvas version and a Three.js remake. These
+  // route through createModeSelectMenu(), which now goes straight to the 3D
+  // version on entry -- classic is kept only as an automatic fallback if
+  // Three.js/WebGL fails, never as a player-facing choice. This is the
+  // standard shape for any mini-game with a 3D version, and the default
+  // shape for brand new mini-games going forward (see the note above
+  // createModeSelectMenu for the template).
   darts: () => enterMinigame(createDartsModeSelect()),
   beatmatch: () => enterMinigame(createBeatMatchModeSelect()),
   whackpigeon: () => enterMinigame(createWhackPigeonModeSelect()),
@@ -746,21 +747,14 @@ function getMinigame3DRenderer(key) {
 // contract as every other entry in MINIGAME_ACTIONS.
 function createModeSelectMenu(opts) {
   // opts: { title, classicSub, threeDSub, createClassic, createThreeD, pickLabel }
-  let phase = 'choose'; // 'choose' | 'loading' | 'error'
-  let index = 0;
+  //
+  // Players no longer get a choice here: entering always goes straight into
+  // loading the 3D version. `createClassic` is kept only as an automatic
+  // fallback if Three.js fails to load or WebGL is unavailable -- it is
+  // never offered as a player-facing option.
+  loadThreeJS();
+  let phase = threeLoadState === 'error' ? 'error' : 'loading'; // 'loading' | 'error'
   let loadDots = 0;
-  const OPTIONS = [
-    { title: 'CLASSIC', sub: opts.classicSub },
-    { title: '3D', sub: opts.threeDSub },
-  ];
-  const cardW = 380, cardH = 92, cardX = VIEW_W / 2 - cardW / 2;
-  const cardY = (i) => 210 + i * (cardH + 26);
-
-  function startPick() {
-    if (index === 0) { activeMinigame = opts.createClassic(); return; }
-    loadThreeJS();
-    phase = threeLoadState === 'error' ? 'error' : 'loading';
-  }
 
   function startThreeD() {
     try {
@@ -773,11 +767,7 @@ function createModeSelectMenu(opts) {
 
   return {
     update(dt) {
-      if (phase === 'choose') {
-        if (menuMove) { index = Math.max(0, Math.min(OPTIONS.length - 1, index + menuMove)); menuMove = 0; }
-        if (interactPressed) { startPick(); return; }
-        if (buyPressed) exitMinigame();
-      } else if (phase === 'loading') {
+      if (phase === 'loading') {
         loadDots += dt;
         if (threeLoadState === 'ready') { startThreeD(); return; }
         if (threeLoadState === 'error') phase = 'error';
@@ -787,18 +777,8 @@ function createModeSelectMenu(opts) {
         if (buyPressed) exitMinigame();
       }
     },
-    // Tapping a card both selects and confirms it, so touch players never
-    // need the d-pad here. Taps anywhere else fall through harmlessly.
     onPointerDown(vx, vy) {
-      if (phase === 'choose') {
-        for (let i = 0; i < OPTIONS.length; i++) {
-          if (vx >= cardX && vx <= cardX + cardW && vy >= cardY(i) && vy <= cardY(i) + cardH) {
-            index = i;
-            startPick();
-            return;
-          }
-        }
-      } else if (phase === 'error') {
+      if (phase === 'error') {
         activeMinigame = opts.createClassic();
       }
     },
@@ -829,40 +809,7 @@ function createModeSelectMenu(opts) {
         ctx.fillStyle = '#6a6070';
         ctx.font = '13px monospace';
         ctx.fillText('X to walk away', VIEW_W / 2, 340);
-        return;
       }
-
-      ctx.fillStyle = '#9a90a8';
-      ctx.font = '15px monospace';
-      ctx.fillText(opts.pickLabel || 'PICK YOUR MODE', VIEW_W / 2, 152);
-
-      for (let i = 0; i < OPTIONS.length; i++) {
-        const y = cardY(i), selected = i === index;
-        ctx.fillStyle = selected ? '#2a1e34' : '#1a1220';
-        ctx.fillRect(cardX, y, cardW, cardH);
-        ctx.strokeStyle = selected ? '#e0b040' : '#3a2840';
-        ctx.lineWidth = selected ? 3 : 2;
-        ctx.strokeRect(cardX, y, cardW, cardH);
-        ctx.fillStyle = selected ? '#e0b040' : '#f4ecd8';
-        ctx.font = 'bold 22px monospace';
-        ctx.fillText(OPTIONS[i].title, VIEW_W / 2, y + 40);
-        ctx.fillStyle = '#9a90a8';
-        ctx.font = '13px monospace';
-        ctx.fillText(OPTIONS[i].sub, VIEW_W / 2, y + 66);
-        if (selected) {
-          ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
-          ctx.font = 'bold 18px monospace';
-          ctx.fillText('>', cardX + 24, y + 44);
-          ctx.fillText('<', cardX + cardW - 24, y + 44);
-        }
-      }
-
-      ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
-      ctx.font = 'bold 17px monospace';
-      ctx.fillText('- E TO PICK -', VIEW_W / 2, 480);
-      ctx.fillStyle = '#6a6070';
-      ctx.font = '13px monospace';
-      ctx.fillText('up/down or tap a card - X to walk away', VIEW_W / 2, 506);
     },
   };
 }
