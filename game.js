@@ -4846,11 +4846,39 @@ function viewToWorld(vx, vy) {
   return { x: (vx - lastCam.dx) / lastCam.zoom, y: (vy - lastCam.dy) / lastCam.zoom };
 }
 
+// States whose screen is a full, opaque takeover -- title, the dig-choice
+// and slot-choose popups, the history slides, and character select all
+// paint their own complete backdrop (art or a near-opaque fill) and are
+// reached before `state` ever becomes 'play'. Nothing of the game world is
+// ever visible behind them. render() used to redraw the full outdoor town
+// scene every frame regardless of `state` -- camera math, every building,
+// every parked car/walker/dog, all of it -- and only *then* paint the
+// opaque menu screen on top, completely hiding that work. That's the exact
+// same expensive per-frame render the LOOKAHEAD buffer above exists to
+// tolerate when the player is actually outside, except here it was 100%
+// wasted: nobody ever sees it, and it was eating into the same main thread
+// the music scheduler needs to stay on time -- which is why the menu/title
+// screens glitched exactly like being outside. They were quietly rendering
+// the outdoors the whole time. Skipping the world draw for these states
+// (the same way 'splash' already did) removes that cost entirely.
+const WORLD_HIDDEN_STATES = new Set(['title', 'digChoice', 'history', 'slotChoose', 'select']);
+
 function render(time) {
   // Startup optimization: the splash is the first screen and is drawn
   // immediately. Do not spend time rendering the game world underneath it.
   if (state === 'splash') {
     drawSplash();
+    return;
+  }
+  if (WORLD_HIDDEN_STATES.has(state)) {
+    ctx.fillStyle = '#120e18';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    if (state === 'title') drawTitle(time);
+    else if (state === 'digChoice') drawDigChoice(time);
+    else if (state === 'history') drawHistory(time);
+    else if (state === 'slotChoose') drawSlotChoose(time);
+    else if (state === 'select') drawCharacterSelect(time);
+    if (toast) drawToast();
     return;
   }
   const map = maps[player.map];
@@ -4911,13 +4939,11 @@ function render(time) {
   }
 
   ctx.restore();
-  if (state !== 'splash') drawHUD();
-  if (state === 'splash') drawSplash();
-  if (state === 'title') drawTitle(time);
-  if (state === 'digChoice') drawDigChoice(time);
-  if (state === 'history') drawHistory(time);
-  if (state === 'slotChoose') drawSlotChoose(time);
-  if (state === 'select') drawCharacterSelect(time);
+  // 'splash' and the WORLD_HIDDEN_STATES (title/digChoice/history/
+  // slotChoose/select) already returned earlier in render() -- only the
+  // gameplay-overlay states that draw on top of a *visible* world reach
+  // this point.
+  drawHUD();
   if (state === 'dialog') drawDialog();
   if (state === 'record') drawRecordCard();
   if (state === 'win') drawWin();
