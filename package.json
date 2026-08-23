@@ -1,0 +1,54 @@
+{
+  "name": "rico-vinyl-quest",
+  "version": "1.0.0",
+  "description": "A vinyl record collecting adventure game",
+  "main": "electron/main.js",
+  "type": "module",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "mobile:init": "npm install && capacitor init",
+    "mobile:add:android": "capacitor add android",
+    "mobile:add:ios": "capacitor add ios",
+    "mobile:sync": "capacitor sync",
+    "mobile:build:android": "capacitor build android",
+    "mobile:build:ios": "capacitor build ios"
+  },
+  "devDependencies": {
+    "electron": "^latest",
+    "electron-builder": "^latest"
+  },
+  "dependencies": {
+    "@capacitor/core": "latest",
+    "@capacitor/cli": "latest",
+    "@capacitor/android": "latest",
+    "@capacitor/ios": "latest"
+  },
+  "build": {
+    "appId": "com.ricovq.game",
+    "productName": "Rico's Vinyl Quest",
+    "directories": {
+      "buildResources": "assets"
+    },
+    "files": [
+      "electron/main.js",
+      "electron/preload.js",
+      "index.html",
+      "game.js",
+      "assets/**"
+    ],
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "mac": {
+      "target": ["dmg", "zip"]
+    },
+    "linux": {
+      "target": ["AppImage"]
+    }
+  }
+}
