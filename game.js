@@ -461,12 +461,12 @@ const MINIGAME_ACTIONS = {
   beatmatch: () => enterMinigame(createBeatMatchModeSelect()),
   whackpigeon: () => enterMinigame(createWhackPigeonModeSelect()),
   cratedig: () => enterMinigame(createCrateDiggingModeSelect()),
-  speedsweep: () => enterMinigame(createSpeedSweepGame()),
+  speedsweep: () => enterMinigame(createSpeedSweepModeSelect()),
   staringcontest: () => enterMinigame(createStaringContestGame()),
   buildpizza: () => enterMinigame(createPizzaBuildGame()),
-  clawmachine: () => enterMinigame(createClawMachineGame()),
+  clawmachine: () => enterMinigame(createClawMachineModeSelect()),
   beatjam: () => enterMinigame(createBeatJamModeSelect()),
-  scratchdj: () => enterMinigame(createScratchDJGame()),
+  scratchdj: () => enterMinigame(createScratchDJModeSelect()),
 };
 
 // ---- trophy case: personal bests for the 8 scored mini-games --------------
@@ -3366,6 +3366,372 @@ function createSpeedSweepGame() {
   };
 }
 
+// ---- speed sweep mode chooser ------------------------------------------------
+function createSpeedSweepModeSelect() {
+  return createModeSelectMenu({
+    title: 'SPEED SWEEP',
+    pickLabel: 'PICK YOUR BROOM',
+    classicSub: 'The original flat sweeping strip',
+    threeDSub: 'Get the dust up close -- full 3D',
+    createClassic: () => createSpeedSweepGame(),
+    createThreeD: () => createSpeedSweep3DGame(),
+  });
+}
+
+// ---- Speed Sweep 3D ----------------------------------------------------------
+// The Three.js remake of Speed Sweep. Identical gameplay contract to the
+// classic version -- same 24-second clock, same weighted small/big pile
+// table, same spawn timer, same SWEEP_RADIUS-clears-everything-in-reach
+// stroke, same 'speedsweep' trophy -- only the rendering changed: a real
+// shop floor with a broom rig that slides on its own little rail, dust
+// piles built as low domes instead of drawn ellipses, and a swing animation
+// plus a dust-burst particle effect on every sweep. The scene renders to an
+// offscreen WebGL canvas (see getMinigame3DRenderer()) that gets blitted
+// into the main 2D canvas each frame, so input handling, CSS scaling, and
+// the rAF loop are all untouched, and the HUD is drawn over the blit with
+// the same monospace styling every other mini-game uses.
+function createSpeedSweep3DGame() {
+  const T = window.THREE;
+  const { renderer, canvas: sweep3DCanvas } = getMinigame3DRenderer('speedsweep');
+
+  // ---- gameplay state: mirrors createSpeedSweepGame exactly, just in
+  // world-space units instead of screen pixels
+  const TIME_LIMIT = 24;
+  const FLOOR_X_HALF = 1.6;           // sweeping range, world units either side of center
+  const BROOM_SPEED = 1.65;           // world units/sec while held
+  const SWEEP_RADIUS = 0.17;          // how close the broom needs to be to clear a pile
+  const MAX_PILES = 6;
+  const FLOOR_Z = -2.4, FLOOR_Y = 0;
+
+  let phase = 'sweep';                // 'sweep' | 'done'
+  let timeLeft = TIME_LIMIT;
+  let score = 0;
+  let swept = 0;
+  let broomX = 0;
+  let pileId = 0;
+  let spawnTimer = 0.5;
+  let bestRecorded = false, isNewBest = false;
+  let t = 0;
+
+  const PILE_TYPES = [
+    { type: 'small', r: 0.09,  pts: 10, color: 0xc8b088, weight: 5 },
+    { type: 'big',   r: 0.15, pts: 25, color: 0xa8895c, weight: 2 },
+  ];
+  function pickType() {
+    const total = PILE_TYPES.reduce((s, o) => s + o.weight, 0);
+    let r = Math.random() * total;
+    for (const o of PILE_TYPES) { if (r < o.weight) return o; r -= o.weight; }
+    return PILE_TYPES[0];
+  }
+
+  // ---- scene ----
+  const scene = new T.Scene();
+  scene.background = new T.Color(0x0a0714);
+  scene.fog = new T.Fog(0x0a0714, 6, 16);
+
+  const camera = new T.PerspectiveCamera(52, VIEW_W / VIEW_H, 0.1, 30);
+  const CAM_POS = new T.Vector3(0, 1.3, 0.9);
+  let camZ = CAM_POS.z;
+  camera.position.copy(CAM_POS);
+  camera.lookAt(0, 0.15, FLOOR_Z);
+
+  // room: dark backdrop, same purple family as the rest of the world
+  const wall = new T.Mesh(
+    new T.PlaneGeometry(12, 7),
+    new T.MeshStandardMaterial({ color: 0x150f1c, roughness: 1 })
+  );
+  wall.position.set(0, 2.6, -4.0);
+  wall.receiveShadow = true;
+  scene.add(wall);
+  const backFloor = new T.Mesh(
+    new T.PlaneGeometry(12, 14),
+    new T.MeshStandardMaterial({ color: 0x1c1422, roughness: 0.95 })
+  );
+  backFloor.rotation.x = -Math.PI / 2;
+  backFloor.position.set(0, 0, -2);
+  backFloor.receiveShadow = true;
+  scene.add(backFloor);
+
+  // shop floor strip: wood-toned planks with a raised trim, same footprint
+  // as the classic's stroked rect
+  const stripW = FLOOR_X_HALF * 2 + 0.5, stripD = 1.2;
+  const shopFloor = new T.Mesh(
+    new T.BoxGeometry(stripW, 0.06, stripD),
+    new T.MeshStandardMaterial({ color: 0xa8946e, roughness: 0.85 })
+  );
+  shopFloor.position.set(0, -0.03, FLOOR_Z);
+  shopFloor.receiveShadow = true;
+  scene.add(shopFloor);
+  // plank seams, purely cosmetic
+  for (let px = -stripW / 2; px <= stripW / 2; px += 0.22) {
+    const seam = new T.Mesh(
+      new T.BoxGeometry(0.006, 0.062, stripD),
+      new T.MeshStandardMaterial({ color: 0x5c4a30, roughness: 0.9 })
+    );
+    seam.position.set(px, -0.03, FLOOR_Z);
+    scene.add(seam);
+  }
+  const trim = new T.Mesh(
+    new T.BoxGeometry(stripW + 0.06, 0.09, stripD + 0.06),
+    new T.MeshStandardMaterial({ color: 0x5c4a30, roughness: 0.8 })
+  );
+  trim.position.set(0, -0.065, FLOOR_Z);
+  scene.add(trim);
+
+  // faint dashed reach ring, following the broom, showing the sweep radius
+  const reachRing = new T.Mesh(
+    new T.RingGeometry(SWEEP_RADIUS - 0.012, SWEEP_RADIUS, 32),
+    new T.MeshBasicMaterial({ color: 0xe0c060, transparent: true, opacity: 0.28, side: T.DoubleSide })
+  );
+  reachRing.rotation.x = -Math.PI / 2;
+  scene.add(reachRing);
+
+  // dust piles: low domes built from a hemisphere, one mesh per pile
+  function buildPileMesh(p) {
+    const dome = new T.Mesh(
+      new T.SphereGeometry(p.r, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+      new T.MeshStandardMaterial({ color: p.color, roughness: 0.95 })
+    );
+    dome.castShadow = true;
+    dome.receiveShadow = true;
+    scene.add(dome);
+    return dome;
+  }
+  function spawnPile() {
+    if (piles.length >= MAX_PILES) return;
+    const ty = pickType();
+    const p = {
+      id: pileId++,
+      x: (Math.random() * 2 - 1) * (FLOOR_X_HALF - 0.15),
+      z: FLOOR_Z + (Math.random() * 0.7 - 0.35),
+      driftSeed: Math.random() * 10,
+      ...ty,
+    };
+    p.mesh = buildPileMesh(p);
+    p.mesh.position.set(p.x, 0, p.z);
+    piles.push(p);
+  }
+  function disposePileMesh(p) {
+    if (!p.mesh) return;
+    scene.remove(p.mesh);
+    p.mesh.geometry.dispose();
+    p.mesh.material.dispose();
+    p.mesh = null;
+  }
+
+  let piles = [];
+  for (let i = 0; i < 3; i++) spawnPile();
+
+  // broom rig: handle angled back, brush head with fanned bristles
+  const broomGroup = new T.Group();
+  scene.add(broomGroup);
+  const handle = new T.Mesh(
+    new T.CylinderGeometry(0.018, 0.018, 0.9, 8),
+    new T.MeshStandardMaterial({ color: 0x8a6a3a, roughness: 0.75 })
+  );
+  handle.position.set(0, 0.44, -0.05);
+  handle.rotation.x = 0.55;
+  broomGroup.add(handle);
+  const band = new T.Mesh(
+    new T.CylinderGeometry(0.032, 0.032, 0.05, 10),
+    new T.MeshStandardMaterial({ color: 0x5c4326, roughness: 0.7 })
+  );
+  band.position.set(0, 0.1, 0.02);
+  broomGroup.add(band);
+  const bristleGroup = new T.Group();
+  bristleGroup.position.set(0, 0.08, 0.02);
+  broomGroup.add(bristleGroup);
+  const bristleMat = new T.MeshStandardMaterial({ color: 0xe0c060, roughness: 0.7 });
+  for (let i = -4; i <= 4; i++) {
+    const straw = new T.Mesh(new T.CylinderGeometry(0.004, 0.007, 0.16, 4), bristleMat);
+    straw.position.set(i * 0.02, -0.08, i * 0.006);
+    straw.rotation.x = -0.15;
+    straw.rotation.z = i * 0.05;
+    bristleGroup.add(straw);
+  }
+  let swingT = 0; // decays after every sweep press, drives the swipe animation
+
+  // dust-burst particles, spawned on every successful sweep
+  let bursts = [];
+  function spawnBurst(x, z, color) {
+    for (let i = 0; i < 6; i++) {
+      const mesh = new T.Mesh(
+        new T.SphereGeometry(0.018, 6, 6),
+        new T.MeshStandardMaterial({ color, roughness: 0.9, transparent: true, opacity: 1 })
+      );
+      mesh.position.set(x, 0.04, z);
+      scene.add(mesh);
+      const ang = Math.random() * Math.PI * 2;
+      bursts.push({
+        mesh, vx: Math.cos(ang) * 0.55, vy: 0.35 + Math.random() * 0.3, vz: Math.sin(ang) * 0.3, life: 0,
+      });
+    }
+  }
+
+  // "+pts" pop text: single HUD-space callout per sweep, matching the
+  // established single-message convention the other 3D remakes use
+  let popText = null; // { text, timer }
+
+  // lights: warm spot over the shop floor, dim ambient
+  scene.add(new T.AmbientLight(0x352c40, 0.8));
+  const spot = new T.SpotLight(0xffe2c0, 1.0, 14, 0.55, 0.45);
+  spot.position.set(0, 3.4, -1.2);
+  spot.target = shopFloor;
+  spot.castShadow = true;
+  spot.shadow.mapSize.set(1024, 1024);
+  scene.add(spot);
+  scene.add(spot.target);
+
+  // Full teardown -- called right before every exitMinigame().
+  function cleanup() {
+    piles.forEach((p) => disposePileMesh(p));
+    bursts.forEach((b) => { scene.remove(b.mesh); b.mesh.geometry.dispose(); b.mesh.material.dispose(); });
+    bursts = [];
+    scene.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
+        else obj.material.dispose();
+      }
+    });
+    scene.clear();
+  }
+  function leave() { cleanup(); exitMinigame(); }
+
+  return {
+    update(dt) {
+      t += dt;
+      if (buyPressed) { leave(); return; }
+
+      if (phase === 'sweep') {
+        timeLeft -= dt;
+        if (timeLeft <= 0) { timeLeft = 0; phase = 'done'; }
+
+        let dx = 0;
+        if (keys['arrowleft'] || keys['a']) dx -= 1;
+        if (keys['arrowright'] || keys['d']) dx += 1;
+        broomX += dx * BROOM_SPEED * dt;
+        broomX = Math.max(-FLOOR_X_HALF, Math.min(FLOOR_X_HALF, broomX));
+
+        spawnTimer -= dt;
+        if (spawnTimer <= 0) {
+          spawnPile();
+          spawnTimer = 0.5 + Math.random() * 0.6;
+        }
+
+        // one swipe clears every pile within reach in a single go -- feels
+        // like an actual broom stroke catching a cluster of dust at once
+        if (interactPressed) {
+          swingT = 1;
+          let gained = 0, hitAny = false, lastColor = 0x8cff5f;
+          piles = piles.filter((p) => {
+            const hit = Math.abs(p.x - broomX) <= SWEEP_RADIUS;
+            if (hit) {
+              score += p.pts;
+              gained += p.pts;
+              swept++;
+              hitAny = true;
+              spawnBurst(p.x, p.z, p.color);
+              disposePileMesh(p);
+            }
+            return !hit;
+          });
+          if (hitAny) popText = { text: `+${gained}`, timer: 0.5 };
+        }
+      } else if (phase === 'done') {
+        if (!bestRecorded) { isNewBest = recordMinigameScore('speedsweep', score); bestRecorded = true; }
+        if (interactPressed) { leave(); return; }
+      }
+
+      if (popText) {
+        popText.timer -= dt;
+        if (popText.timer <= 0) popText = null;
+      }
+
+      // broom rig follows broomX, with a quick swing decay on every press
+      broomGroup.position.set(broomX, 0, FLOOR_Z);
+      swingT = Math.max(0, swingT - dt * 3.2);
+      broomGroup.rotation.z = Math.sin(swingT * Math.PI) * 0.35;
+      reachRing.position.set(broomX, 0.005, FLOOR_Z);
+
+      // piles drift/settle very slightly for visual life
+      piles.forEach((p) => {
+        if (!p.mesh) return;
+        p.mesh.rotation.y = Math.sin(t * 0.8 + p.driftSeed) * 0.1;
+      });
+
+      bursts.forEach((b) => {
+        b.life += dt;
+        b.mesh.position.x += b.vx * dt;
+        b.mesh.position.y += (b.vy - b.life * 1.6) * dt;
+        b.mesh.position.z += b.vz * dt;
+        b.mesh.material.opacity = Math.max(0, 1 - b.life * 1.4);
+      });
+      bursts = bursts.filter((b) => {
+        if (b.life * 1.4 >= 1) {
+          scene.remove(b.mesh); b.mesh.geometry.dispose(); b.mesh.material.dispose();
+          return false;
+        }
+        return true;
+      });
+
+      // camera: gentle idle sway, no shake needed -- sweeping is a calmer
+      // mini-game than the reflex-timing ones
+      const sway = Math.sin(t * 0.5) * 0.02;
+      camera.position.set(CAM_POS.x + sway, CAM_POS.y + Math.sin(t * 0.7) * 0.008, camZ);
+      camera.lookAt(0, 0.15, FLOOR_Z);
+    },
+    draw() {
+      renderer.render(scene, camera);
+      ctx.drawImage(sweep3DCanvas, 0, 0);
+
+      // HUD: same layout and styling as the classic version
+      const cx = VIEW_W / 2;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#e0b040';
+      ctx.font = 'bold 26px monospace';
+      ctx.fillText('SPEED SWEEP 3D', cx, 56);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = '15px monospace';
+      ctx.fillText(`SCORE ${score}   SWEPT ${swept}`, cx, 78);
+
+      // countdown bar
+      const barW = 260, barX = cx - barW / 2, barY = 92;
+      ctx.fillStyle = 'rgba(244,236,216,0.15)';
+      ctx.fillRect(barX, barY, barW, 8);
+      const frac = timeLeft / TIME_LIMIT;
+      ctx.fillStyle = frac > 0.3 ? '#8cff5f' : '#e0603a';
+      ctx.fillRect(barX, barY, barW * Math.max(0, frac), 8);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = 'bold 14px monospace';
+      ctx.fillText(`${Math.ceil(timeLeft)}s`, cx, barY + 24);
+
+      if (popText) {
+        ctx.fillStyle = '#8cff5f';
+        ctx.font = 'bold 16px monospace';
+        ctx.globalAlpha = Math.max(0, popText.timer / 0.5);
+        ctx.fillText(popText.text, cx, 480);
+        ctx.globalAlpha = 1;
+      }
+
+      ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#8cff5f' : '#f4ecd8';
+      ctx.font = 'bold 17px monospace';
+      if (phase === 'sweep') ctx.fillText('- HOLD \u25c0 \u25b6 TO MOVE, TAP E TO SWEEP -', cx, 520);
+      else ctx.fillText(`TIME'S UP! FINAL SCORE: ${score} - PRESS E TO LEAVE`, cx, 520);
+
+      if (phase === 'done') {
+        ctx.font = '14px monospace';
+        ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
+        ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('speedsweep')}`, cx, 538);
+      }
+
+      ctx.fillStyle = '#6a6070';
+      ctx.font = '13px monospace';
+      ctx.fillText('X to walk away anytime', cx, phase === 'done' ? 556 : 544);
+    },
+  };
+}
+
 // Staring Contest with a Cat: the cat blinks at a random moment; hold
 // completely still (no movement keys, no E, no X) until it does, and you
 // win. Press or hold ANYTHING before the blink and that counts as giving
@@ -4028,6 +4394,445 @@ function createClawMachineGame() {
   };
 }
 
+// ---- claw machine mode chooser -----------------------------------------------
+function createClawMachineModeSelect() {
+  return createModeSelectMenu({
+    title: 'CLAW MACHINE',
+    pickLabel: 'PICK YOUR CABINET',
+    classicSub: 'The original flat glass case',
+    threeDSub: 'Reach right into the case -- full 3D',
+    createClassic: () => createClawMachineGame(),
+    createThreeD: () => createClawMachine3DGame(),
+  });
+}
+
+// ---- Claw Machine 3D --------------------------------------------------------
+// The Three.js remake of Claw Machine. Identical gameplay contract to the
+// classic version -- same 6 tries, same weighted flower types/grab chances/
+// point values, same GRAB_RADIUS logic, same 22% post-grab fumble chance,
+// same 'clawmachine' trophy -- only the rendering changed: a real glass
+// case with a planter floor, a claw that actually descends on a rod and
+// opens/closes its fingers, and flowers built from primitives instead of
+// drawn circles. The scene renders to an offscreen WebGL canvas (see
+// getMinigame3DRenderer()) that gets blitted into the main 2D canvas each
+// frame, so input handling, CSS scaling, and the rAF loop are all
+// untouched, and the HUD is drawn over the blit with the same monospace
+// styling every other mini-game uses.
+function createClawMachine3DGame() {
+  const T = window.THREE;
+  const { renderer, canvas: claw3DCanvas } = getMinigame3DRenderer('clawmachine');
+
+  // ---- gameplay state: mirrors createClawMachineGame exactly, just in
+  // world-space units instead of screen pixels (world Y increases upward,
+  // so "descending" now means clawY decreasing toward FLOOR_Y).
+  const TRIES_TOTAL = 6;
+  const RAIL_Y = 1.85;                // claw's resting height, top of the case
+  const FLOOR_Y = 0.25;               // where flowers sit at the bottom of the case
+  const CASE_X_HALF = 1.3;
+  const CASE_Z = -2.6, CASE_DEPTH = 0.85;
+  const CLAW_SPEED = 1.4;             // world units/sec sliding left/right
+  const DROP_SPEED = 1.8;             // world units/sec descending/ascending
+  const GRAB_RADIUS = 0.16;           // how close, in x, the claw needs to be to a flower to try grabbing it
+  const CHUTE_X = CASE_X_HALF + 0.55, CHUTE_Y = RAIL_Y;
+
+  const FLOWER_TYPES = [
+    { type: 'daisy', pts: 10, grabChance: 0.85, petal: '#f4ecd8', center: '#e0b040', weight: 5 },
+    { type: 'tulip', pts: 20, grabChance: 0.65, petal: '#d94f9a', center: '#e0b040', weight: 3 },
+    { type: 'rose',  pts: 40, grabChance: 0.45, petal: '#c0392b', center: '#8e2418', weight: 1 },
+  ];
+  function pickType() {
+    const total = FLOWER_TYPES.reduce((s, o) => s + o.weight, 0);
+    let r = Math.random() * total;
+    for (const o of FLOWER_TYPES) { if (r < o.weight) return o; r -= o.weight; }
+    return FLOWER_TYPES[0];
+  }
+  function spawnFlowerData(n) {
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      out.push({
+        id: i,
+        x: -CASE_X_HALF + 0.18 + Math.random() * (CASE_X_HALF * 2 - 0.36),
+        z: CASE_Z + (Math.random() - 0.5) * (CASE_DEPTH - 0.15),
+        wobble: Math.random() * 10,
+        ...pickType(),
+      });
+    }
+    return out;
+  }
+
+  let triesLeft = TRIES_TOTAL;
+  let score = 0, caught = 0;
+  let phase = 'aim';         // aim | drop | rise | deliver | done
+  let clawX = 0, clawY = RAIL_Y;
+  let held = null;           // flower currently gripped, or null
+  let message = null;        // { text, color, timer } -- one-at-a-time HUD callout
+  let bestRecorded = false, isNewBest = false;
+  let t = 0;
+
+  function showMessage(text, color, dur) { message = { text, color, timer: dur }; }
+
+  // Common exit for the drop/rise/deliver branches: back to aiming if
+  // there's a try and a flower left to go for, otherwise the round's over.
+  function afterAttempt() {
+    phase = (triesLeft > 0 && flowers.length > 0) ? 'aim' : 'done';
+  }
+
+  function nearestFlower(x) {
+    let best = null, bestD = Infinity;
+    flowers.forEach((f) => {
+      const d = Math.abs(f.x - x);
+      if (d < GRAB_RADIUS && d < bestD) { best = f; bestD = d; }
+    });
+    return best;
+  }
+
+  // ---- scene ----
+  const scene = new T.Scene();
+  scene.background = new T.Color(0x0a0714);
+  scene.fog = new T.Fog(0x0a0714, 6, 16);
+
+  const camera = new T.PerspectiveCamera(52, VIEW_W / VIEW_H, 0.1, 30);
+  const CAM_POS = new T.Vector3(0, 1.5, 1.1);
+  const CAM_Z_IN = -0.25;
+  let camZ = CAM_POS.z;
+  camera.position.copy(CAM_POS);
+  camera.lookAt(0, (RAIL_Y + FLOOR_Y) / 2, CASE_Z);
+
+  // room: dark backdrop, same purple family as the rest of the world
+  const wall = new T.Mesh(
+    new T.PlaneGeometry(12, 7),
+    new T.MeshStandardMaterial({ color: 0x150f1c, roughness: 1 })
+  );
+  wall.position.set(0, 2.6, -4.0);
+  wall.receiveShadow = true;
+  scene.add(wall);
+  const floor = new T.Mesh(
+    new T.PlaneGeometry(12, 14),
+    new T.MeshStandardMaterial({ color: 0x1c1422, roughness: 0.95 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(0, 0, -2);
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  // glass case: transparent box with visible edges, plus a planter-box
+  // floor at the bottom -- same footprint as the classic's stroked rect
+  const caseCenterY = (RAIL_Y + FLOOR_Y) / 2 + 0.15;
+  const caseH = RAIL_Y - FLOOR_Y + 0.5, caseW = CASE_X_HALF * 2 + 0.3, caseD = CASE_DEPTH + 0.3;
+  const glassMat = new T.MeshPhysicalMaterial({
+    color: 0xc8dcff, transparent: true, opacity: 0.07, roughness: 0.1,
+    metalness: 0, transmission: 0.6, side: T.DoubleSide,
+  });
+  const glassBox = new T.Mesh(new T.BoxGeometry(caseW, caseH, caseD), glassMat);
+  glassBox.position.set(0, caseCenterY, CASE_Z);
+  scene.add(glassBox);
+  const glassEdges = new T.LineSegments(
+    new T.EdgesGeometry(new T.BoxGeometry(caseW, caseH, caseD)),
+    new T.LineBasicMaterial({ color: 0xc8dcff, transparent: true, opacity: 0.5 })
+  );
+  glassEdges.position.copy(glassBox.position);
+  scene.add(glassEdges);
+
+  const planter = new T.Mesh(
+    new T.BoxGeometry(caseW, 0.14, caseD),
+    new T.MeshStandardMaterial({ color: 0x3c5c40, roughness: 0.9 })
+  );
+  planter.position.set(0, FLOOR_Y - 0.08, CASE_Z);
+  planter.receiveShadow = true;
+  scene.add(planter);
+
+  // rail the claw's carriage rides along, top of the case
+  const railBar = new T.Mesh(
+    new T.BoxGeometry(caseW - 0.1, 0.04, 0.04),
+    new T.MeshStandardMaterial({ color: 0x5a4a6a, roughness: 0.6, metalness: 0.3 })
+  );
+  railBar.position.set(0, RAIL_Y + 0.1, CASE_Z);
+  scene.add(railBar);
+
+  // prize chute off to the right
+  const chuteOuter = new T.Mesh(
+    new T.BoxGeometry(0.3, 0.22, 0.28),
+    new T.MeshStandardMaterial({ color: 0x6a4a2c, roughness: 0.85 })
+  );
+  chuteOuter.position.set(CHUTE_X, RAIL_Y - 0.1, CASE_Z);
+  chuteOuter.castShadow = true;
+  scene.add(chuteOuter);
+  const chuteInner = new T.Mesh(
+    new T.BoxGeometry(0.22, 0.15, 0.05),
+    new T.MeshStandardMaterial({ color: 0x8a6438, roughness: 0.8 })
+  );
+  chuteInner.position.set(CHUTE_X, RAIL_Y - 0.1, CASE_Z + CASE_DEPTH / 2 - 0.02);
+  scene.add(chuteInner);
+
+  // flowers: built from primitives, one group per flower, kept alive for
+  // the flower's whole lifetime (floor -> held -> either back to the floor
+  // on a fumble, or disposed once delivered)
+  function buildFlowerMesh(f) {
+    const g = new T.Group();
+    const stem = new T.Mesh(
+      new T.CylinderGeometry(0.008, 0.012, 0.22, 6),
+      new T.MeshStandardMaterial({ color: 0x4f9a52, roughness: 0.85 })
+    );
+    stem.position.y = 0.11;
+    g.add(stem);
+    const head = new T.Group();
+    head.position.y = 0.23;
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const petal = new T.Mesh(
+        new T.SphereGeometry(0.035, 8, 6),
+        new T.MeshStandardMaterial({ color: f.petal, roughness: 0.7 })
+      );
+      petal.scale.set(1, 0.5, 0.6);
+      petal.position.set(Math.cos(a) * 0.045, 0, Math.sin(a) * 0.045);
+      head.add(petal);
+    }
+    const center = new T.Mesh(
+      new T.SphereGeometry(0.025, 10, 8),
+      new T.MeshStandardMaterial({ color: f.center, roughness: 0.6 })
+    );
+    head.add(center);
+    g.add(head);
+    g.userData.head = head;
+    g.castShadow = true;
+    scene.add(g);
+    return g;
+  }
+
+  let flowers = spawnFlowerData(9);
+  flowers.forEach((f) => { f.mesh = buildFlowerMesh(f); });
+
+  function disposeFlowerMesh(f) {
+    if (!f.mesh) return;
+    scene.remove(f.mesh);
+    f.mesh.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) obj.material.dispose();
+    });
+    f.mesh = null;
+  }
+
+  // claw rig: a rod from the rail down to the fingers, plus a small
+  // carriage riding the rail and two fingers that open/close
+  const carriage = new T.Mesh(
+    new T.BoxGeometry(0.14, 0.08, 0.14),
+    new T.MeshStandardMaterial({ color: 0x9a90a8, roughness: 0.5, metalness: 0.35 })
+  );
+  scene.add(carriage);
+  const clawRod = new T.Mesh(
+    new T.CylinderGeometry(0.012, 0.012, 1, 8),
+    new T.MeshStandardMaterial({ color: 0x5a5060, roughness: 0.6 })
+  );
+  scene.add(clawRod);
+  const clawHead = new T.Mesh(
+    new T.BoxGeometry(0.09, 0.05, 0.09),
+    new T.MeshStandardMaterial({ color: 0x9a90a8, roughness: 0.5, metalness: 0.3 })
+  );
+  scene.add(clawHead);
+  const fingerMat = new T.MeshStandardMaterial({ color: 0xc8bcd8, roughness: 0.4, metalness: 0.4 });
+  const fingerL = new T.Mesh(new T.ConeGeometry(0.018, 0.11, 6), fingerMat);
+  const fingerR = new T.Mesh(new T.ConeGeometry(0.018, 0.11, 6), fingerMat);
+  fingerL.rotation.z = 0.55;
+  fingerR.rotation.z = -0.55;
+  scene.add(fingerL, fingerR);
+  let fingerSpread = 0.09;
+
+  // lights: warm spot into the case, dim ambient, matching the rest of the
+  // world's palette
+  scene.add(new T.AmbientLight(0x352c40, 0.8));
+  const spot = new T.SpotLight(0xffe2c0, 1.0, 14, 0.5, 0.45);
+  spot.position.set(0, 3.6, -1.4);
+  spot.target = glassBox;
+  spot.castShadow = true;
+  spot.shadow.mapSize.set(1024, 1024);
+  scene.add(spot);
+  scene.add(spot.target);
+
+  let shakeT = 0;
+  let impactRing = null, impactT = 0;
+
+  function disposeImpactRing() {
+    if (!impactRing) return;
+    scene.remove(impactRing);
+    impactRing.geometry.dispose();
+    impactRing.material.dispose();
+    impactRing = null;
+  }
+  function spawnImpact(pos, color) {
+    disposeImpactRing();
+    impactRing = new T.Mesh(
+      new T.TorusGeometry(0.09, 0.012, 8, 28),
+      new T.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 })
+    );
+    impactRing.position.copy(pos);
+    scene.add(impactRing);
+    impactT = 0;
+  }
+
+  // Full teardown -- called right before every exitMinigame().
+  function cleanup() {
+    disposeImpactRing();
+    flowers.forEach((f) => disposeFlowerMesh(f));
+    if (held) disposeFlowerMesh(held);
+    scene.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
+        else obj.material.dispose();
+      }
+    });
+    scene.clear();
+  }
+  function leave() { cleanup(); exitMinigame(); }
+
+  return {
+    update(dt) {
+      t += dt;
+      if (buyPressed) { leave(); return; }
+
+      if (phase === 'aim') {
+        let dx = 0;
+        if (keys['arrowleft'] || keys['a']) dx -= 1;
+        if (keys['arrowright'] || keys['d']) dx += 1;
+        clawX += dx * CLAW_SPEED * dt;
+        clawX = Math.max(-CASE_X_HALF + 0.1, Math.min(CASE_X_HALF - 0.1, clawX));
+        if (interactPressed && triesLeft > 0) phase = 'drop';
+      } else if (phase === 'drop') {
+        clawY -= DROP_SPEED * dt;
+        if (clawY <= FLOOR_Y) {
+          clawY = FLOOR_Y;
+          const f = nearestFlower(clawX);
+          if (f && Math.random() < f.grabChance) {
+            held = f;
+            flowers = flowers.filter((x) => x !== f);
+          }
+          phase = 'rise';
+        }
+      } else if (phase === 'rise') {
+        clawY += DROP_SPEED * dt;
+        if (clawY >= RAIL_Y) {
+          clawY = RAIL_Y;
+          triesLeft--;
+          if (held) {
+            // one more chance for the claw to fumble it before the chute
+            if (Math.random() < 0.22) {
+              showMessage('SLIPPED!', '#e0603a', 0.7);
+              spawnImpact(new T.Vector3(clawX, RAIL_Y, CASE_Z), 0xe0603a);
+              shakeT = 0.14;
+              held.x = clawX;
+              flowers.push(held);
+              held = null;
+              afterAttempt();
+            } else {
+              phase = 'deliver';
+            }
+          } else {
+            showMessage('MISS', '#9a90a8', 0.6);
+            afterAttempt();
+          }
+        }
+      } else if (phase === 'deliver') {
+        const dxp = CHUTE_X - clawX;
+        clawX += Math.sign(dxp) * CLAW_SPEED * 1.3 * dt;
+        if (Math.abs(dxp) < 0.03) {
+          score += held.pts;
+          caught++;
+          showMessage(`+${held.pts}`, '#8cff5f', 0.7);
+          spawnImpact(new T.Vector3(CHUTE_X, CHUTE_Y, CASE_Z), 0x8cff5f);
+          shakeT = 0.12;
+          disposeFlowerMesh(held);
+          held = null;
+          afterAttempt();
+        }
+      } else if (phase === 'done') {
+        if (!bestRecorded) { isNewBest = recordMinigameScore('clawmachine', score); bestRecorded = true; }
+        if (interactPressed) { leave(); return; }
+      }
+
+      if (message) {
+        message.timer -= dt;
+        if (message.timer <= 0) message = null;
+      }
+
+      // flowers still on the floor: settle at their spot with a gentle sway
+      flowers.forEach((f) => {
+        f.mesh.position.set(f.x, FLOOR_Y, f.z);
+        f.mesh.userData.head.position.x = Math.sin(t * 2 + f.wobble) * 0.02;
+      });
+      // the held flower rides along under the claw
+      if (held) {
+        held.mesh.position.set(clawX, clawY - 0.12, CASE_Z);
+        held.mesh.userData.head.position.x = Math.sin(t * 3 + held.wobble) * 0.012;
+      }
+
+      // claw rig follows clawX/clawY every frame
+      const railTopY = RAIL_Y + 0.1;
+      carriage.position.set(clawX, railTopY, CASE_Z);
+      clawRod.position.set(clawX, (railTopY + clawY) / 2, CASE_Z);
+      clawRod.scale.y = Math.max(0.001, railTopY - clawY);
+      clawHead.position.set(clawX, clawY, CASE_Z);
+      const closed = !!held || (phase === 'drop' && clawY <= FLOOR_Y + 0.04);
+      const targetSpread = closed ? 0.028 : 0.09;
+      fingerSpread += (targetSpread - fingerSpread) * Math.min(1, dt * 10);
+      fingerL.position.set(clawX - fingerSpread, clawY - 0.05, CASE_Z);
+      fingerR.position.set(clawX + fingerSpread, clawY - 0.05, CASE_Z);
+
+      if (impactRing) {
+        impactT += dt;
+        const k = Math.min(1, impactT / 0.35);
+        impactRing.scale.setScalar(1 + k * 3);
+        impactRing.material.opacity = 0.9 * (1 - k);
+      }
+
+      // camera: gentle idle sway, decaying impact shake
+      const sway = Math.sin(t * 0.5) * 0.02;
+      camera.position.set(CAM_POS.x + sway, CAM_POS.y + Math.sin(t * 0.7) * 0.01, camZ);
+      if (shakeT > 0) {
+        shakeT -= dt;
+        const s = Math.max(0, shakeT / 0.14) * 0.02;
+        camera.position.x += (Math.random() - 0.5) * s;
+        camera.position.y += (Math.random() - 0.5) * s;
+      }
+      camera.lookAt(0, caseCenterY - 0.1, CASE_Z);
+    },
+    draw() {
+      renderer.render(scene, camera);
+      ctx.drawImage(claw3DCanvas, 0, 0);
+
+      // HUD: same layout and styling as the classic version
+      const cx = VIEW_W / 2;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#e0b040';
+      ctx.font = 'bold 26px monospace';
+      ctx.fillText('CLAW MACHINE 3D', cx, 56);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = '15px monospace';
+      ctx.fillText(`SCORE ${score}   CAUGHT ${caught}   TRIES LEFT ${Math.max(0, triesLeft)}`, cx, 78);
+
+      ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#8cff5f' : '#f4ecd8';
+      ctx.font = 'bold 17px monospace';
+      if (phase === 'done') {
+        ctx.fillText(`OUT OF TRIES! FINAL SCORE: ${score} - PRESS E TO LEAVE`, cx, 540);
+      } else if (message) {
+        ctx.fillStyle = message.color;
+        ctx.fillText(message.text, cx, 540);
+      } else if (phase === 'aim') {
+        ctx.fillText('- HOLD \u25c0 \u25b6 TO AIM, TAP E TO DROP -', cx, 540);
+      }
+
+      if (phase === 'done') {
+        ctx.font = '14px monospace';
+        ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
+        ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('clawmachine')}`, cx, 558);
+      }
+
+      ctx.fillStyle = '#6a6070';
+      ctx.font = '13px monospace';
+      ctx.fillText('X to walk away anytime', cx, phase === 'done' ? 576 : 564);
+    },
+  };
+}
+
 // Freestyle Scratch-DJ: twin turntables instead of beat match's one bar --
 // a left needle (under [E]) and a right needle (under [Q]) sweep back and
 // forth completely independently, at different speeds and out of phase
@@ -4198,6 +5003,397 @@ function createScratchDJGame() {
       ctx.fillStyle = '#6a6070';
       ctx.font = '13px monospace';
       ctx.fillText('X to walk away anytime', VIEW_W / 2, phase === 'done' ? 418 : 402);
+    },
+  };
+}
+
+// ---- scratch-dj mode chooser ------------------------------------------------
+function createScratchDJModeSelect() {
+  return createModeSelectMenu({
+    title: 'SCRATCH-DJ',
+    pickLabel: 'PICK YOUR SETUP',
+    classicSub: 'The original twin-needle bars',
+    threeDSub: 'Get behind the decks -- full 3D',
+    createClassic: () => createScratchDJGame(),
+    createThreeD: () => createScratchDJ3DGame(),
+  });
+}
+
+// ---- Scratch-DJ 3D ----------------------------------------------------------
+// The Three.js remake of Scratch-DJ. Identical gameplay contract to the
+// classic version -- same two independent needle sweeps/speeds/ramps, same
+// wrong-hand penalty, same hitFor() judging, same round count, same
+// 'scratchdj' trophy -- only the rendering changed: a twin-deck DJ booth
+// with two spinning turntables, each topped by a suspended neon rail whose
+// glowing orb tracks that needle's sweep. The scene renders to an offscreen
+// WebGL canvas (see getMinigame3DRenderer()) that gets blitted into the
+// main 2D canvas each frame, so input handling, CSS scaling, and the rAF
+// loop are all untouched, and the HUD is drawn over the blit with the same
+// monospace styling every other mini-game uses.
+function createScratchDJ3DGame() {
+  const T = window.THREE;
+  const { renderer, canvas: dj3DCanvas } = getMinigame3DRenderer('scratchdj');
+
+  // ---- gameplay state: mirrors createScratchDJGame exactly
+  const ROUNDS = 10;
+  let phase = 'wait';        // 'wait' | 'result' | 'done'
+  let round = 1;
+  let score = 0;
+  let combo = 0;
+  let lastHitLabel = '';
+  let resultTimer = 0;
+  let bestRecorded = false, isNewBest = false;
+
+  let leftPos = -1, leftDir = 1, leftSpeed = 1.05;
+  let rightPos = 1, rightDir = -1, rightSpeed = 1.35;
+  let expectedHand = Math.random() < 0.5 ? 'left' : 'right';
+  let t = 0;
+
+  function hitFor(p) {
+    const d = Math.abs(p);
+    if (d <= 0.08) return { label: 'PERFECT!', pts: 50, color: 0xffffff };
+    if (d <= 0.22) return { label: 'GOOD', pts: 25, color: 0xe0b040 };
+    if (d <= 0.45) return { label: 'OK', pts: 10, color: 0x9a90a8 };
+    return { label: 'MISS', pts: 0, color: 0x6a6070 };
+  }
+
+  // ---- scene ----
+  const LEFT_COLOR = 0x5fd0ff, RIGHT_COLOR = 0xff5fb0;
+  const RAIL_LEN = 1.7;
+  const LEFT_X = -1.15, RIGHT_X = 1.15;
+  const RAIL_Y = 1.7, DECK_Z = -2.6;
+
+  const scene = new T.Scene();
+  scene.background = new T.Color(0x0a0714);
+  scene.fog = new T.Fog(0x0a0714, 6, 16);
+
+  const camera = new T.PerspectiveCamera(55, VIEW_W / VIEW_H, 0.1, 30);
+  const CAM_POS = new T.Vector3(0, 1.4, 0.8);
+  const CAM_Z_IN = -0.3;
+  let camZ = CAM_POS.z;
+  camera.position.copy(CAM_POS);
+  camera.lookAt(0, RAIL_Y - 0.35, DECK_Z);
+
+  // room: dark booth walls/floor, same purple family as the rest of the world
+  const wallMat = new T.MeshStandardMaterial({ color: 0x150f1c, roughness: 1 });
+  const wall = new T.Mesh(new T.PlaneGeometry(12, 7), wallMat);
+  wall.position.set(0, 2.6, -4.0);
+  wall.receiveShadow = true;
+  scene.add(wall);
+
+  const floorMat = new T.MeshStandardMaterial({ color: 0x1c1422, roughness: 0.9, metalness: 0.1 });
+  const floor = new T.Mesh(new T.PlaneGeometry(12, 14), floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(0, 0, -2);
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  // DJ booth counter, spanning under both decks
+  const counter = new T.Mesh(
+    new T.BoxGeometry(3.2, 0.75, 0.7),
+    new T.MeshStandardMaterial({ color: 0x1a1220, roughness: 0.7, metalness: 0.15 })
+  );
+  counter.position.set(0, 0.375, -1.9);
+  counter.castShadow = true;
+  counter.receiveShadow = true;
+  scene.add(counter);
+  const counterTrim = new T.Mesh(
+    new T.BoxGeometry(3.24, 0.03, 0.74),
+    new T.MeshStandardMaterial({ color: 0xe0b040, metalness: 0.6, roughness: 0.35 })
+  );
+  counterTrim.position.set(0, 0.75, -1.9);
+  scene.add(counterTrim);
+
+  // two turntables set into the counter top, one per hand/color
+  const decks = {};
+  [['left', LEFT_X, LEFT_COLOR], ['right', RIGHT_X, RIGHT_COLOR]].forEach(([hand, x, color]) => {
+    const group = new T.Group();
+    group.position.set(x, 0.77, -1.85);
+    const platter = new T.Mesh(
+      new T.CylinderGeometry(0.4, 0.4, 0.05, 40),
+      new T.MeshStandardMaterial({ color: 0x14101a, roughness: 0.5, metalness: 0.4 })
+    );
+    platter.castShadow = true;
+    group.add(platter);
+    const ring = new T.Mesh(
+      new T.TorusGeometry(0.4, 0.012, 10, 40),
+      new T.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.5, roughness: 0.4 })
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.026;
+    group.add(ring);
+    const label = new T.Mesh(
+      new T.CircleGeometry(0.11, 24),
+      new T.MeshStandardMaterial({ color: 0x0c0810, roughness: 0.6 })
+    );
+    label.rotation.x = -Math.PI / 2;
+    label.position.y = 0.027;
+    group.add(label);
+    const tonearm = new T.Mesh(
+      new T.BoxGeometry(0.42, 0.025, 0.025),
+      new T.MeshStandardMaterial({ color: 0xd8d8e0, metalness: 0.7, roughness: 0.3 })
+    );
+    tonearm.position.set(0.28, 0.05, -0.28);
+    tonearm.rotation.y = -0.5;
+    group.add(tonearm);
+    scene.add(group);
+    decks[hand] = { group, ring, color };
+  });
+
+  // called-hand callout light, hovers above the correct deck when flashing
+  const calloutArrow = new T.Mesh(
+    new T.ConeGeometry(0.1, 0.16, 4),
+    new T.MeshStandardMaterial({ color: LEFT_COLOR, emissive: LEFT_COLOR, emissiveIntensity: 1.4, roughness: 0.3 })
+  );
+  calloutArrow.rotation.x = Math.PI;
+  scene.add(calloutArrow);
+
+  // suspended neon rails: one per deck, reimagining each classic bar as a
+  // hanging light fixture. GOOD band (0.44 width) + PERFECT band (0.16
+  // width) match the classic's proportions exactly, both centered.
+  function buildRail(x, color) {
+    const group = new T.Group();
+    group.position.set(x, RAIL_Y, DECK_Z);
+    const track = new T.Mesh(
+      new T.BoxGeometry(RAIL_LEN + 0.16, 0.045, 0.045),
+      new T.MeshStandardMaterial({ color: 0x2a2030, roughness: 0.7 })
+    );
+    group.add(track);
+    const goodBand = new T.Mesh(
+      new T.BoxGeometry(RAIL_LEN * 0.44, 0.075, 0.075),
+      new T.MeshStandardMaterial({ color: 0xe0a030, emissive: 0x4a3010, transparent: true, opacity: 0.5, roughness: 0.5 })
+    );
+    group.add(goodBand);
+    const perfectBand = new T.Mesh(
+      new T.BoxGeometry(RAIL_LEN * 0.08, 0.095, 0.095),
+      new T.MeshStandardMaterial({ color: 0xf4ecd8, emissive: 0x888078, transparent: true, opacity: 0.65, roughness: 0.4 })
+    );
+    group.add(perfectBand);
+    scene.add(group);
+    [-RAIL_LEN / 2 - 0.08, RAIL_LEN / 2 + 0.08].forEach((cx) => {
+      const cable = new T.Mesh(
+        new T.CylinderGeometry(0.006, 0.006, 0.85, 6),
+        new T.MeshStandardMaterial({ color: 0x241a2a, roughness: 0.9 })
+      );
+      cable.position.set(x + cx, RAIL_Y + 0.42, DECK_Z);
+      scene.add(cable);
+    });
+    const orb = new T.Mesh(
+      new T.SphereGeometry(0.075, 18, 18),
+      new T.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.1, roughness: 0.3 })
+    );
+    orb.castShadow = true;
+    scene.add(orb);
+    const glow = new T.PointLight(color, 0.7, 3);
+    scene.add(glow);
+    return { orb, glow };
+  }
+  const leftRail = buildRail(LEFT_X, LEFT_COLOR);
+  const rightRail = buildRail(RIGHT_X, RIGHT_COLOR);
+
+  function railX(base, p) { return base + p * (RAIL_LEN / 2 - 0.04); }
+  leftRail.orb.position.set(railX(LEFT_X, leftPos), RAIL_Y, DECK_Z);
+  leftRail.glow.position.copy(leftRail.orb.position);
+  rightRail.orb.position.set(railX(RIGHT_X, rightPos), RAIL_Y, DECK_Z);
+  rightRail.glow.position.copy(rightRail.orb.position);
+
+  // lights: dim ambient plus a warm spot over the booth, matching the rest
+  // of the world's palette
+  scene.add(new T.AmbientLight(0x302840, 0.7));
+  const spot = new T.SpotLight(0xffe2c0, 0.9, 14, 0.55, 0.5);
+  spot.position.set(0, 3.4, -1.0);
+  spot.target = counter;
+  spot.castShadow = true;
+  spot.shadow.mapSize.set(1024, 1024);
+  scene.add(spot);
+  scene.add(spot.target);
+
+  // impact feedback state
+  let shakeT = 0;
+  const impactRings = {}; // hand -> { mesh, t }
+
+  function spawnImpact(hand, rail, color) {
+    if (impactRings[hand]) disposeImpact(hand);
+    const ring = new T.Mesh(
+      new T.TorusGeometry(0.075, 0.01, 8, 28),
+      new T.MeshBasicMaterial({ color, transparent: true, opacity: 0.9 })
+    );
+    ring.position.copy(rail.orb.position);
+    scene.add(ring);
+    impactRings[hand] = { mesh: ring, t: 0 };
+  }
+  function disposeImpact(hand) {
+    const r = impactRings[hand];
+    if (!r) return;
+    scene.remove(r.mesh);
+    r.mesh.geometry.dispose();
+    r.mesh.material.dispose();
+    delete impactRings[hand];
+  }
+
+  function nextRound() {
+    round++;
+    leftSpeed += 0.07;
+    rightSpeed += 0.09;
+    expectedHand = Math.random() < 0.5 ? 'left' : 'right';
+    phase = 'wait';
+  }
+
+  function resetRailColor(hand) {
+    const rail = hand === 'left' ? leftRail : rightRail;
+    const color = hand === 'left' ? LEFT_COLOR : RIGHT_COLOR;
+    rail.orb.material.color.setHex(color);
+    rail.orb.material.emissive.setHex(color);
+    rail.glow.color.setHex(color);
+  }
+
+  // Full teardown -- called right before every exitMinigame().
+  function cleanup() {
+    disposeImpact('left');
+    disposeImpact('right');
+    scene.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
+        else obj.material.dispose();
+      }
+    });
+    scene.clear();
+  }
+  function leave() { cleanup(); exitMinigame(); }
+
+  return {
+    update(dt) {
+      t += dt;
+
+      if (phase === 'wait') {
+        leftPos += leftDir * dt * leftSpeed;
+        if (leftPos >= 1) { leftPos = 1; leftDir = -1; }
+        if (leftPos <= -1) { leftPos = -1; leftDir = 1; }
+        rightPos += rightDir * dt * rightSpeed;
+        if (rightPos >= 1) { rightPos = 1; rightDir = -1; }
+        if (rightPos <= -1) { rightPos = -1; rightDir = 1; }
+
+        const pressedHand = interactPressed ? 'left' : (scratchPressed ? 'right' : null);
+        if (pressedHand) {
+          if (pressedHand !== expectedHand) {
+            combo = 0;
+            lastHitLabel = 'WRONG HAND!';
+            shakeT = 0.18;
+            const rail = pressedHand === 'left' ? leftRail : rightRail;
+            spawnImpact(pressedHand, rail, 0x6a6070);
+            rail.orb.material.color.setHex(0x6a6070);
+            rail.orb.material.emissive.setHex(0x6a6070);
+            rail.glow.color.setHex(0x6a6070);
+          } else {
+            const pos = pressedHand === 'left' ? leftPos : rightPos;
+            const res = hitFor(pos);
+            const mult = 1 + Math.min(combo, 8) * 0.1;
+            score += Math.round(res.pts * mult);
+            combo = res.pts > 0 ? combo + 1 : 0;
+            lastHitLabel = res.label;
+            shakeT = res.pts > 0 ? 0.14 : 0.2;
+            const rail = pressedHand === 'left' ? leftRail : rightRail;
+            spawnImpact(pressedHand, rail, res.color);
+            rail.orb.material.color.setHex(res.color);
+            rail.orb.material.emissive.setHex(res.color);
+            rail.glow.color.setHex(res.color);
+          }
+          phase = 'result';
+          resultTimer = 0.6;
+        }
+      } else if (phase === 'result') {
+        resultTimer -= dt;
+        if (resultTimer <= 0) {
+          if (round >= ROUNDS) phase = 'done';
+          else {
+            nextRound();
+            resetRailColor('left');
+            resetRailColor('right');
+            disposeImpact('left');
+            disposeImpact('right');
+          }
+        }
+      } else if (phase === 'done') {
+        if (!bestRecorded) { isNewBest = recordMinigameScore('scratchdj', score); bestRecorded = true; }
+        if (interactPressed || scratchPressed) { leave(); return; }
+      }
+
+      leftRail.orb.position.set(railX(LEFT_X, leftPos), RAIL_Y, DECK_Z);
+      leftRail.glow.position.copy(leftRail.orb.position);
+      rightRail.orb.position.set(railX(RIGHT_X, rightPos), RAIL_Y, DECK_Z);
+      rightRail.glow.position.copy(rightRail.orb.position);
+
+      // turntables spin faster with a hot combo
+      decks.left.group.rotation.y += dt * (0.5 + combo * 0.3);
+      decks.right.group.rotation.y -= dt * (0.5 + combo * 0.3);
+
+      // called-hand callout hovers and pulses above the correct deck
+      const calloutBase = expectedHand === 'left' ? LEFT_X : RIGHT_X;
+      const calloutColor = expectedHand === 'left' ? LEFT_COLOR : RIGHT_COLOR;
+      calloutArrow.position.set(calloutBase, 1.35 + Math.sin(t * 5) * 0.03, -1.55);
+      calloutArrow.material.color.setHex(calloutColor);
+      calloutArrow.material.emissive.setHex(calloutColor);
+      calloutArrow.visible = phase === 'wait' && Math.floor(t * 4) % 2 === 0;
+
+      Object.entries(impactRings).forEach(([hand, r]) => {
+        r.t += dt;
+        const k = Math.min(1, r.t / 0.32);
+        r.mesh.scale.setScalar(1 + k * 3);
+        r.mesh.material.opacity = 0.9 * (1 - k);
+      });
+
+      // camera: dolly in slightly on a result, gentle idle sway, decaying shake
+      const wantZ = (phase === 'result' || phase === 'done') ? CAM_Z_IN : CAM_POS.z;
+      camZ += (wantZ - camZ) * Math.min(1, dt * 5);
+      const sway = Math.sin(t * 0.6) * 0.02;
+      camera.position.set(CAM_POS.x + sway, CAM_POS.y + Math.sin(t * 0.8) * 0.01, camZ);
+      if (shakeT > 0) {
+        shakeT -= dt;
+        const s = Math.max(0, shakeT / 0.2) * 0.025;
+        camera.position.x += (Math.random() - 0.5) * s;
+        camera.position.y += (Math.random() - 0.5) * s;
+      }
+      camera.lookAt(0, RAIL_Y - 0.35, DECK_Z);
+
+      // X always bails out early, no matter the phase
+      if (buyPressed) { leave(); return; }
+    },
+    draw() {
+      renderer.render(scene, camera);
+      ctx.drawImage(dj3DCanvas, 0, 0);
+
+      // HUD: same layout and styling as the classic version
+      const cx = VIEW_W / 2;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#e0b040';
+      ctx.font = 'bold 24px monospace';
+      ctx.fillText('FREESTYLE SCRATCH-DJ 3D', cx, 56);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = '15px monospace';
+      ctx.fillText(`SCORE ${score}   COMBO x${combo}   ROUND ${Math.min(round, ROUNDS)}/${ROUNDS}`, cx, 80);
+
+      ctx.fillStyle = '#5fd0ff';
+      ctx.font = 'bold 13px monospace';
+      ctx.fillText('LEFT [E]', cx - 150, 560);
+      ctx.fillStyle = '#ff5fb0';
+      ctx.fillText('RIGHT [Q/SK8]', cx + 150, 560);
+
+      ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
+      ctx.font = 'bold 16px monospace';
+      if (phase === 'wait') ctx.fillText('- SCRATCH THE CALLED HAND ON THE BEAT -', cx, 522);
+      else if (phase === 'result') ctx.fillText(lastHitLabel, cx, 522);
+      else if (phase === 'done') ctx.fillText(`FINAL SCORE: ${score} - PRESS E TO LEAVE`, cx, 522);
+
+      if (phase === 'done') {
+        ctx.font = '14px monospace';
+        ctx.fillStyle = isNewBest ? '#8cff5f' : '#9a90a8';
+        ctx.fillText(isNewBest ? 'NEW BEST!' : `BEST: ${bestFor('scratchdj')}`, cx, 542);
+      }
+
+      ctx.fillStyle = '#6a6070';
+      ctx.font = '13px monospace';
+      ctx.fillText('X to walk away anytime', cx, 582);
     },
   };
 }
