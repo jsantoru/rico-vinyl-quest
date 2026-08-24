@@ -896,62 +896,6 @@ function getMinigame3DRenderer(key) {
   return entry;
 }
 
-// ---- shared 3D ambience helpers ---------------------------------------------
-// Small, cheap helpers any 3D mini-game scene can pull in to feel "alive"
-// without any new assets or textures: a multi-frequency light flicker
-// (reads as a lived-in bulb, not a strobe) and a handful of slowly drifting
-// dust motes. Both cost almost nothing -- a few extra sin() calls and, for
-// the motes, a handful of tiny shared-geometry meshes -- and are torn down
-// the same way every other per-scene Three.js object is.
-//
-// Usage:
-//   spot.intensity = flickerIntensity(1.05, t);              // every frame
-//   const dust = createDustMotes(T, scene, { center, spread });
-//   dust.update(t);                                           // every frame
-//   dust.dispose();                                           // in cleanup()
-function flickerIntensity(base, t, seed = 0) {
-  return base
-    + Math.sin(t * 9.3 + seed) * base * 0.02
-    + Math.sin(t * 2.6 + seed * 1.7) * base * 0.015
-    + (Math.sin(t * 21 + seed * 3.1) > 0.965 ? base * 0.05 : 0); // rare tiny flicker-pop
-}
-
-function createDustMotes(T, scene, opts = {}) {
-  const count = opts.count ?? 14;
-  const spread = opts.spread ?? new T.Vector3(1.6, 1.4, 1.2);
-  const center = opts.center ?? new T.Vector3(0, 1.4, -2);
-  const color = opts.color ?? 0xf4ecd8;
-  const geo = new T.SphereGeometry(0.006, 4, 3);
-  const mat = new T.MeshBasicMaterial({ color, transparent: true, opacity: 0.25 });
-  const group = new T.Group();
-  scene.add(group);
-  const motes = [];
-  for (let i = 0; i < count; i++) {
-    const m = new T.Mesh(geo, mat);
-    const seed = Math.random() * Math.PI * 2;
-    m.position.set(
-      center.x + (Math.random() - 0.5) * spread.x,
-      center.y + (Math.random() - 0.5) * spread.y,
-      center.z + (Math.random() - 0.5) * spread.z
-    );
-    group.add(m);
-    motes.push({ mesh: m, seed, baseX: m.position.x, baseY: m.position.y, speed: 0.15 + Math.random() * 0.2 });
-  }
-  return {
-    update(t) {
-      motes.forEach((mo) => {
-        mo.mesh.position.y = mo.baseY + Math.sin(t * mo.speed + mo.seed) * 0.12;
-        mo.mesh.position.x = mo.baseX + Math.sin(t * mo.speed * 0.7 + mo.seed * 1.3) * 0.06;
-      });
-    },
-    dispose() {
-      scene.remove(group);
-      geo.dispose();
-      mat.dispose();
-    },
-  };
-}
-
 // ---- shared mini-game "juice" system (miniFX) ------------------------------
 // A small reusable effects toolkit any mini-game can pull from instead of
 // hand-rolling its own flash/shake/popup/particle/camera-punch code every
@@ -1473,13 +1417,6 @@ function createDarts3DGame() {
     bulb.position.copy(p.position);
     scene.add(bulb);
   });
-  const SPOT_BASE = spot.intensity;
-
-  // slow-drifting dust motes catching the spotlight, plus a couple of
-  // floating motes near each sconce -- pure atmosphere, no gameplay effect
-  const dust = createDustMotes(T, scene, {
-    center: new T.Vector3(0, 1.9, -1.8), spread: new T.Vector3(2.6, 1.6, 3.2), count: 16,
-  });
 
   // aim needle: a glowing vertical bar sweeping across the board face,
   // 1:1 with the classic version's needle
@@ -1537,7 +1474,6 @@ function createDarts3DGame() {
   let pendingPts = 0;
   let shakeT = 0;
   let impactRing = null, impactT = 0;
-  let spotBoostT = 0; // brief radial flare on the board when a throw lands
 
   // Where the dart lands: radial distance from center is exactly the
   // distance the shared scoring used, so the dart always sticks in the ring
@@ -1573,7 +1509,6 @@ function createDarts3DGame() {
     lastScoreLabel = pendingPts > 0 ? `+${pendingPts}` : 'MISS';
     throwsLeft--;
     shakeT = 0.22;
-    spotBoostT = pendingPts > 0 ? 0.3 : 0.12; // brief flare on the scoring zone
     // expanding fading ring right where the dart hit
     impactRing = new T.Mesh(
       new T.TorusGeometry(0.05, 0.008, 8, 32),
@@ -1599,7 +1534,6 @@ function createDarts3DGame() {
   // for the next visit.
   function cleanup() {
     disposeImpactRing();
-    dust.dispose();
     scene.traverse((obj) => {
       if (obj.geometry) obj.geometry.dispose();
       if (obj.material) {
@@ -1626,9 +1560,6 @@ function createDarts3DGame() {
   return {
     update(dt) {
       t += dt;
-      dust.update(t);
-      if (spotBoostT > 0) spotBoostT = Math.max(0, spotBoostT - dt);
-      spot.intensity = flickerIntensity(SPOT_BASE, t) + spotBoostT * SPOT_BASE * 1.4;
 
       if (phase === 'power') {
         power += powerDir * dt * 0.9;
@@ -3368,7 +3299,6 @@ function createCrateDigging3DGame() {
   let resultTimer = 0;
   let bestRecorded = false, isNewBest = false;
   let t = 0;
-  let introT = 0; // counts up from 0 each time a fresh stack drops in; drives the camera push-in
   const tally = { rare: 0, mixtape: 0, dud: 0 };
   const fx = createMiniFX();
 
@@ -3383,7 +3313,7 @@ function createCrateDigging3DGame() {
     for (const o of OUTCOMES) { if (r < o.weight) return o; r -= o.weight; }
     return OUTCOMES[OUTCOMES.length - 1];
   }
-  function newStack() { slots = Array.from({ length: SLOTS }, pickOutcome); introT = 0; }
+  function newStack() { slots = Array.from({ length: SLOTS }, pickOutcome); }
   newStack();
 
   // ---- scene ----
@@ -3452,13 +3382,9 @@ function createCrateDigging3DGame() {
   crateGroup.add(crateBack);
 
   // six sleeve slots stacked top to bottom, front face plain cardboard
-  // (alternating shades) until grabbed, then flip color to the outcome. Each
-  // gets a small circular "vinyl label" child mesh, hidden until a rare find
-  // pulls it out and turns it to face the camera.
+  // (alternating shades) until grabbed, then flip color to the outcome
   const slotH = CRATE_H / SLOTS;
   const sleeveMeshes = [];
-  const labelMeshes = [];
-  const labelGeo = new T.CircleGeometry(0.11, 24);
   for (let i = 0; i < SLOTS; i++) {
     const sleeve = new T.Mesh(
       new T.BoxGeometry(CRATE_W - 0.1, slotH - 0.03, 0.16),
@@ -3467,20 +3393,8 @@ function createCrateDigging3DGame() {
     sleeve.position.set(0, CRATE_H / 2 - slotH / 2 - i * slotH, -0.1);
     sleeve.castShadow = true;
     sleeve.receiveShadow = true;
-    sleeve.userData.baseX = sleeve.position.x;
-    sleeve.userData.baseY = sleeve.position.y;
-    sleeve.userData.swaySeed = Math.random() * Math.PI * 2;
     crateGroup.add(sleeve);
     sleeveMeshes.push(sleeve);
-
-    const label = new T.Mesh(
-      labelGeo,
-      new T.MeshBasicMaterial({ color: 0xf4ecd8, transparent: true, opacity: 0 })
-    );
-    label.position.set(0, 0, 0.09);
-    label.scale.setScalar(0.001);
-    sleeve.add(label);
-    labelMeshes.push(label);
   }
 
   // sweeping needle: a glowing bar that travels down the crate, with a
@@ -3509,54 +3423,31 @@ function createCrateDigging3DGame() {
   spot.castShadow = true;
   spot.shadow.mapSize.set(1024, 1024);
   scene.add(spot);
-  const SPOT_BASE = spot.intensity;
-  let spotBoostT = 0; // brief flare when a rare 45 catches the light
-
-  // slow-drifting dust motes in the spotlight beam -- pure atmosphere
-  const dust = createDustMotes(T, scene, {
-    center: new T.Vector3(0, 1.6, -2.2), spread: new T.Vector3(1.8, 1.6, 2.2), count: 14,
-  });
 
   // Fires the feedback for a grabbed sleeve, scaled to how good the find
   // was -- a rare 45 gets the full "perfect" treatment (camera punch, a
   // flash, a bigger particle burst, a bold popup), a mixtape gets a lighter
   // touch, and a dud gets barely more than a dull nudge. All of it routes
   // through the shared miniFX toolkit instead of one-off shake/ring code.
-  function fireOutcomeFX(mesh, outcome, index) {
+  function fireOutcomeFX(mesh, outcome) {
     const worldPos = new T.Vector3();
     mesh.getWorldPosition(worldPos);
     worldPos.z += 0.05;
     const screenPos = worldToScreen(worldPos);
-    const label = labelMeshes[index];
-    // sleeves on the left half of the crate flip open toward the right and
-    // vice versa, so a grab never rotates a sleeve straight into its neighbor
-    const side = index < SLOTS / 2 ? 1 : -1;
 
     if (outcome.type === 'rare') {
-      // full PERFECT treatment: pop + flip toward camera, the vinyl label
-      // catches the light, a warm spotlight flare, a bigger dust burst
-      mesh.userData.popRotY = side * 0.5;
-      label.userData.reveal = 1;
-      spotBoostT = 0.4;
       fx.perfect3D(T, scene, worldPos, outcome.color);
       fx.flash('#e0b040', 0.14, 0.22);
       fx.ring(screenPos.x, screenPos.y, '#e0b040', { endRadius: 60 });
       fx.popup(`+${outcome.pts}`, screenPos.x, screenPos.y, { color: '#e0b040', size: 22 });
     } else if (outcome.type === 'mixtape') {
-      mesh.userData.popRotY = side * 0.18;
       fx.cameraPunch(0.045, 0.16);
       fx.shake(0.025, 0.14);
       fx.spawnParticles3D(T, scene, worldPos, { color: outcome.color, count: 8 });
       fx.ring(screenPos.x, screenPos.y, '#4870d0');
       fx.popup(`+${outcome.pts}`, screenPos.x, screenPos.y, { color: '#4870d0' });
     } else {
-      // MISS treatment: an awkward sideways slide instead of a clean pop,
-      // a dull grey dust puff, a muted thud shake, and a brief screen dim
-      // (reusing fx.flash with a dark color, rather than a bright one)
-      mesh.userData.popX = side * -0.05;
-      fx.shake(0.015, 0.12);
-      fx.spawnParticles3D(T, scene, worldPos, { color: 0x555058, count: 5, speed: 0.7 });
-      fx.flash('#050308', 0.22, 0.3);
+      fx.shake(0.012, 0.1);
       fx.popup('DUD', screenPos.x, screenPos.y, { color: '#8a8090', size: 13 });
     }
   }
@@ -3577,7 +3468,7 @@ function createCrateDigging3DGame() {
     const popZ = lastOutcome.type === 'rare' ? 0.32 : lastOutcome.type === 'mixtape' ? 0.2 : 0.1;
     mesh.userData.popZ = popZ;
 
-    fireOutcomeFX(mesh, lastOutcome, grabbedIndex);
+    fireOutcomeFX(mesh, lastOutcome);
 
     phase = 'result';
     resultTimer = 1.0;
@@ -3588,21 +3479,12 @@ function createCrateDigging3DGame() {
     mesh.material.color.setHex(i % 2 === 0 ? 0x9a8058 : 0x8a7048);
     mesh.material.emissiveIntensity = 0;
     mesh.userData.popZ = 0;
-    mesh.userData.popRotY = 0;
-    mesh.userData.popX = 0;
-    mesh.rotation.y = 0;
     mesh.position.z = -0.1;
-    mesh.position.x = mesh.userData.baseX;
-    const label = labelMeshes[i];
-    label.userData.reveal = 0;
-    label.material.opacity = 0;
-    label.scale.setScalar(0.001);
   }
 
   // Full teardown -- called right before every exitMinigame().
   function cleanup() {
     fx.disposeParticles3D();
-    dust.dispose();
     scene.traverse((obj) => {
       if (obj.geometry) obj.geometry.dispose();
       if (obj.material) {
@@ -3617,12 +3499,8 @@ function createCrateDigging3DGame() {
   return {
     update(dt) {
       t += dt;
-      introT += dt;
       fx.update(dt);
       fx.updateParticles3D(dt);
-      dust.update(t);
-      if (spotBoostT > 0) spotBoostT = Math.max(0, spotBoostT - dt);
-      spot.intensity = flickerIntensity(SPOT_BASE, t) + spotBoostT * SPOT_BASE * 1.6;
 
       if (phase === 'dig') {
         needlePos += dir * dt * speed;
@@ -3652,38 +3530,16 @@ function createCrateDigging3DGame() {
       needle.visible = phase === 'dig';
       needleTip.position.y = needleY();
       needleTip.visible = phase === 'dig';
-      // tonearm tip breathes gently, like it's riding the sleeves' surface
-      needleTip.scale.setScalar(1 + Math.sin(t * 6) * 0.05);
 
-      // sleeves sway slightly while sitting in the crate -- a little overlap
-      // and shuffle so the stack reads as loose records, not a solid block --
-      // and ease toward their grabbed pop/slide/rotate targets
-      sleeveMeshes.forEach((mesh, i) => {
-        if (phase === 'dig' && i !== grabbedIndex) {
-          mesh.position.x = mesh.userData.baseX + Math.sin(t * 0.7 + mesh.userData.swaySeed) * 0.01;
-          mesh.rotation.z = Math.sin(t * 0.5 + mesh.userData.swaySeed) * 0.008;
-        }
+      // grabbed sleeve eases forward out of the crate, then eases back on reset
+      sleeveMeshes.forEach((mesh) => {
         const targetZ = -0.1 + (mesh.userData.popZ || 0);
         mesh.position.z += (targetZ - mesh.position.z) * Math.min(1, dt * 8);
-        const targetRotY = mesh.userData.popRotY || 0;
-        mesh.rotation.y += (targetRotY - mesh.rotation.y) * Math.min(1, dt * 7);
-        const targetX = mesh.userData.baseX + (mesh.userData.popX || 0);
-        if (mesh.userData.popX) mesh.position.x += (targetX - mesh.position.x) * Math.min(1, dt * 10);
       });
 
-      // vinyl label scales/fades in on a rare pull, tracking its sleeve's pop
-      labelMeshes.forEach((label) => {
-        const target = label.userData.reveal || 0;
-        const cur = label.material.opacity;
-        label.material.opacity += (target - cur) * Math.min(1, dt * 6);
-        label.scale.setScalar(Math.max(0.001, label.material.opacity));
-      });
-
-      // camera: push in toward the crate as a fresh stack drops in, dolly
-      // in further on a result, gentle idle sway, plus miniFX's decaying
-      // shake and push-in punch layered on top
-      const introPush = Math.max(0, 0.4 * (1 - Math.min(1, introT / 0.7)));
-      const wantZ = (phase === 'result' || phase === 'done') ? CAM_Z_IN : CAM_POS.z + introPush;
+      // camera: dolly in on a result, gentle idle sway, plus miniFX's
+      // decaying shake and push-in punch layered on top
+      const wantZ = (phase === 'result' || phase === 'done') ? CAM_Z_IN : CAM_POS.z;
       camZ += (wantZ - camZ) * Math.min(1, dt * 5);
       const sway = Math.sin(t * 0.6) * 0.015;
       camera.position.set(
