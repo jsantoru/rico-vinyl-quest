@@ -1675,7 +1675,11 @@ function createBeatJamGame() {
     p.flash = 1;
     hits++;
     if (!music.ctx) return;
-    const t = music.ctx.currentTime + 0.02;
+    // Fire at the current audio-clock instant -- no forward offset -- so a
+    // pad hit is heard as close to instantly as Web Audio allows. (Web
+    // Audio clamps any start time at/behind "now" to play immediately
+    // rather than throwing, so this is safe.)
+    const t = music.ctx.currentTime;
     if (p.id === 'kick') music.kick(t);
     else if (p.id === 'snare') music.snare(t);
     else if (p.id === 'hihat') music.hat(t, false, 0.16);
@@ -1923,7 +1927,9 @@ function createBeatJam3DGame() {
     shakeT = Math.min(shakeT + 0.05, 0.14);
 
     if (!music.ctx) return;
-    const time = music.ctx.currentTime + 0.02;
+    // Same reasoning as the classic version's triggerPad: play right at
+    // "now" instead of scheduling 20ms out, so pads respond instantly.
+    const time = music.ctx.currentTime;
     if (p.id === 'kick') music.kick(time);
     else if (p.id === 'snare') music.snare(time);
     else if (p.id === 'hihat') music.hat(time, false, 0.16);
