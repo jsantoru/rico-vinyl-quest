@@ -703,6 +703,81 @@ function loadThreeJS() {
   document.head.appendChild(s);
 }
 
+// ---- shared mini-game visual FX ----------------------------------------------
+// Lightweight, procedural "juice" used by the three benchmark mini-games.
+// It deliberately lives in the main 2D canvas layer: no extra textures,
+// models, post-processing passes, or particle assets are loaded.
+function createMiniGameFX() {
+  const particles = [];
+  const popups = [];
+  let flash = 0;
+  let flashColor = '#ffffff';
+  let shake = 0;
+
+  function burst(x, y, color, count = 10, power = 1) {
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = (45 + Math.random() * 95) * power;
+      particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 0.35 + Math.random() * 0.25, age: 0, size: 1.5 + Math.random() * 2.5, color });
+    }
+  }
+
+  function hit(opts = {}) {
+    const strength = opts.strength || 1;
+    flash = Math.max(flash, 0.12 * strength);
+    flashColor = opts.color || '#ffffff';
+    shake = Math.max(shake, 0.05 * strength);
+    if (opts.x != null && opts.y != null) burst(opts.x, opts.y, opts.color || '#ffffff', opts.count || 10, strength);
+    if (opts.label) popups.push({ x: opts.x || VIEW_W / 2, y: opts.y || 300, label: opts.label,
+      color: opts.color || '#f4ecd8', age: 0, life: 0.75, strength });
+  }
+
+  function update(dt) {
+    flash = Math.max(0, flash - dt * 1.8);
+    shake = Math.max(0, shake - dt * 0.75);
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const q = particles[i]; q.age += dt;
+      q.x += q.vx * dt; q.y += q.vy * dt; q.vy += 80 * dt;
+      if (q.age >= q.life) particles.splice(i, 1);
+    }
+    for (let i = popups.length - 1; i >= 0; i--) {
+      const q = popups[i]; q.age += dt; q.y -= 38 * dt;
+      if (q.age >= q.life) popups.splice(i, 1);
+    }
+  }
+
+  function draw() {
+    // Tiny, cheap vignette keeps the scene feeling like a framed arcade booth.
+    const g = ctx.createRadialGradient(VIEW_W/2, VIEW_H/2, VIEW_H*0.22, VIEW_W/2, VIEW_H/2, VIEW_H*0.78);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, 'rgba(4,2,8,0.28)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+    if (flash > 0) {
+      ctx.globalAlpha = flash;
+      ctx.fillStyle = flashColor; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+      ctx.globalAlpha = 1;
+    }
+    for (const q of particles) {
+      const a = Math.max(0, 1 - q.age / q.life);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = q.color;
+      ctx.fillRect(q.x - q.size/2, q.y - q.size/2, q.size, q.size);
+    }
+    ctx.globalAlpha = 1;
+    for (const q of popups) {
+      const a = Math.max(0, 1 - q.age / q.life);
+      const scale = 0.85 + Math.min(0.35, q.age * 1.8);
+      ctx.save(); ctx.globalAlpha = a; ctx.translate(q.x, q.y); ctx.scale(scale, scale);
+      ctx.textAlign = 'center'; ctx.font = 'bold 22px monospace';
+      ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillText(q.label, 2, 3);
+      ctx.fillStyle = q.color; ctx.fillText(q.label, 0, 0); ctx.restore();
+    }
+  }
+  return { hit, update, draw, getShake: () => shake };
+}
+
 // ---- shared 3D renderer cache ----------------------------------------------
 // One offscreen WebGL renderer/canvas per mini-game id, created once and
 // reused across visits (context creation is the slow part) while the scene
@@ -719,7 +794,8 @@ function getMinigame3DRenderer(key) {
     canvas.height = VIEW_H;
     // preserveDrawingBuffer guarantees drawImage() always sees the frame we
     // just rendered, whatever the browser's compositing timing.
-    const renderer = new T.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+    const renderer = new T.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(1);
     renderer.setSize(VIEW_W, VIEW_H, false);
     renderer.outputEncoding = T.sRGBEncoding;
     renderer.shadowMap.enabled = true;
@@ -1362,6 +1438,7 @@ function createBeatMatch3DGame() {
   let resultTimer = 0;
   let bestRecorded = false, isNewBest = false;
   let t = 0;
+  const fx = createMiniGameFX();
 
   function hitFor(p) {
     const d = Math.abs(p);
@@ -1496,6 +1573,9 @@ function createBeatMatch3DGame() {
   spot.castShadow = true;
   spot.shadow.mapSize.set(1024, 1024);
   scene.add(spot);
+  const railAccent = new T.PointLight(0x4ad0ff, 0.55, 5);
+  railAccent.position.set(0, 1.95, -2.2);
+  scene.add(railAccent);
 
   // impact feedback state
   let shakeT = 0;
@@ -1517,6 +1597,7 @@ function createBeatMatch3DGame() {
     impactRing.position.copy(orb.position);
     scene.add(impactRing);
     impactT = 0;
+    fx.hit({ x: VIEW_W / 2, y: 285, color: '#' + res.color.toString(16).padStart(6, '0'), label: res.label, strength: res.pts >= 50 ? 1.7 : res.pts >= 25 ? 1.15 : 0.65, count: res.pts >= 50 ? 16 : 9 });
     phase = 'result';
     resultTimer = 0.7;
   }
@@ -1546,6 +1627,7 @@ function createBeatMatch3DGame() {
   return {
     update(dt) {
       t += dt;
+      fx.update(dt);
 
       if (phase === 'wait') {
         pos += dir * dt * speed;
@@ -1603,6 +1685,7 @@ function createBeatMatch3DGame() {
     draw() {
       renderer.render(scene, camera);
       ctx.drawImage(bm3DCanvas, 0, 0);
+      fx.draw();
 
       // HUD: same layout and styling as the classic version
       const cx = VIEW_W / 2;
@@ -1829,6 +1912,7 @@ function createBeatJam3DGame() {
   let keyIdx = 0;
   let phase = 'jam'; // jam | done
   let t = 0;
+  const fx = createMiniGameFX();
   const prevKey = {};
 
   // ---- scene ----
@@ -1905,6 +1989,12 @@ function createBeatJam3DGame() {
   spot.castShadow = true;
   spot.shadow.mapSize.set(1024, 1024);
   scene.add(spot);
+  const jamRed = new T.PointLight(0xe04858, 0.45, 5);
+  jamRed.position.set(0, 1.2, -1.0);
+  scene.add(jamRed);
+  const jamBlue = new T.PointLight(0x4ad0ff, 0.45, 4);
+  jamBlue.position.set(-1.0, 1.5, -1.6);
+  scene.add(jamBlue);
 
   let shakeT = 0;
   let flashRings = [];
@@ -1925,6 +2015,8 @@ function createBeatJam3DGame() {
     scene.add(ring);
     flashRings.push({ mesh: ring, life: 0 });
     shakeT = Math.min(shakeT + 0.05, 0.14);
+    const hex = '#' + p.color.toString(16).padStart(6, '0');
+    fx.hit({ x: cx + p.dx, y: cy + p.dy, color: hex, strength: p.id === 'kick' ? 1.35 : 0.9, count: p.id === 'kick' ? 12 : 7 });
 
     if (!music.ctx) return;
     // Same reasoning as the classic version's triggerPad: play right at
@@ -1970,6 +2062,7 @@ function createBeatJam3DGame() {
     },
     update(dt) {
       t += dt;
+      fx.update(dt);
       if (buyPressed) { leave(); return; }
 
       if (phase === 'jam') {
@@ -2022,6 +2115,7 @@ function createBeatJam3DGame() {
     draw() {
       renderer.render(scene, camera);
       ctx.drawImage(jam3DCanvas, 0, 0);
+      fx.draw();
 
       // HUD: same layout and styling as the classic version
       ctx.textAlign = 'center';
@@ -2826,6 +2920,7 @@ function createCrateDigging3DGame() {
   let resultTimer = 0;
   let bestRecorded = false, isNewBest = false;
   let t = 0;
+  const fx = createMiniGameFX();
   const tally = { rare: 0, mixtape: 0, dud: 0 };
 
   const OUTCOMES = [
@@ -2941,6 +3036,9 @@ function createCrateDigging3DGame() {
   spot.castShadow = true;
   spot.shadow.mapSize.set(1024, 1024);
   scene.add(spot);
+  const crateAccent = new T.PointLight(0xe0b040, 0.5, 4);
+  crateAccent.position.set(0.9, 1.4, -1.2);
+  scene.add(crateAccent);
 
   let shakeT = 0;
   let impactRing = null, impactT = 0;
@@ -2981,6 +3079,7 @@ function createCrateDigging3DGame() {
     impactRing.position.z += 0.05;
     scene.add(impactRing);
     impactT = 0;
+    fx.hit({ x: VIEW_W / 2, y: 285, color: '#' + lastOutcome.color.toString(16).padStart(6, '0'), label: lastOutcome.label, strength: lastOutcome.type === 'rare' ? 1.8 : lastOutcome.type === 'mixtape' ? 1.15 : 0.55, count: lastOutcome.type === 'rare' ? 18 : 9 });
 
     phase = 'result';
     resultTimer = 1.0;
@@ -3011,6 +3110,7 @@ function createCrateDigging3DGame() {
   return {
     update(dt) {
       t += dt;
+      fx.update(dt);
 
       if (phase === 'dig') {
         needlePos += dir * dt * speed;
@@ -3074,6 +3174,7 @@ function createCrateDigging3DGame() {
     draw() {
       renderer.render(scene, camera);
       ctx.drawImage(crate3DCanvas, 0, 0);
+      fx.draw();
 
       // HUD: same layout and styling as the classic version
       const cx = VIEW_W / 2;
