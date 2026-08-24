@@ -11,6 +11,172 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
+// ---------------------------------------------------------------- atmosphere: cached gradients & glow sprites
+// These are built ONCE, here, instead of inside render() or any per-frame
+// draw function. ctx.createLinearGradient/createRadialGradient are
+// relatively expensive DOM-adjacent calls, and both gradients below only
+// ever depend on VIEW_W/VIEW_H, which are fixed constants -- so rebuilding
+// them 60x/sec would be pure waste. A single CanvasGradient object can be
+// reused for the life of the page.
+
+// Night-sky backdrop, screen-space, used in place of the old flat '#120e18'
+// fill behind every scene.
+const SKY_GRADIENT = (() => {
+  const g = ctx.createLinearGradient(0, 0, 0, VIEW_H);
+  g.addColorStop(0, '#0a0814');
+  g.addColorStop(0.55, '#161027');
+  g.addColorStop(1, '#241d38');
+  return g;
+})();
+
+// Soft screen-space vignette, drawn once per frame over the fully-composited
+// world (after ctx.restore(), before the HUD) to add depth without touching
+// any of the world-space drawing underneath it.
+const VIGNETTE_GRADIENT = (() => {
+  const g = ctx.createRadialGradient(
+    VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.32,
+    VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.85
+  );
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.5)');
+  return g;
+})();
+
+// Small pre-rendered "glow" sprites stand in for every light halo drawn in
+// the world (floodlights, neon signs, and future light sources). Each is
+// baked into an offscreen canvas ONCE per (radius, color) pair and cached;
+// drawing one is then a single ctx.drawImage() call, which is far cheaper
+// per-call than building a fresh createRadialGradient + fillRect every time
+// a light is drawn -- outdoor scenes can have a dozen+ light sources
+// on-screen at once, all repainted every frame.
+// `color` must be an rgba() string containing the literal text 'ALPHA' in
+// place of the alpha channel, e.g. 'rgba(224,176,64,ALPHA)'.
+const glowSpriteCache = new Map();
+function getGlowSprite(radius, color) {
+  const key = radius + '|' + color;
+  let spr = glowSpriteCache.get(key);
+  if (spr) return spr;
+  const size = radius * 2;
+  const off = document.createElement('canvas');
+  off.width = size; off.height = size;
+  const octx = off.getContext('2d');
+  const g = octx.createRadialGradient(radius, radius, 0, radius, radius, radius);
+  g.addColorStop(0, color.replace('ALPHA', '0.55'));
+  g.addColorStop(0.5, color.replace('ALPHA', '0.22'));
+  g.addColorStop(1, color.replace('ALPHA', '0'));
+  octx.fillStyle = g;
+  octx.fillRect(0, 0, size, size);
+  glowSpriteCache.set(key, off);
+  return off;
+}
+function drawGlow(x, y, radius, color) {
+  const spr = getGlowSprite(radius, color);
+  ctx.drawImage(spr, x - radius, y - radius);
+}
+
+// Converts a '#rrggbb' hex string (the color format used throughout this
+// file for particles, records, etc.) into the 'rgba(r,g,b,ALPHA)' template
+// drawGlow()/getGlowSprite() expect. Cached per hex string since the same
+// handful of colors get reused constantly.
+const hexRgbaCache = new Map();
+function hexToRgbaTemplate(hex) {
+  let t = hexRgbaCache.get(hex);
+  if (t) return t;
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  t = `rgba(${r},${g},${b},ALPHA)`;
+  hexRgbaCache.set(hex, t);
+  return t;
+}
+
+// Elliptical glow (soft contact shadows, halo behind a collected HUD icon,
+// etc). Reuses ONE fixed-resolution circular sprite per color -- stretching
+// it non-uniformly via drawImage's destination width/height -- rather than
+// caching a new sprite per (rx, ry) pair, so drawing any number of
+// different ellipse sizes in a given color costs no extra sprite bakes.
+function drawGlowEllipse(x, y, rx, ry, color) {
+  const spr = getGlowSprite(32, color);
+  ctx.drawImage(spr, x - rx, y - ry, rx * 2, ry * 2);
+}
+
+// Same reasoning as SKY_GRADIENT/VIGNETTE_GRADIENT above: the HUD samples
+// panel is always drawn at the same fixed rect (8,8,320,44), so its subtle
+// top-to-bottom sheen can be built once and reused every frame instead of
+// re-creating a gradient on every drawHUD() call.
+const HUD_PANEL_GRADIENT = (() => {
+  const g = ctx.createLinearGradient(0, 8, 0, 52);
+  g.addColorStop(0, 'rgba(30,24,40,0.85)');
+  g.addColorStop(1, 'rgba(8,6,12,0.85)');
+  return g;
+})();
+// Fixed screen-space stars for outdoor scenes. Positions/sizes/phases are
+// generated ONCE with a tiny deterministic PRNG (not Math.random(), so the
+// field is identical across reloads instead of reshuffling every launch),
+// then only their twinkle brightness changes per frame via a cheap sine --
+// no per-frame allocation, no gradients, just filled circles.
+const STARS = (() => {
+  const arr = [];
+  let seed = 1337;
+  const rand = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  for (let i = 0; i < 55; i++) {
+    arr.push({
+      x: rand() * VIEW_W,
+      y: rand() * VIEW_H * 0.5, // keep the field in the upper half of the sky
+      r: 0.6 + rand() * 1.1,
+      phase: rand() * Math.PI * 2,
+      speed: 0.5 + rand() * 0.7,
+    });
+  }
+  return arr;
+})();
+function drawStars(time) {
+  ctx.fillStyle = '#f4ecd8';
+  for (const s of STARS) {
+    const tw = 0.5 + 0.5 * Math.sin(time * s.speed + s.phase);
+    ctx.globalAlpha = 0.25 + tw * 0.55;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------------------------------------------------------------- skate trail
+// A small fixed-capacity ring buffer of recent skating positions, drawn as a
+// fading streak behind the player. Capacity is capped (SKATE_TRAIL_MAX) so
+// this can never grow unbounded -- oldest samples are evicted with shift()
+// once over the cap, same "bounded small array" pattern the FX module
+// already uses for its own 2D particle list.
+const SKATE_TRAIL_MAX = 8;
+const SKATE_TRAIL_INTERVAL = 0.035; // seconds between samples
+const SKATE_TRAIL_LIFE = 0.3; // seconds a sample stays visible
+let skateTrail = [];
+let skateTrailNextSample = 0;
+function updateSkateTrail(time) {
+  if (player.skating && player.moving) {
+    if (time >= skateTrailNextSample) {
+      skateTrailNextSample = time + SKATE_TRAIL_INTERVAL;
+      skateTrail.push({ x: player.x, y: player.y + 6, t: time });
+      if (skateTrail.length > SKATE_TRAIL_MAX) skateTrail.shift();
+    }
+  } else if (skateTrail.length) {
+    skateTrail.length = 0;
+  }
+}
+function drawSkateTrail(time) {
+  for (let i = 0; i < skateTrail.length; i++) {
+    const s = skateTrail[i];
+    const k = Math.max(0, 1 - (time - s.t) / SKATE_TRAIL_LIFE);
+    if (k <= 0) continue;
+    ctx.globalAlpha = k * 0.35;
+    ctx.fillStyle = '#e0e8f4';
+    ctx.fillRect(s.x - 9, s.y - 1, 18, 2);
+  }
+  ctx.globalAlpha = 1;
+}
+
 // ---------------------------------------------------------------- responsive fullscreen canvas
 (() => {
   let vp = document.querySelector('meta[name="viewport"]');
@@ -982,6 +1148,10 @@ function createMiniFX() {
       particles2D.forEach((p) => {
         const k = 1 - p.life / p.maxLife;
         ctx.globalAlpha = Math.max(0, k);
+        // soft halo behind the solid core -- radius is rounded so the
+        // shared sprite cache only ever holds a handful of entries even
+        // though particle sizes vary continuously
+        drawGlow(p.x, p.y, Math.max(4, Math.round(p.size * 1.6)), hexToRgbaTemplate(p.color));
         ctx.fillStyle = p.color;
         ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
       });
@@ -8265,7 +8435,7 @@ function render(time) {
     return;
   }
   if (WORLD_HIDDEN_STATES.has(state)) {
-    ctx.fillStyle = '#120e18';
+    ctx.fillStyle = SKY_GRADIENT;
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
     if (state === 'title') drawTitle(time);
     else if (state === 'digChoice') drawDigChoice(time);
@@ -8276,12 +8446,13 @@ function render(time) {
     return;
   }
   const map = maps[player.map];
-  ctx.fillStyle = '#120e18';
+  ctx.fillStyle = SKY_GRADIENT;
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
 
   let camX = 0, camY = 0;
   if (map.outside) {
     [camX, camY] = camera(map);
+    drawStars(time);
     drawMountains(camX);
   }
 
@@ -8333,6 +8504,14 @@ function render(time) {
   }
 
   ctx.restore();
+
+  // Screen-space vignette over the fully-composited world. Uses the
+  // pre-built VIGNETTE_GRADIENT (see top of file) -- no gradient math here,
+  // just one cheap fillRect -- and is drawn before the HUD so the HUD itself
+  // stays crisp and undimmed on top of it.
+  ctx.fillStyle = VIGNETTE_GRADIENT;
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
   // 'splash' and the WORLD_HIDDEN_STATES (title/digChoice/history/
   // slotChoose/select) already returned earlier in render() -- only the
   // gameplay-overlay states that draw on top of a *visible* world reach
@@ -9204,9 +9383,9 @@ function drawSkylabSign(px, py, label) {
   const sw = 66, sh = 17;
   const signY = py - 32;
 
-  // soft glow behind the plaque
-  ctx.fillStyle = 'rgba(150,90,230,0.32)';
-  ctx.fillRect(cx - sw / 2 - 5, signY - 4, sw + 10, sh + 10);
+  // soft glow behind the plaque -- a real radial bloom now (cached sprite,
+  // one drawImage call) instead of a flat semi-transparent rectangle
+  drawGlow(cx, signY + sh / 2, 30, 'rgba(150,90,230,ALPHA)');
 
   // mount bracket down to the desk
   ctx.fillStyle = '#241c28';
@@ -10331,6 +10510,10 @@ function roundRectPath(x, y, w, h, r) {
 
 // A small stadium floodlight tower: pole + lamp head, gold-tinted bulbs.
 function drawFloodlight(x, y) {
+  // Warm halo behind the fixture, cheap: a single drawImage against the
+  // shared glow-sprite cache (see top of file) instead of a fresh
+  // per-call gradient.
+  drawGlow(x + 9, y + 6, 34, 'rgba(224,176,64,ALPHA)');
   ctx.fillStyle = 'rgba(0,0,0,0.2)';
   ctx.fillRect(x + 5, y + 34, 10, 4);
   ctx.fillStyle = '#3a3a3e';
@@ -13537,8 +13720,12 @@ function drawPlayer(time) {
   const bob = player.skating && player.moving ? Math.sin(time * 14) * 1.5 : 0;
   const footY = player.y + 6;
 
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.fillRect(player.x - 11, footY - 3, 22, 5);
+  updateSkateTrail(time);
+  drawSkateTrail(time);
+
+  // soft blurred contact shadow (cached ellipse glow) instead of a
+  // hard-edged rectangle
+  drawGlowEllipse(player.x, footY - 0.5, 13, 5, 'rgba(0,0,0,ALPHA)');
 
   if (player.skating) {
     ctx.fillStyle = '#8a4a20';
@@ -13640,7 +13827,7 @@ function drawPlayerIceCream(spriteTopY) {
 
 // ---------------------------------------------------------------- UI
 function drawHUD() {
-  ctx.fillStyle = 'rgba(10,8,14,0.75)';
+  ctx.fillStyle = HUD_PANEL_GRADIENT;
   ctx.fillRect(8, 8, 320, 44);
   ctx.font = 'bold 14px monospace';
   ctx.textAlign = 'left';
@@ -13649,11 +13836,16 @@ function drawHUD() {
   worldPadOrder().forEach((id, i) => {
     const r = worldRecords()[id];
     const x = 88 + i * 46, y = 14;
-    ctx.fillStyle = collected.has(recKey(currentWorldId(), id)) ? r.color : '#262030';
+    const isCollected = collected.has(recKey(currentWorldId(), id));
+    if (isCollected) {
+      // small satisfying halo behind pads the player has already found
+      drawGlowEllipse(x + 19, y + 15, 21, 17, hexToRgbaTemplate(r.color));
+    }
+    ctx.fillStyle = isCollected ? r.color : '#262030';
     ctx.fillRect(x, y, 38, 30);
     ctx.strokeStyle = '#0a080e';
     ctx.strokeRect(x + 0.5, y + 0.5, 37, 29);
-    ctx.fillStyle = collected.has(recKey(currentWorldId(), id)) ? '#181418' : '#4a4258';
+    ctx.fillStyle = isCollected ? '#181418' : '#4a4258';
     ctx.textAlign = 'center';
     ctx.fillText(r.pad, x + 19, y + 20);
   });
