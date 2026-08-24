@@ -730,6 +730,295 @@ function getMinigame3DRenderer(key) {
   return entry;
 }
 
+// ---- shared mini-game "juice" system (miniFX) ------------------------------
+// A small reusable effects toolkit any mini-game can pull from instead of
+// hand-rolling its own flash/shake/popup/particle/camera-punch code every
+// time -- Crate Digging 3D already rolls its own version of several of these
+// (a decaying camera shake, an expanding impact ring, a per-sleeve pop) and
+// this is that pattern pulled out and generalized so every mini-game,
+// current and future, can share one implementation.
+//
+// Nothing calls into this yet. It's built first, on its own, so the next
+// pass -- upgrading Crate Digging 3D to use it -- is wiring, not invention.
+// Once that one mini-game proves the system out, the same `fx` instance
+// shape drops into Beat Match, Beat Jam, and the rest.
+//
+// Usage shape, once wired into a mini-game (2D canvas games read `fx.draw()`
+// and `fx.shakeOffset`; 3D scenes skip `fx.draw()` and instead read the live
+// numeric offsets directly and manage their own particle scene):
+//
+//   const fx = createMiniFX();
+//
+//   update(dt) {
+//     fx.update(dt);                              // every frame, first thing
+//     ...
+//     if (goodHit) fx.perfect(x, y, '#e0b040', '+100');  // 2D combo
+//     if (miss)    fx.miss(x, y);
+//   }
+//
+//   draw() {                                       // 2D mini-game
+//     ctx.save();
+//     ctx.translate(fx.shakeOffset.x, fx.shakeOffset.y);
+//     ...normal drawing...
+//     ctx.restore();
+//     fx.draw();                                    // flashes/popups/etc on top
+//   }
+//
+//   // 3D mini-game, each frame:
+//   camera.position.x = CAM_POS.x + fx.shakeOffset.x;
+//   camera.position.z = baseZ + fx.cameraPunchOffset;   // punch curve
+//   if (goodHit) fx.perfect3D(T, scene, worldPos, 0xe0b040);
+//   fx.updateParticles3D(dt);
+//   // on cleanup, alongside the scene's own dispose:
+//   fx.disposeParticles3D();
+function createMiniFX() {
+  // ---- screen flash: a full-view color wash that fades out -----------------
+  let flashColor = '#ffffff', flashT = 0, flashDur = 0, flashPeak = 0;
+  function flash(color, duration = 0.15, peakAlpha = 0.35) {
+    flashColor = color; flashT = 0; flashDur = duration; flashPeak = peakAlpha;
+  }
+
+  // ---- screen/camera shake: decaying random jitter --------------------------
+  let shakeT = 0, shakeDur = 0, shakeMag = 0;
+  const shakeOffset = { x: 0, y: 0 };
+  function shake(magnitude = 6, duration = 0.2) {
+    // don't let a small hit cut off a bigger shake that's still playing out
+    const remaining = shakeT < shakeDur ? shakeMag * (1 - shakeT / shakeDur) : 0;
+    if (magnitude < remaining) return;
+    shakeMag = magnitude; shakeDur = duration; shakeT = 0;
+  }
+
+  // ---- camera punch: a quick push-in-and-back curve, for 3D cameras --------
+  let punchT = 0, punchDur = 0, punchMag = 0;
+  let cameraPunchOffset = 0;
+  function cameraPunch(magnitude = 0.06, duration = 0.18) {
+    punchMag = magnitude; punchDur = duration; punchT = 0;
+  }
+
+  // ---- popups: floating score/label text ------------------------------------
+  let popups = [];
+  function popup(text, x, y, opts = {}) {
+    popups.push({
+      text, x, y,
+      color: opts.color || '#f4ecd8',
+      size: opts.size || 16,
+      life: 0,
+      maxLife: opts.duration || 0.9,
+      rise: opts.rise || 40,
+    });
+  }
+
+  // ---- rings: expanding, fading circle outlines (2D) -------------------------
+  let rings = [];
+  function ring(x, y, color, opts = {}) {
+    rings.push({
+      x, y, color,
+      life: 0,
+      maxLife: opts.duration || 0.4,
+      startR: opts.startRadius ?? 6,
+      endR: opts.endRadius ?? 46,
+      lineWidth: opts.lineWidth || 3,
+    });
+  }
+
+  // ---- particles: small 2D canvas bursts -------------------------------------
+  let particles2D = [];
+  function particles(x, y, opts = {}) {
+    const count = opts.count ?? 10;
+    const color = opts.color || '#e0b040';
+    const speed = opts.speed ?? 90;
+    const gravity = opts.gravity ?? 160;
+    const life = opts.life ?? 0.6;
+    const size = opts.size ?? 3;
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = speed * (0.4 + Math.random() * 0.6);
+      particles2D.push({
+        x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - speed * 0.3,
+        life: 0, maxLife: life * (0.7 + Math.random() * 0.6),
+        color, size: size * (0.7 + Math.random() * 0.6), gravity,
+      });
+    }
+  }
+
+  // ---- particles3D: small Three.js mesh bursts, for 3D scenes ----------------
+  // The caller's scene owns these meshes once added -- disposeParticles3D()
+  // must be called from the mini-game's own cleanup() so nothing leaks past
+  // exitMinigame(), same as every other Three.js object those scenes create.
+  let particles3D = [];
+  function spawnParticles3D(T, scene, position, opts = {}) {
+    const count = opts.count ?? 8;
+    const color = opts.color ?? 0xe0b040;
+    const speed = opts.speed ?? 1.4;
+    const size = opts.size ?? 0.03;
+    const life = opts.life ?? 0.5;
+    const geo = new T.SphereGeometry(size, 5, 4);
+    for (let i = 0; i < count; i++) {
+      const mat = new T.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
+      const mesh = new T.Mesh(geo, mat);
+      mesh.position.copy(position);
+      const dir = new T.Vector3(
+        Math.random() - 0.5, Math.random() * 0.6 + 0.2, Math.random() - 0.5
+      ).normalize();
+      const s = speed * (0.5 + Math.random() * 0.6);
+      scene.add(mesh);
+      particles3D.push({
+        mesh, vel: dir.multiplyScalar(s), life: 0,
+        maxLife: life * (0.7 + Math.random() * 0.6),
+        sharedGeo: geo,
+      });
+    }
+  }
+  function updateParticles3D(dt) {
+    for (let i = particles3D.length - 1; i >= 0; i--) {
+      const p = particles3D[i];
+      p.life += dt;
+      const k = p.life / p.maxLife;
+      if (k >= 1) {
+        if (p.mesh.parent) p.mesh.parent.remove(p.mesh);
+        p.mesh.material.dispose();
+        particles3D.splice(i, 1);
+        continue;
+      }
+      p.vel.y -= dt * 1.6; // gentle gravity
+      p.mesh.position.addScaledVector(p.vel, dt);
+      p.mesh.material.opacity = 1 - k;
+      p.mesh.scale.setScalar(1 - k * 0.5);
+    }
+  }
+  // Call from the mini-game's own cleanup(), before exitMinigame().
+  function disposeParticles3D() {
+    const seenGeo = new Set();
+    particles3D.forEach((p) => {
+      if (p.mesh.parent) p.mesh.parent.remove(p.mesh);
+      p.mesh.material.dispose();
+      if (!seenGeo.has(p.sharedGeo)) { p.sharedGeo.dispose(); seenGeo.add(p.sharedGeo); }
+    });
+    particles3D = [];
+  }
+
+  // ---- convenience combos -----------------------------------------------------
+  // A "big success" moment, 2D: flash + shake + ring + particles + popup.
+  function perfect(x, y, color = '#e0b040', text = null) {
+    flash(color, 0.12, 0.22);
+    shake(7, 0.22);
+    ring(x, y, color);
+    particles(x, y, { color, count: 14 });
+    if (text) popup(text, x, y, { color });
+  }
+  // A smaller "ok" moment, 2D: no flash, gentler shake/particles.
+  function goodHit(x, y, color = '#f4ecd8', text = null) {
+    shake(3, 0.12);
+    particles(x, y, { color, count: 6, speed: 60 });
+    if (text) popup(text, x, y, { color });
+  }
+  // A miss, 2D: a quick dull shake, no flash, no particles.
+  function miss(x, y, text = null) {
+    shake(4, 0.15);
+    if (text) popup(text, x, y, { color: '#c04070' });
+  }
+  // A "big success" moment, 3D: camera punch + shake + a particle burst at
+  // the given world position. The caller still owns rendering the scene/camera.
+  function perfect3D(T, scene, worldPos, color = 0xe0b040) {
+    cameraPunch(0.08, 0.2);
+    shake(0.05, 0.22);
+    spawnParticles3D(T, scene, worldPos, { color, count: 12 });
+  }
+
+  return {
+    // primitives
+    flash, shake, cameraPunch, popup, ring, particles,
+    spawnParticles3D, updateParticles3D, disposeParticles3D,
+    // convenience combos
+    perfect, goodHit, miss, perfect3D,
+    // live values 2D and 3D scenes read directly each frame
+    shakeOffset,
+    get cameraPunchOffset() { return cameraPunchOffset; },
+
+    update(dt) {
+      if (flashT < flashDur) flashT += dt;
+
+      if (shakeT < shakeDur) {
+        shakeT += dt;
+        const k = Math.max(0, 1 - shakeT / shakeDur);
+        const m = shakeMag * k;
+        shakeOffset.x = (Math.random() - 0.5) * 2 * m;
+        shakeOffset.y = (Math.random() - 0.5) * 2 * m;
+      } else {
+        shakeOffset.x = 0; shakeOffset.y = 0;
+      }
+
+      // eases up to the peak and back down to 0 over the punch's duration,
+      // rather than snapping in and cutting off
+      if (punchT < punchDur) {
+        punchT += dt;
+        const k = Math.min(1, punchT / punchDur);
+        cameraPunchOffset = Math.sin(k * Math.PI) * punchMag;
+      } else {
+        cameraPunchOffset = 0;
+      }
+
+      popups.forEach((p) => { p.life += dt; });
+      popups = popups.filter((p) => p.life < p.maxLife);
+
+      rings.forEach((r) => { r.life += dt; });
+      rings = rings.filter((r) => r.life < r.maxLife);
+
+      for (let i = particles2D.length - 1; i >= 0; i--) {
+        const p = particles2D[i];
+        p.life += dt;
+        if (p.life >= p.maxLife) { particles2D.splice(i, 1); continue; }
+        p.vy += p.gravity * dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+      }
+    },
+
+    // Draws every active 2D effect (particles, rings, popups, flash wash) on
+    // top of whatever the mini-game already drew this frame. 3D scenes don't
+    // call this -- they read shakeOffset/cameraPunchOffset directly and call
+    // updateParticles3D() instead, since their particles live in the scene.
+    draw() {
+      particles2D.forEach((p) => {
+        const k = 1 - p.life / p.maxLife;
+        ctx.globalAlpha = Math.max(0, k);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+      });
+      ctx.globalAlpha = 1;
+
+      rings.forEach((r) => {
+        const k = r.life / r.maxLife;
+        ctx.globalAlpha = Math.max(0, 1 - k);
+        ctx.strokeStyle = r.color;
+        ctx.lineWidth = r.lineWidth;
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, r.startR + (r.endR - r.startR) * k, 0, Math.PI * 2);
+        ctx.stroke();
+      });
+      ctx.globalAlpha = 1;
+
+      popups.forEach((p) => {
+        const k = p.life / p.maxLife;
+        ctx.globalAlpha = Math.max(0, 1 - k);
+        ctx.fillStyle = p.color;
+        ctx.font = `bold ${p.size}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillText(p.text, p.x, p.y - k * p.rise);
+      });
+      ctx.globalAlpha = 1;
+
+      if (flashT < flashDur) {
+        const k = Math.max(0, 1 - flashT / flashDur);
+        ctx.globalAlpha = flashPeak * k;
+        ctx.fillStyle = flashColor;
+        ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+        ctx.globalAlpha = 1;
+      }
+    },
+  };
+}
+
 // ---- generic "CLASSIC vs 3D" mode chooser ----------------------------------
 // Runs as a mini-game itself (same update/draw contract) so the arcade sign
 // and the tap shortcut need no per-game changes: entering the mini-game
@@ -1899,16 +2188,21 @@ function createBeatJam3DGame() {
 
   // lights: dim ambient + a spot on the chassis, plus a soft rim light
   scene.add(new T.AmbientLight(0x302840, 0.75));
-  const spot = new T.SpotLight(0xffe2c0, 0.9, 14, 0.55, 0.5);
+  const SPOT_BASE = 0.9;
+  const spot = new T.SpotLight(0xffe2c0, SPOT_BASE, 14, 0.55, 0.5);
   spot.position.set(0, 3.2, -1.4);
   spot.target = chassisGroup;
   spot.castShadow = true;
   spot.shadow.mapSize.set(1024, 1024);
   scene.add(spot);
 
-  let shakeT = 0;
-  let flashRings = [];
+  const fx = createMiniFX();
+  let spotBoost = 0; // kick gives the spotlight a brief boom-pulse, decays back to SPOT_BASE
 
+  // Each pad gets its own reaction instead of one shared generic flash --
+  // kick is a BOOM that thumps the camera and pulses the spotlight, snare
+  // is a sharp FLASH, hi-hat is a tiny sparkle, keys ripple outward like a
+  // wave. All of it routes through the shared miniFX toolkit.
   function triggerPad(p) {
     p.flash = 1;
     hits++;
@@ -1917,14 +2211,27 @@ function createBeatJam3DGame() {
     const worldPos = new T.Vector3();
     mesh.getWorldPosition(worldPos);
     worldPos.z += 0.06;
-    const ring = new T.Mesh(
-      new T.TorusGeometry(0.22, 0.012, 8, 28),
-      new T.MeshBasicMaterial({ color: p.color, transparent: true, opacity: 0.9 })
-    );
-    ring.position.copy(worldPos);
-    scene.add(ring);
-    flashRings.push({ mesh: ring, life: 0 });
-    shakeT = Math.min(shakeT + 0.05, 0.14);
+
+    if (p.id === 'kick') {
+      fx.cameraPunch(0.05, 0.14);
+      fx.shake(0.03, 0.16);
+      fx.flash('#e0603a', 0.1, 0.12);
+      fx.spawnParticles3D(T, scene, worldPos, { color: p.color, count: 10, speed: 1.7 });
+      spotBoost = Math.min(spotBoost + 1.1, 1.6);
+    } else if (p.id === 'snare') {
+      fx.cameraPunch(0.03, 0.1);
+      fx.shake(0.018, 0.1);
+      fx.flash('#4ad0ff', 0.08, 0.1);
+      fx.spawnParticles3D(T, scene, worldPos, { color: p.color, count: 8, speed: 1.3 });
+    } else if (p.id === 'hihat') {
+      fx.shake(0.006, 0.06);
+      fx.spawnParticles3D(T, scene, worldPos, { color: p.color, count: 4, speed: 0.9, size: 0.018, life: 0.3 });
+    } else if (p.id === 'keys') {
+      fx.cameraPunch(0.02, 0.12);
+      fx.shake(0.01, 0.08);
+      fx.ring(cx + p.dx, cy + p.dy, '#8cff5f', { endRadius: 70, duration: 0.5, lineWidth: 2 });
+      fx.spawnParticles3D(T, scene, worldPos, { color: p.color, count: 6, speed: 1.0 });
+    }
 
     if (!music.ctx) return;
     // Same reasoning as the classic version's triggerPad: play right at
@@ -1948,8 +2255,7 @@ function createBeatJam3DGame() {
 
   // Full teardown -- called right before every exitMinigame().
   function cleanup() {
-    flashRings.forEach((r) => { scene.remove(r.mesh); r.mesh.geometry.dispose(); r.mesh.material.dispose(); });
-    flashRings = [];
+    fx.disposeParticles3D();
     scene.traverse((obj) => {
       if (obj.geometry) obj.geometry.dispose();
       if (obj.material) {
@@ -1970,6 +2276,8 @@ function createBeatJam3DGame() {
     },
     update(dt) {
       t += dt;
+      fx.update(dt);
+      fx.updateParticles3D(dt);
       if (buyPressed) { leave(); return; }
 
       if (phase === 'jam') {
@@ -1998,30 +2306,25 @@ function createBeatJam3DGame() {
         mesh.position.z += (targetZ - mesh.position.z) * Math.min(1, dt * 14);
       });
 
-      flashRings = flashRings.filter((r) => {
-        r.life += dt;
-        const k = Math.min(1, r.life / 0.35);
-        r.mesh.scale.setScalar(1 + k * 2.4);
-        r.mesh.material.opacity = 0.9 * (1 - k);
-        if (k >= 1) { scene.remove(r.mesh); r.mesh.geometry.dispose(); r.mesh.material.dispose(); return false; }
-        return true;
-      });
+      // kick's spotlight boom-pulse decays back to its resting brightness
+      spotBoost = Math.max(0, spotBoost - dt * 4);
+      spot.intensity = SPOT_BASE + spotBoost;
 
-      // gentle idle sway plus a tiny shake on each hit, decaying fast so
-      // rapid mashing reads as a steady vibration rather than a jolt
+      // gentle idle sway, plus miniFX's decaying shake and push-in punch
+      // (mashing pads reads as a steady vibration since fx.shake() won't
+      // let a small hit cut off a bigger one still playing out)
       const sway = Math.sin(t * 0.55) * 0.012;
-      camera.position.set(CAM_POS.x + sway, CAM_POS.y + Math.sin(t * 0.75) * 0.007, CAM_POS.z);
-      if (shakeT > 0) {
-        shakeT -= dt;
-        const s = Math.max(0, shakeT / 0.14) * 0.015;
-        camera.position.x += (Math.random() - 0.5) * s;
-        camera.position.y += (Math.random() - 0.5) * s;
-      }
+      camera.position.set(
+        CAM_POS.x + sway + fx.shakeOffset.x,
+        CAM_POS.y + Math.sin(t * 0.75) * 0.007 + fx.shakeOffset.y,
+        CAM_POS.z + fx.cameraPunchOffset
+      );
       camera.lookAt(MPC_POS.x, MPC_POS.y, MPC_POS.z);
     },
     draw() {
       renderer.render(scene, camera);
       ctx.drawImage(jam3DCanvas, 0, 0);
+      fx.draw(); // screen-space flash/ring from the last hit, on top of the 3D frame
 
       // HUD: same layout and styling as the classic version
       ctx.textAlign = 'center';
@@ -2827,6 +3130,7 @@ function createCrateDigging3DGame() {
   let bestRecorded = false, isNewBest = false;
   let t = 0;
   const tally = { rare: 0, mixtape: 0, dud: 0 };
+  const fx = createMiniFX();
 
   const OUTCOMES = [
     { type: 'rare',    label: 'RARE 45!',       sub: 'A genuine find.',            pts: 100, color: 0xe0b040, weight: 1 },
@@ -2855,6 +3159,14 @@ function createCrateDigging3DGame() {
   let camZ = CAM_POS.z;
   camera.position.copy(CAM_POS);
   camera.lookAt(CRATE_POS.x, CRATE_POS.y, CRATE_POS.z);
+
+  // Projects a 3D world position to 2D canvas pixel coordinates, so fx's
+  // screen-space effects (ring/popup) can land on top of a specific sleeve
+  // even though the scene itself is rendered in 3D.
+  function worldToScreen(vec3) {
+    const p = vec3.clone().project(camera);
+    return { x: (p.x + 1) / 2 * VIEW_W, y: (1 - p.y) / 2 * VIEW_H };
+  }
 
   // shop backdrop: wall + floor, same purple family as the rest of the world
   const wall = new T.Mesh(
@@ -2942,15 +3254,32 @@ function createCrateDigging3DGame() {
   spot.shadow.mapSize.set(1024, 1024);
   scene.add(spot);
 
-  let shakeT = 0;
-  let impactRing = null, impactT = 0;
+  // Fires the feedback for a grabbed sleeve, scaled to how good the find
+  // was -- a rare 45 gets the full "perfect" treatment (camera punch, a
+  // flash, a bigger particle burst, a bold popup), a mixtape gets a lighter
+  // touch, and a dud gets barely more than a dull nudge. All of it routes
+  // through the shared miniFX toolkit instead of one-off shake/ring code.
+  function fireOutcomeFX(mesh, outcome) {
+    const worldPos = new T.Vector3();
+    mesh.getWorldPosition(worldPos);
+    worldPos.z += 0.05;
+    const screenPos = worldToScreen(worldPos);
 
-  function disposeImpactRing() {
-    if (!impactRing) return;
-    scene.remove(impactRing);
-    impactRing.geometry.dispose();
-    impactRing.material.dispose();
-    impactRing = null;
+    if (outcome.type === 'rare') {
+      fx.perfect3D(T, scene, worldPos, outcome.color);
+      fx.flash('#e0b040', 0.14, 0.22);
+      fx.ring(screenPos.x, screenPos.y, '#e0b040', { endRadius: 60 });
+      fx.popup(`+${outcome.pts}`, screenPos.x, screenPos.y, { color: '#e0b040', size: 22 });
+    } else if (outcome.type === 'mixtape') {
+      fx.cameraPunch(0.045, 0.16);
+      fx.shake(0.025, 0.14);
+      fx.spawnParticles3D(T, scene, worldPos, { color: outcome.color, count: 8 });
+      fx.ring(screenPos.x, screenPos.y, '#4870d0');
+      fx.popup(`+${outcome.pts}`, screenPos.x, screenPos.y, { color: '#4870d0' });
+    } else {
+      fx.shake(0.012, 0.1);
+      fx.popup('DUD', screenPos.x, screenPos.y, { color: '#8a8090', size: 13 });
+    }
   }
 
   function grabSlot() {
@@ -2964,23 +3293,12 @@ function createCrateDigging3DGame() {
     mesh.material.emissive = new T.Color(lastOutcome.color);
     mesh.material.emissiveIntensity = 0.3;
 
-    // rare finds pop forward harder and shake the camera more -- the "feel"
-    // scales with how good the pull was, same spirit as darts' impact shake
+    // rare finds pop forward harder -- the "feel" scales with how good the
+    // pull was, same spirit as darts' impact shake
     const popZ = lastOutcome.type === 'rare' ? 0.32 : lastOutcome.type === 'mixtape' ? 0.2 : 0.1;
     mesh.userData.popZ = popZ;
-    shakeT = lastOutcome.type === 'rare' ? 0.3 : lastOutcome.type === 'mixtape' ? 0.16 : 0.08;
 
-    disposeImpactRing();
-    const worldPos = new T.Vector3();
-    mesh.getWorldPosition(worldPos);
-    impactRing = new T.Mesh(
-      new T.TorusGeometry(0.14, 0.014, 8, 32),
-      new T.MeshBasicMaterial({ color: lastOutcome.color, transparent: true, opacity: 0.9 })
-    );
-    impactRing.position.copy(worldPos);
-    impactRing.position.z += 0.05;
-    scene.add(impactRing);
-    impactT = 0;
+    fireOutcomeFX(mesh, lastOutcome);
 
     phase = 'result';
     resultTimer = 1.0;
@@ -2996,7 +3314,7 @@ function createCrateDigging3DGame() {
 
   // Full teardown -- called right before every exitMinigame().
   function cleanup() {
-    disposeImpactRing();
+    fx.disposeParticles3D();
     scene.traverse((obj) => {
       if (obj.geometry) obj.geometry.dispose();
       if (obj.material) {
@@ -3011,6 +3329,8 @@ function createCrateDigging3DGame() {
   return {
     update(dt) {
       t += dt;
+      fx.update(dt);
+      fx.updateParticles3D(dt);
 
       if (phase === 'dig') {
         needlePos += dir * dt * speed;
@@ -3028,7 +3348,6 @@ function createCrateDigging3DGame() {
             needlePos = 0; dir = 1;
             grabbedIndex = -1;
             newStack();
-            disposeImpactRing();
             phase = 'dig';
           }
         }
@@ -3048,24 +3367,16 @@ function createCrateDigging3DGame() {
         mesh.position.z += (targetZ - mesh.position.z) * Math.min(1, dt * 8);
       });
 
-      if (impactRing) {
-        impactT += dt;
-        const k = Math.min(1, impactT / 0.4);
-        impactRing.scale.setScalar(1 + k * 3);
-        impactRing.material.opacity = 0.9 * (1 - k);
-      }
-
-      // camera: dolly in on a result, gentle idle sway, decaying impact shake
+      // camera: dolly in on a result, gentle idle sway, plus miniFX's
+      // decaying shake and push-in punch layered on top
       const wantZ = (phase === 'result' || phase === 'done') ? CAM_Z_IN : CAM_POS.z;
       camZ += (wantZ - camZ) * Math.min(1, dt * 5);
       const sway = Math.sin(t * 0.6) * 0.015;
-      camera.position.set(CAM_POS.x + sway, CAM_POS.y + Math.sin(t * 0.8) * 0.008, camZ);
-      if (shakeT > 0) {
-        shakeT -= dt;
-        const s = Math.max(0, shakeT / 0.3) * 0.035;
-        camera.position.x += (Math.random() - 0.5) * s;
-        camera.position.y += (Math.random() - 0.5) * s;
-      }
+      camera.position.set(
+        CAM_POS.x + sway + fx.shakeOffset.x,
+        CAM_POS.y + Math.sin(t * 0.8) * 0.008 + fx.shakeOffset.y,
+        camZ + fx.cameraPunchOffset
+      );
       camera.lookAt(CRATE_POS.x, CRATE_POS.y, CRATE_POS.z);
 
       // X always bails out early, no matter the phase
@@ -3074,6 +3385,7 @@ function createCrateDigging3DGame() {
     draw() {
       renderer.render(scene, camera);
       ctx.drawImage(crate3DCanvas, 0, 0);
+      fx.draw(); // screen-space flash/ring/popup from the last grab, on top of the 3D frame
 
       // HUD: same layout and styling as the classic version
       const cx = VIEW_W / 2;
