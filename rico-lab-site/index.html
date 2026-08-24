@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rico Lab — Audio Tools</title>
+<style>
+  :root {
+    --bg: #0e0c09;
+    --panel: #17140f;
+    --line: #332c1f;
+    --gold: #d4af37;
+    --gold-dim: #8a7228;
+    --paper: #ece4d3;
+    --paper-dim: #9c9484;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--paper);
+    font-family: 'Courier New', ui-monospace, monospace;
+  }
+  body {
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(212,175,55,0.05), transparent 40%),
+      radial-gradient(circle at 80% 90%, rgba(212,175,55,0.04), transparent 40%);
+    min-height: 100vh;
+  }
+  header {
+    padding: 64px 24px 32px;
+    text-align: center;
+    border-bottom: 1px solid var(--line);
+  }
+  .eyebrow {
+    letter-spacing: 0.35em;
+    font-size: 11px;
+    color: var(--gold-dim);
+    text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+  h1 {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(2.4rem, 6vw, 4rem);
+    font-weight: 400;
+    margin: 0;
+    color: var(--paper);
+    letter-spacing: 0.01em;
+  }
+  h1 span { color: var(--gold); font-style: italic; }
+  .tagline {
+    margin-top: 14px;
+    color: var(--paper-dim);
+    font-size: 14px;
+    max-width: 480px;
+    margin-left: auto;
+    margin-right: auto;
+    line-height: 1.6;
+  }
+  main {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 56px 24px 80px;
+  }
+  .rack {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 22px;
+  }
+  .unit {
+    position: relative;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 26px 22px 22px;
+    text-decoration: none;
+    color: inherit;
+    display: block;
+    transition: border-color 0.2s ease, transform 0.2s ease;
+    overflow: hidden;
+  }
+  .unit::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--gold);
+    opacity: 0.25;
+    transition: opacity 0.2s ease;
+  }
+  .unit:hover {
+    border-color: var(--gold-dim);
+    transform: translateY(-2px);
+  }
+  .unit:hover::before { opacity: 1; }
+  .unit:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+  }
+  .unit-index {
+    font-size: 11px;
+    color: var(--gold-dim);
+    letter-spacing: 0.2em;
+  }
+  .unit-name {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 26px;
+    margin: 10px 0 8px;
+    color: var(--paper);
+  }
+  .unit-desc {
+    font-size: 12.5px;
+    color: var(--paper-dim);
+    line-height: 1.6;
+    margin: 0 0 18px;
+  }
+  .unit-launch {
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--gold);
+  }
+  .unit-launch::after { content: ' →'; }
+  footer {
+    text-align: center;
+    padding: 30px 24px 50px;
+    font-size: 11px;
+    color: var(--paper-dim);
+    letter-spacing: 0.08em;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .unit { transition: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="eyebrow">Rico Lab</div>
+  <h1>Instruments for <span>testing</span></h1>
+  <p class="tagline">Four self-contained Web Audio tools. No install, no build step — tap a unit to open it live in the browser.</p>
+</header>
+<main>
+  <div class="rack">
+    <a class="unit" href="rico-keys/index.html">
+      <div class="unit-index">UNIT 01</div>
+      <div class="unit-name">Rico's Keys</div>
+      <p class="unit-desc">A touchscreen piano with a synth engine and responsive keyboard, built entirely on the Web Audio API.</p>
+      <div class="unit-launch">Launch</div>
+    </a>
+    <a class="unit" href="rico-eq/index.html">
+      <div class="unit-index">UNIT 02</div>
+      <div class="unit-name">Rico's EQ</div>
+      <p class="unit-desc">A 5-band parametric EQ practice trainer with a live analyzer curve and ear-training match game.</p>
+      <div class="unit-launch">Launch</div>
+    </a>
+    <a class="unit" href="rico-cuts/index.html">
+      <div class="unit-index">UNIT 03</div>
+      <div class="unit-name">Rico Cuts</div>
+      <p class="unit-desc">A turntable scratch app. Drag the vinyl forward or backward to scratch, just like the real thing.</p>
+      <div class="unit-launch">Launch</div>
+    </a>
+    <a class="unit" href="rico-pocket-sampler/index.html">
+      <div class="unit-index">UNIT 04</div>
+      <div class="unit-name">Rico's Pocket Sampler</div>
+      <p class="unit-desc">An 8-pad Koala-style sampler with mic recording, waveform chopping, and a 16-step sequencer.</p>
+      <div class="unit-launch">Launch</div>
+    </a>
+  </div>
+</main>
+<footer>Built with the Web Audio API — no audio files, no dependencies.</footer>
+</body>
+</html>
