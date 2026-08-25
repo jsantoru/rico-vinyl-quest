@@ -7176,7 +7176,6 @@ function loadGame(slot) {
 
   state = 'play';
   music.setMenuBreak(false);
-  syncMusicDuckToMap(player.map); // resuming inside Rico's Beat Lab should stay ducked
   toast = { text: 'Game Loaded', t: 1.2 };
   return true;
 }
@@ -7201,7 +7200,6 @@ function newGame(slot) {
   player.tempItemTimer = 0;
   state = 'select';
   music.setMenuBreak(true);
-  syncMusicDuckToMap(player.map); // always 'town' on a fresh game -- clears any leftover duck
 }
 
 // Voice line played the instant a character is locked in at the select
@@ -7521,14 +7519,22 @@ const music = {
   },
 };
 
-// Rooms whose own audio should have the floor to themselves, with the
-// ambient town music ducked out rather than competing with it. Currently
-// just Rico's Beat Lab (the 'groove' shop interior, home to Beat Match and
-// Beat Jam) -- add more map ids here if a future room needs the same
-// treatment.
-const MUSIC_DUCKED_MAPS = new Set(['groove']);
-function syncMusicDuckToMap(mapId) {
-  music.duck(MUSIC_DUCKED_MAPS.has(mapId));
+// Rico's Beat Lab ('lab'/'labApp' game states -- the instrument-picker
+// popup and the instrument iframe it opens, both reached only via
+// checkLabDoor()) is the one place the ambient town music should be
+// ducked out, so the player can hear the sampler/drum-pad audio without
+// it fighting the background loop. No shop interior (including Green
+// Door Studio, map id 'groove') ducks -- every building should sound
+// like every other one, with the full music + sfx bus always audible.
+//
+// This is recalculated from `state` every frame in update() (see
+// syncMusicDuck() below) rather than toggled at individual
+// enter/exit call sites, so it can't drift out of sync no matter which
+// of the several ways the player backs out of the lab popup (keyboard
+// [X], on-screen [X] button, closing the instrument iframe, etc.).
+const DUCKED_STATES = new Set(['lab', 'labApp']);
+function syncMusicDuck() {
+  music.duck(DUCKED_STATES.has(state));
 }
 
 // ---------------------------------------------------------------- movement
@@ -7571,7 +7577,6 @@ function movePlayer(dt) {
     player.x = tr.x * TILE;
     player.y = tr.y * TILE;
     if (!maps[tr.map].outside) player.skating = false;
-    syncMusicDuckToMap(tr.map); // e.g. duck the ambient loop for Rico's Beat Lab
     saveGame(); // silent autosave checkpoint -- keeps "Continue" accurate to the room the player is in
   }
 
@@ -8367,6 +8372,7 @@ function frame(now) {
 
 function update(dt) {
   updateAmbient(dt);
+  syncMusicDuck(); // ducks the ambient loop only while in Rico's Beat Lab ('lab'/'labApp')
   if (toast) { toast.t -= dt; if (toast.t <= 0) toast = null; }
 
   if (state === 'splash') {
