@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Rico's Pocket Sampler</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="stage">
+      <!-- Top bar -->
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">RICO'S</span>
+          <span class="brand-sub">POCKET</span>
+        </div>
+        <p class="tagline">sample &middot; chop &middot; sequence</p>
+      </header>
+
+      <!-- Source controls -->
+      <section class="source" aria-label="Sample source">
+        <button id="recBtn" class="btn btn-primary" type="button">
+          <span class="dot"></span> Record
+        </button>
+        <label class="btn btn-ghost" for="fileInput">Load Audio</label>
+        <input id="fileInput" type="file" accept="audio/*" hidden />
+        <button id="kitBtn" class="btn btn-ghost" type="button">Load Kit</button>
+      </section>
+
+      <!-- Live level meter -->
+      <section class="meter-wrap" aria-label="Output level">
+        <div id="meterFill" class="meter-fill"></div>
+      </section>
+
+      <!-- 8 Pads -->
+      <section class="pads" id="pads" aria-label="Sound pads">
+        <!-- pads injected by game.js -->
+      </section>
+
+      <!-- Waveform editor -->
+      <section class="editor" aria-label="Waveform editor">
+        <div class="editor-head">
+          <span class="editor-title">EDITING <strong id="editTarget">PAD 1</strong></span>
+          <div class="editor-actions">
+            <button id="playSel" class="chip" type="button">Play</button>
+            <button id="chop8" class="chip chip-accent" type="button">Chop &rarr; 8 Pads</button>
+          </div>
+        </div>
+        <div class="wave-wrap">
+          <canvas id="wave" class="wave" width="900" height="220"></canvas>
+          <div id="handleStart" class="handle handle-start" role="slider" aria-label="Trim start" tabindex="0"></div>
+          <div id="handleEnd" class="handle handle-end" role="slider" aria-label="Trim end" tabindex="0"></div>
+          <div id="playhead" class="playhead" hidden></div>
+        </div>
+        <div class="editor-foot">
+          <div class="mini">
+            <span class="mini-key">START</span>
+            <span class="mini-val" id="startVal">0.00s</span>
+          </div>
+          <div class="mini">
+            <span class="mini-key">END</span>
+            <span class="mini-val" id="endVal">0.00s</span>
+          </div>
+          <div class="mini">
+            <span class="mini-key">LEN</span>
+            <span class="mini-val" id="lenVal">0.00s</span>
+          </div>
+          <button id="trimBtn" class="chip" type="button">Apply Trim</button>
+        </div>
+        <!-- per-pad flavor -->
+        <div class="pitch-row">
+          <div class="pitch-ctrl">
+            <label class="ctrl-label" for="pitch">PITCH</label>
+            <input id="pitch" class="slider" type="range" min="-12" max="12" step="1" value="0" />
+            <span class="mini-val" id="pitchVal">0 st</span>
+          </div>
+          <button id="reverseBtn" class="chip" type="button">↺ Reverse</button>
+        </div>
+      </section>
+
+      <!-- Effects bus -->
+      <section class="sequencer" aria-label="Effects bus">
+        <div class="editor-head">
+          <span class="editor-title">EFFECTS</span>
+          <span class="mini-val" style="font-size:11px">applies to everything</span>
+        </div>
+        <div class="fx-grid">
+          <div class="fx">
+            <label class="ctrl-label" for="fxDrive">DRIVE</label>
+            <input id="fxDrive" class="slider" type="range" min="0" max="1" step="0.01" value="0" />
+            <span class="mini-val" id="fxDriveVal">0%</span>
+          </div>
+          <div class="fx">
+            <label class="ctrl-label" for="fxTone">TONE</label>
+            <input id="fxTone" class="slider" type="range" min="0" max="1" step="0.01" value="1" />
+            <span class="mini-val" id="fxToneVal">Open</span>
+          </div>
+          <div class="fx">
+            <label class="ctrl-label" for="fxDelay">DELAY</label>
+            <input id="fxDelay" class="slider" type="range" min="0" max="1" step="0.01" value="0" />
+            <span class="mini-val" id="fxDelayVal">0%</span>
+          </div>
+          <div class="fx">
+            <label class="ctrl-label" for="fxSpace">SPACE</label>
+            <input id="fxSpace" class="slider" type="range" min="0" max="1" step="0.01" value="0" />
+            <span class="mini-val" id="fxSpaceVal">0%</span>
+          </div>
+          <div class="fx">
+            <label class="ctrl-label" for="fxVolume">VOLUME</label>
+            <input id="fxVolume" class="slider" type="range" min="0" max="1" step="0.01" value="0.9" />
+            <span class="mini-val" id="fxVolumeVal">90%</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Sequencer -->
+      <section class="sequencer" aria-label="Drum sequencer">
+        <div class="seq-head">
+          <button id="seqPlay" class="btn btn-primary" type="button">Play Loop</button>
+          <div class="seq-ctrl">
+            <label class="ctrl-label" for="tempo">BPM</label>
+            <input id="tempo" class="slider" type="range" min="60" max="180" value="96" />
+            <span class="mini-val" id="tempoVal">96</span>
+          </div>
+          <button id="clearSeq" class="chip" type="button">Clear</button>
+        </div>
+        <!-- Pattern bank -->
+        <div class="pat-row">
+          <span class="ctrl-label">PATTERN</span>
+          <div id="patSlots" class="pat-slots" aria-label="Pattern slots"></div>
+          <button id="savePat" class="chip chip-accent" type="button">Save</button>
+          <button id="clearPat" class="chip" type="button">Clear</button>
+        </div>
+        <div class="grid" id="grid" aria-label="Step grid">
+          <!-- rows injected by game.js -->
+        </div>
+      </section>
+
+      <p class="hint">
+        Tap a pad or hit <strong>A S D F G H J K</strong> to play &amp; select. Use each pad's
+        <strong>M</strong> (mute) and <strong>S</strong> (solo) chips to focus the mix. Record / load audio, drag the handles to trim,
+        then <strong>Chop &rarr; 8 Pads</strong>. Pitch + Reverse reshape a pad, the <strong>Effects</strong> row colors the
+        whole mix, and the <strong>Pattern</strong> bank saves / reloads your beats.
+      </p>
+    </main>
+
+    <script src="game.js"></script>
+  </body>
+</html>
