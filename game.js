@@ -7045,6 +7045,7 @@ let activeLabDoor = null; // { x, y } tile the player walked into to open the la
 let labIndex = 0;
 let labLayout = null; // { originX, originY, scale, imgW, imgH } of the drawn lab splash art
 let activeLabApp = null; // id of the instrument currently loaded in the DOM overlay, or null
+let labHistoryPushed = false; // true while an extra history entry is sitting under an open instrument (see openInstrument/closeInstrument)
 
 // ---------------------------------------------------------------- save / load
 // Save/load only ever run on explicit checkpoints below (never once per
@@ -8261,18 +8262,45 @@ function openInstrument(opt) {
   labOverlayFrame.src = opt.path;
   labOverlayEl.classList.add('open');
   state = 'labApp';
+  // Push a throwaway history entry so the browser's back button has
+  // something of ours to consume first. Without this, hitting back while
+  // an instrument is open just navigates the tab away from the game
+  // entirely; with it, back triggers the popstate handler below instead,
+  // which we use to close the instrument and stay in Rico's Lab.
+  history.pushState({ ricoLabApp: true }, '');
+  labHistoryPushed = true;
 }
 
 // Tears the iframe back down (clearing src stops any Web Audio playback
 // and frees the tab's audio context rather than leaving it running hidden)
 // and returns to the instrument-picker splash so the player can grab
 // another one without having to walk back through the door.
-function closeInstrument() {
+// fromPopState is true when this was triggered by the browser's back
+// button (via the popstate handler below) -- in that case the extra
+// history entry pushed in openInstrument() has already been consumed by
+// the browser, so we must NOT call history.back() again here or it'll
+// also eat the page the player was on before the game.
+function closeInstrument(fromPopState) {
   labOverlayEl.classList.remove('open');
   labOverlayFrame.src = 'about:blank';
   activeLabApp = null;
   state = 'lab';
+  if (!fromPopState && labHistoryPushed) {
+    labHistoryPushed = false;
+    history.back();
+  } else {
+    labHistoryPushed = false;
+  }
 }
+
+// Browser/OS back gesture while an instrument is open: consume it to
+// close the instrument and drop the player back on the Rico's Lab
+// picker screen, instead of letting it navigate away from the game.
+window.addEventListener('popstate', () => {
+  if (state === 'labApp') {
+    closeInstrument(true);
+  }
+});
 
 canvas.addEventListener('pointerdown', (e) => {
   music.start();
