@@ -8092,8 +8092,11 @@ function createTouchControls() {
         if (k === 'arrowright') selectMove = 1;
       }
       // 'minigame' included for the darts mode chooser (classic vs 3D) --
-      // running mini-games themselves ignore menuMove.
-      if (state === 'digChoice' || state === 'slotChoose' || state === 'minigame') {
+      // running mini-games themselves ignore menuMove. 'lab' included so the
+      // 4-bay instrument picker in Rico's Lab (see LAB_OPTIONS/labIndex) can
+      // be cycled by tapping the on-screen d-pad, same as a physical
+      // keyboard's up/down arrows do via the keydown listener above.
+      if (state === 'digChoice' || state === 'slotChoose' || state === 'minigame' || state === 'lab') {
         if (k === 'arrowup') menuMove = -1;
         if (k === 'arrowdown') menuMove = 1;
       }
