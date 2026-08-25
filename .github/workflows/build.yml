@@ -1,0 +1,21 @@
+name: Run Bash Build and Reload
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get your code
+        uses: actions/checkout@v4
+
+      - name: Run your bash build script
+        run: |
+          chmod +x ./build.sh
+          ./build.sh
+
+      # Add your reload or deployment step here, for example:
+      - name: Reload or Deploy
+        run: echo "Build complete and reloaded!"
