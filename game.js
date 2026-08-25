@@ -5900,6 +5900,10 @@ window.addEventListener('keydown', (e) => {
       else if (state === 'trophies') state = trophyReturnState;
     }
     if (k === 'escape' && state === 'trophies') { state = trophyReturnState; }
+    // [X] already sets buyPressed above, which update()'s 'labApp' branch
+    // consumes to close the instrument overlay; [Esc] is the one extra key
+    // worth adding here since browsers treat it as the natural "close".
+    if (k === 'escape' && state === 'labApp') { closeInstrument(); }
     if (k === 'arrowleft') selectMove = -1;
     if (k === 'arrowright') selectMove = 1;
     if (k === 'arrowup') menuMove = -1;
@@ -6148,6 +6152,31 @@ RECORD_FOUND_IMGS.white.src = 'assets/record_found_white.png';
 const portalClosedImg = new Image();
 portalClosedImg.src = 'assets/closed_for_now.png';
 
+// Rico's Lab -- unlocked once every one of Burlington's 5 records has been
+// found (see checkLabDoor()). Walking into the lab door shows this splash
+// with 4 highlighted, selectable instrument bays instead of an actual map
+// transition; picking one loads the matching standalone instrument app into
+// the DOM overlay built by createLabAppOverlay() (see openInstrument()).
+const ricoLabSplashImg = new Image();
+ricoLabSplashImg.src = 'assets/rico_lab_splash.png';
+
+// The 4 instrument bays, top to bottom, matching the boxes drawn on the
+// right-hand side of rico_lab_splash.png. bx0/bx1/by0/by1 are fractions of
+// the splash image's own width/height (independent of how it's scaled to
+// fit the screen) -- drawLabPopup() and handleLabTap() both map them
+// through labLayout to get real screen coordinates. `path` is where the
+// standalone app lives relative to this game's own index.html.
+const LAB_OPTIONS = [
+  { id: 'sampler', name: "RICO'S POCKET SAMPLER", path: 'instruments/rico-pocket-sampler/index.html',
+    bx0: 0.7910, bx1: 0.9701, by0: 0.1543, by1: 0.3174 },
+  { id: 'keys', name: "RICO'S KEYS", path: 'instruments/rico-keys/index.html',
+    bx0: 0.7910, bx1: 0.9701, by0: 0.3535, by1: 0.5273 },
+  { id: 'cuts', name: "RICO'S CUTS", path: 'instruments/rico-cuts/index.html',
+    bx0: 0.7910, bx1: 0.9701, by0: 0.5566, by1: 0.7178 },
+  { id: 'eq', name: "RICO'S EQ", path: 'instruments/rico-eq/index.html',
+    bx0: 0.7910, bx1: 0.9701, by0: 0.7422, by1: 0.8838 },
+];
+
 // Easter-egg splash shown when the player types "fifa" on a keyboard (see
 // the fifaBuffer tracking in the keydown listener below).
 const fifaImg = new Image();
@@ -6219,16 +6248,19 @@ function makeOverworld() {
   for (let x = 1; x < W-1; x++) { g[9][x] = 'r'; }
   for (let y = 1; y < H-1; y++) { g[y][19] = 'r'; }
 
-  // Placeholder portal doors on the west, east, north & south edges of the
-  // map. The west/east pair sits right on Main Street (row 9); the
-  // north/south pair sits on the vertical cross-street (column 19), so all
-  // four read as a natural continuation of a road. None lead anywhere yet —
-  // walking into one pops the "more lands coming" splash (see
-  // checkPortal()/drawPortalPopup()).
-  g[9][0] = 'P';
+  // Placeholder portal doors on the east, north & south edges of the map.
+  // They sit right on Main Street (row 9) / the vertical cross-street
+  // (column 19), so all three read as a natural continuation of a road.
+  // None lead anywhere yet — walking into one pops the "more lands coming"
+  // splash (see checkPortal()/drawPortalPopup()).
   g[9][W - 1] = 'P';
   g[0][19] = 'P';
   g[H - 1][19] = 'P';
+  // Rico's Lab door — the west end of Main Street, a stone's throw from
+  // Green Door Studio. Locked until every record in town has been found;
+  // see checkLabDoor()/drawLabDoor() for the two looks it can have and
+  // drawLabPopup() for the instrument-picker it opens once unlocked.
+  g[9][0] = 'L';
 
   const buildings = [];
   function building(x, y, w, h, name, wall, roof, customDoorX) {
@@ -6958,7 +6990,7 @@ const player = {
   tempItem: null, tempItemTimer: 0,
 };
 const collected = new Set();
-let state = 'splash'; // splash | title | digChoice | history | slotChoose | select | play | dialog | record | win | portal | fifa | minigame | hotkeys | crate | trophies
+let state = 'splash'; // splash | title | digChoice | history | slotChoose | select | play | dialog | record | win | portal | fifa | minigame | hotkeys | crate | trophies | lab | labLocked | labApp
 // State to snap back to when the [H] hotkeys popup is closed -- currently
 // always 'play' since that's the only state H can be opened from, but kept
 // as its own var in case another state wants to offer the popup later.
@@ -6991,6 +7023,19 @@ let shownRecord = null;
 let activePortal = null; // { x, y } tile the player walked into to open the portal popup
 const completedWorlds = new Set(); // worlds whose 5 records have all been found
 let toast = null;    // { text, t }
+
+// ---------------------------------------------------------------- Rico's Lab
+// The lab door only opens once every record in the current town has been
+// found (see checkLabDoor()). activeLabDoor mirrors activePortal -- it
+// records the tile the player walked onto so closing the popup can nudge
+// them back off of it. labIndex is the keyboard/tap-selected instrument
+// (0-3, matching LAB_OPTIONS below) and labLayout mirrors selectLayout,
+// recording where drawLabPopup() last drew the splash art so taps can be
+// mapped back onto one of the 4 boxes.
+let activeLabDoor = null; // { x, y } tile the player walked into to open the lab popup
+let labIndex = 0;
+let labLayout = null; // { originX, originY, scale, imgW, imgH } of the drawn lab splash art
+let activeLabApp = null; // id of the instrument currently loaded in the DOM overlay, or null
 
 // ---------------------------------------------------------------- save / load
 // Save/load only ever run on explicit checkpoints below (never once per
@@ -7488,6 +7533,7 @@ function movePlayer(dt) {
   }
 
   checkPortal(map);
+  checkLabDoor(map);
 }
 
 // Placeholder portal doors: walking onto a 'P' tile pops the "more lands
@@ -7500,6 +7546,37 @@ function checkPortal(map) {
     activePortal = { x: tx, y: ty };
     state = 'portal';
   }
+}
+
+// Rico's Lab door: walking onto an 'L' tile opens the instrument picker
+// once every record in town has been found (worldComplete()/completedWorlds
+// only track the world the player is *currently* standing in, but the lab
+// door only ever lives on the town map, so checking 'town' directly here is
+// safe and keeps this working even if the player somehow reaches it from
+// another world later). Before that, it just pops a "locked" popup — same
+// activeLabDoor-records-the-tile trick as checkPortal() above so closing
+// either popup can nudge the player back off the doorway.
+function checkLabDoor(map) {
+  const tx = Math.floor(player.x / TILE), ty = Math.floor(player.y / TILE);
+  if (map.grid[ty] && map.grid[ty][tx] === 'L') {
+    activeLabDoor = { x: tx, y: ty };
+    state = completedWorlds.has('town') ? 'lab' : 'labLocked';
+    if (state === 'lab') labIndex = 0;
+  }
+}
+
+// Shared by the 'portal'/'lab'/'labLocked' popups: nudges the player one
+// tile back off whichever edge door they just walked into, so standing
+// still on the doorway doesn't immediately reopen the popup the instant it
+// closes. Works for any of the four map edges the door might sit on.
+function pushOffDoor(map, doorTile) {
+  let pushX = 0, pushY = 0;
+  if (doorTile.x === 0) pushX = 1;
+  else if (doorTile.x === map.w - 1) pushX = -1;
+  else if (doorTile.y === 0) pushY = 1;
+  else if (doorTile.y === map.h - 1) pushY = -1;
+  player.x = (doorTile.x + pushX + 0.5) * TILE;
+  player.y = (doorTile.y + pushY + 0.5) * TILE;
 }
 
 // ---------------------------------------------------------------- interact
@@ -8059,6 +8136,96 @@ function createTouchControls() {
 }
 createTouchControls();
 
+// ---------------------------------------------------------------- Rico's Lab instrument overlay
+// Each of the 4 instrument apps (Pocket Sampler, Keys, Cuts, EQ) is a full
+// standalone HTML/CSS/JS page (see LAB_OPTIONS), so rather than porting
+// ~1000+ lines of Web Audio code per instrument into the canvas/minigame
+// system, they're loaded into a fixed full-screen DOM overlay via <iframe>
+// -- same trick as the rest of the game's UI (touch controls, the
+// responsive canvas sizing) building its own DOM/CSS at runtime instead of
+// depending on markup living in index.html.
+let labOverlayEl = null, labOverlayFrame = null, labOverlayTitle = null;
+
+function createLabAppOverlay() {
+  const style = document.createElement('style');
+  style.textContent = `
+    #ricoLabApp {
+      position: fixed; inset: 0; z-index: 1000;
+      background: #000;
+      display: none; flex-direction: column;
+    }
+    #ricoLabApp.open { display: flex; }
+    #ricoLabApp .rla-bar {
+      flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; padding: 10px 14px;
+      background: linear-gradient(#241a0e, #120d06);
+      border-bottom: 2px solid #e0b040;
+      padding-top: calc(10px + env(safe-area-inset-top, 0px));
+    }
+    #ricoLabApp .rla-title {
+      color: #f4ecd8; font: bold 14px monospace; letter-spacing: 0.5px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #ricoLabApp .rla-close {
+      flex: 0 0 auto; cursor: pointer;
+      background: rgba(224,176,64,0.15);
+      border: 1.5px solid rgba(224,176,64,0.85);
+      color: #f4ecd8; border-radius: 8px;
+      padding: 7px 16px; font: bold 13px monospace;
+      -webkit-user-select: none; user-select: none;
+    }
+    #ricoLabApp .rla-close:active { background: rgba(224,176,64,0.4); }
+    #ricoLabApp iframe {
+      flex: 1 1 auto; width: 100%; border: 0; background: #000;
+    }
+  `;
+  document.head.appendChild(style);
+
+  labOverlayEl = document.createElement('div');
+  labOverlayEl.id = 'ricoLabApp';
+
+  const bar = document.createElement('div');
+  bar.className = 'rla-bar';
+  labOverlayTitle = document.createElement('div');
+  labOverlayTitle.className = 'rla-title';
+  const closeBtn = document.createElement('div');
+  closeBtn.className = 'rla-close';
+  closeBtn.textContent = '\u2190 BACK TO THE LAB';
+  bindTap(closeBtn, closeInstrument);
+  bar.appendChild(labOverlayTitle);
+  bar.appendChild(closeBtn);
+
+  labOverlayFrame = document.createElement('iframe');
+  labOverlayFrame.setAttribute('allow', 'autoplay; microphone');
+
+  labOverlayEl.appendChild(bar);
+  labOverlayEl.appendChild(labOverlayFrame);
+  document.body.appendChild(labOverlayEl);
+}
+createLabAppOverlay();
+
+// Loads one of the 4 LAB_OPTIONS into the overlay iframe and switches
+// state to 'labApp'. Called both from update() (E on a keyboard-selected
+// box) and handleLabTap() (tapping a box directly).
+function openInstrument(opt) {
+  activeLabApp = opt.id;
+  labOverlayTitle.textContent = opt.name;
+  labOverlayFrame.src = opt.path;
+  labOverlayEl.classList.add('open');
+  state = 'labApp';
+}
+
+// Tears the iframe back down (clearing src stops any Web Audio playback
+// and frees the tab's audio context rather than leaving it running hidden)
+// and returns to the instrument-picker splash so the player can grab
+// another one without having to walk back through the door.
+function closeInstrument() {
+  labOverlayEl.classList.remove('open');
+  labOverlayFrame.src = 'about:blank';
+  activeLabApp = null;
+  state = 'lab';
+}
+
 canvas.addEventListener('pointerdown', (e) => {
   music.start();
   if (state === 'select') {
@@ -8066,6 +8233,16 @@ canvas.addEventListener('pointerdown', (e) => {
     const vx = (e.clientX - rect.left) * (canvas.width / rect.width);
     const vy = (e.clientY - rect.top) * (canvas.height / rect.height);
     handleCharacterTap(vx, vy);
+  } else if (state === 'lab') {
+    const rect = canvas.getBoundingClientRect();
+    const vx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const vy = (e.clientY - rect.top) * (canvas.height / rect.height);
+    handleLabTap(vx, vy);
+  } else if (state === 'labApp') {
+    // The DOM overlay sits on top of (and outside) the canvas while an
+    // instrument is loaded, so a pointerdown reaching the canvas itself
+    // means the overlay isn't up yet/already closing -- ignore it rather
+    // than falling through to the generic interactPressed=true below.
   } else if (state === 'play') {
     // Tapping directly on a "TAP HERE TO PLAY AROUND" sign jumps straight
     // into that mini-game -- no need to walk up and face the exact tile.
@@ -8108,6 +8285,25 @@ function handleCharacterTap(vx, vy) {
   else idx = 2;
   selectIndex = idx;
   chooseCharacter(SELECT_ORDER[idx]);
+}
+
+// Maps a tap/click in view coordinates to whichever of the 4 LAB_OPTIONS
+// boxes it landed on, using the layout drawLabPopup() recorded the last
+// time it drew (real art or fallback panels -- see the `fallback` flag).
+// Ignores taps outside the art/panels, and (for the real art) outside all
+// 4 boxes -- e.g. a tap on the character art on the left half of the
+// splash image does nothing, same as tapping outside the art entirely.
+function handleLabTap(vx, vy) {
+  if (!labLayout) return;
+  const { originX, originY, scale, imgW, imgH, fallback } = labLayout;
+  const ix = (vx - originX) / scale, iy = (vy - originY) / scale;
+  if (ix < 0 || ix > imgW || iy < 0 || iy > imgH) return;
+  const fx = ix / imgW, fy = iy / imgH;
+  const idx = LAB_OPTIONS.findIndex((o) =>
+    fy >= o.by0 && fy <= o.by1 && (fallback || (fx >= o.bx0 && fx <= o.bx1)));
+  if (idx === -1) return;
+  labIndex = idx;
+  openInstrument(LAB_OPTIONS[idx]);
 }
 
 // ---------------------------------------------------------------- update
@@ -8228,6 +8424,28 @@ function update(dt) {
         activePortal = null;
       }
     }
+  } else if (state === 'labLocked') {
+    if (interactPressed || buyPressed) {
+      state = 'play';
+      if (activeLabDoor) { pushOffDoor(maps[player.map], activeLabDoor); activeLabDoor = null; }
+    }
+  } else if (state === 'lab') {
+    if (menuMove) {
+      labIndex = Math.max(0, Math.min(LAB_OPTIONS.length - 1, labIndex + menuMove));
+      menuMove = 0;
+    }
+    if (interactPressed) openInstrument(LAB_OPTIONS[labIndex]);
+    else if (buyPressed) {
+      state = 'play';
+      if (activeLabDoor) { pushOffDoor(maps[player.map], activeLabDoor); activeLabDoor = null; }
+    }
+  } else if (state === 'labApp') {
+    // The DOM overlay (see createLabAppOverlay()) owns input while an
+    // instrument is loaded -- its own close button and [Esc] handle
+    // closing it directly. buyPressed is still consumed here too so the
+    // on-screen [X] touch button (which only ever sets buyPressed, same as
+    // every other popup's "back" button) works while an instrument is open.
+    if (buyPressed) closeInstrument();
   } else if (state === 'hotkeys') {
     if (interactPressed || buyPressed) state = hotkeysReturnState;
   } else if (state === 'crate') {
@@ -8434,6 +8652,12 @@ function render(time) {
     drawSplash();
     return;
   }
+  if (state === 'labApp') {
+    // The DOM overlay (see createLabAppOverlay()) fully covers the canvas
+    // while an instrument is loaded -- skip the (otherwise wasted) redraw
+    // of the world underneath it, same reasoning as WORLD_HIDDEN_STATES.
+    return;
+  }
   if (WORLD_HIDDEN_STATES.has(state)) {
     ctx.fillStyle = SKY_GRADIENT;
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
@@ -8521,6 +8745,8 @@ function render(time) {
   if (state === 'record') drawRecordCard();
   if (state === 'win') drawWin();
   if (state === 'portal') drawPortalPopup();
+  if (state === 'labLocked') drawLabLockedPopup();
+  if (state === 'lab') drawLabPopup(time);
   if (state === 'hotkeys') drawHotkeysPopup();
   if (state === 'crate') drawCrate();
   if (state === 'trophies') drawTrophyCase();
@@ -8590,6 +8816,7 @@ function drawTiles(map, time, camX = 0, camY = 0) {
         }
         case '#': drawTree(px, py, map); break;
         case 'P': drawPortalDoor(px, py, tx, ty, time); break;
+        case 'L': drawLabDoor(px, py, tx, ty, time); break;
         case '~': {
           const p = map.palette;
           ctx.fillStyle = p ? p.water : '#3060b0';
@@ -8748,6 +8975,91 @@ function drawPortalDoor(px, py, tx, ty, time) {
   ctx.font = 'bold 14px monospace';
   ctx.textAlign = 'center';
   ctx.fillText('?', cx, py - TILE + 22);
+  ctx.restore();
+}
+
+// Rico's Lab door. Same taller-than-a-tile archway treatment as
+// drawPortalDoor(), but with two distinct looks depending on whether every
+// record in town has been found yet:
+//  - locked: a dark, boarded-up steel door with a padlock icon. Cold colors,
+//    no motion, reads as "not open yet" at a glance.
+//  - unlocked: a warm gold/green shimmering archway (matching the lab's own
+//    dark+gold+green color scheme from rico_lab_splash.png) with a pulsing
+//    glow and a music-note flourish, reading as "come on in".
+function drawLabDoor(px, py, tx, ty, time) {
+  const t = time || 0;
+  const cx = px + TILE / 2, cy = py + TILE / 2;
+  const unlocked = completedWorlds.has('town');
+  const pulse = 0.5 + 0.5 * Math.sin(t * 2.4 + tx * 3 + ty);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(px - 6, py - TILE - 4, TILE + 12, TILE * 2 + 8);
+  ctx.clip();
+
+  if (unlocked) {
+    // outer glow -- gold/green, brighter and faster-pulsing than the plain
+    // placeholder portals so it reads as "special" from across the street
+    const grd = ctx.createRadialGradient(cx, cy, 2, cx, cy, TILE * 1.05);
+    grd.addColorStop(0, `rgba(240,211,120,${0.6 + pulse * 0.3})`);
+    grd.addColorStop(0.55, 'rgba(160,190,80,0.45)');
+    grd.addColorStop(1, 'rgba(20,16,8,0)');
+    ctx.fillStyle = grd;
+    ctx.fillRect(px - 6, py - TILE - 4, TILE + 12, TILE * 2 + 8);
+
+    // stone archway frame, gold trim
+    ctx.fillStyle = '#241a0e';
+    ctx.fillRect(px + 1, py - TILE + 4, TILE - 2, TILE * 2 - 4);
+    ctx.fillStyle = '#e0b040';
+    ctx.fillRect(px + 1, py - TILE + 4, TILE - 2, 3);
+    ctx.fillRect(px + 1, py + TILE - 7, TILE - 2, 3);
+    ctx.fillStyle = '#3a2e18';
+    ctx.fillRect(px + 4, py - TILE + 9, TILE - 8, TILE * 2 - 16);
+
+    // swirling portal core, gold/green instead of purple
+    ctx.fillStyle = 'rgba(30,26,10,0.9)';
+    ctx.beginPath();
+    ctx.ellipse(cx, py + TILE - 12, 10, 16, 0, 0, Math.PI * 2);
+    ctx.fill();
+    for (let i = 0; i < 3; i++) {
+      const a = t * 1.6 + i * (Math.PI * 2 / 3);
+      ctx.fillStyle = i % 2 === 0 ? '#f0d378' : '#7fae4a';
+      ctx.beginPath();
+      ctx.ellipse(cx + Math.cos(a) * 4, py + TILE - 12 + Math.sin(a) * 9, 3, 6, a, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // a little musical note instead of the placeholder's "?" -- marks this
+    // one as an actual, working door
+    ctx.fillStyle = Math.floor(t * 2.4) % 2 ? '#f4ecd8' : '#e0b040';
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('\u266A', cx, py - TILE + 22);
+  } else {
+    // locked: flat, cold, boarded-up -- deliberately undramatic so it
+    // doesn't compete visually with the plain "?" portals nearby
+    ctx.fillStyle = '#1a1712';
+    ctx.fillRect(px + 1, py - TILE + 4, TILE - 2, TILE * 2 - 4);
+    ctx.strokeStyle = '#3a3428';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+      const by = py - TILE + 10 + i * 16;
+      ctx.beginPath();
+      ctx.moveTo(px + 3, by);
+      ctx.lineTo(px + TILE - 3, by + 6);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#241a30'.replace('#241a30', '#241f16');
+    ctx.fillRect(px + 6, py + TILE - 20, TILE - 12, 14);
+    // padlock
+    ctx.strokeStyle = '#8a7a50';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, py + TILE - 16, 4, Math.PI, 0);
+    ctx.stroke();
+    ctx.fillStyle = '#8a7a50';
+    ctx.fillRect(cx - 5, py + TILE - 16, 10, 8);
+  }
   ctx.restore();
 }
 
@@ -13935,6 +14247,115 @@ function drawPortalPopup() {
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
   ctx.font = 'bold 17px monospace';
   ctx.fillText('Press [E] or tap screen to return', VIEW_W / 2, boxY + boxH - 16);
+}
+
+// Shown when the player walks into Rico's Lab door before every record in
+// town has been found. Same look as drawPortalPopup(), just its own text
+// and no splash art -- the point is "not yet", not "check out this cool
+// thing", so it stays visually calm.
+function drawLabLockedPopup() {
+  ctx.fillStyle = 'rgba(8,6,12,0.6)';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+  const boxW = VIEW_W - 160, boxH = 160, boxX = 80, boxY = (VIEW_H - boxH) / 2;
+  ctx.fillStyle = 'rgba(10,8,14,0.94)';
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+  ctx.strokeStyle = '#8a7a50';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(boxX + 2, boxY + 2, boxW - 4, boxH - 4);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#e0b040';
+  ctx.font = 'bold 20px monospace';
+  ctx.fillText("RICO'S LAB", VIEW_W / 2, boxY + 34);
+
+  ctx.fillStyle = '#f4ecd8';
+  ctx.font = '17px monospace';
+  const lines = wrapLinesCentered(
+    "Door's locked tight. Dig up every last record hiding around town first.",
+    boxW - 48
+  );
+  const startY = boxY + 66;
+  lines.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, startY + i * 22));
+
+  ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
+  ctx.font = 'bold 16px monospace';
+  ctx.fillText('Press [E] or tap screen to return', VIEW_W / 2, boxY + boxH - 16);
+}
+
+// The instrument picker shown once Rico's Lab is unlocked. Mirrors
+// drawCharacterSelect()'s approach: draw the full splash art scaled to
+// fit, record where it landed as labLayout so taps can be mapped back onto
+// it, then paint a highlight over the LAB_OPTIONS box that matches whatever
+// the player last selected (arrow keys, or a previous tap). All 4 boxes get
+// a soft ambient shimmer so they read as "live"/selectable at a glance, the
+// same way the 4 boxes on the source art already look inviting -- the
+// selected one on top of that gets the brighter, faster character-select-
+// style pulsing border.
+function drawLabPopup(time) {
+  ctx.fillStyle = 'rgba(8,6,12,0.6)';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+  if (ricoLabSplashImg.complete && ricoLabSplashImg.naturalWidth) {
+    const iw = ricoLabSplashImg.naturalWidth, ih = ricoLabSplashImg.naturalHeight;
+    const scale = Math.min(VIEW_W / iw, VIEW_H / ih);
+    const dw = iw * scale, dh = ih * scale;
+    const originX = (VIEW_W - dw) / 2, originY = (VIEW_H - dh) / 2;
+    labLayout = { originX, originY, scale, imgW: iw, imgH: ih, fallback: false };
+    ctx.drawImage(ricoLabSplashImg, originX, originY, dw, dh);
+
+    LAB_OPTIONS.forEach((opt, i) => {
+      const bx = originX + opt.bx0 * dw, by = originY + opt.by0 * dh;
+      const bw = (opt.bx1 - opt.bx0) * dw, bh = (opt.by1 - opt.by0) * dh;
+      if (i === labIndex) {
+        // selected: bright flickering border, same cadence as
+        // drawCharacterSelect()'s portrait highlight
+        ctx.strokeStyle = Math.floor(time * 2.4) % 2 ? '#e0b040' : '#f4ecd8';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(bx + 2, by + 2, bw - 4, bh - 4);
+        ctx.save();
+        ctx.shadowColor = '#e0b040';
+        ctx.shadowBlur = 16;
+        ctx.strokeRect(bx + 2, by + 2, bw - 4, bh - 4);
+        ctx.restore();
+      } else {
+        // ambient: soft, slow, out-of-phase-per-box shimmer so all 4 read
+        // as selectable without fighting the highlighted one for attention
+        const p = 0.35 + 0.35 * Math.sin(time * 1.6 + i * 1.9);
+        ctx.strokeStyle = `rgba(160,200,90,${p.toFixed(2)})`;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(bx + 2, by + 2, bw - 4, bh - 4);
+      }
+    });
+  } else {
+    // fallback: simple stacked panels until the art loads. Uses the same
+    // by0/by1 fractions as the real art (mapped onto the full view height)
+    // so it lines up close enough once the image does load in.
+    labLayout = { originX: 0, originY: 0, scale: 1, imgW: VIEW_W, imgH: VIEW_H, fallback: true };
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#e0b040';
+    ctx.font = 'bold 26px monospace';
+    ctx.fillText("RICO'S LAB", VIEW_W / 2, 50);
+    LAB_OPTIONS.forEach((opt, i) => {
+      const y = opt.by0 * VIEW_H, h = (opt.by1 - opt.by0) * VIEW_H;
+      const x = VIEW_W * 0.12, w = VIEW_W * 0.76;
+      ctx.fillStyle = i === labIndex ? 'rgba(224,176,64,0.35)' : 'rgba(90,120,60,0.22)';
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = i === labIndex
+        ? (Math.floor(time * 2.4) % 2 ? '#e0b040' : '#f4ecd8')
+        : `rgba(160,200,90,${(0.35 + 0.35 * Math.sin(time * 1.6 + i * 1.9)).toFixed(2)})`;
+      ctx.lineWidth = i === labIndex ? 4 : 2;
+      ctx.strokeRect(x + 2, y + 2, w - 4, h - 4);
+      ctx.fillStyle = '#f4ecd8';
+      ctx.font = 'bold 18px monospace';
+      ctx.fillText(`${i + 1}.) ${opt.name}`, VIEW_W / 2, y + h / 2 + 6);
+    });
+  }
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
+  ctx.font = 'bold 16px monospace';
+  ctx.fillText('- TAP AN INSTRUMENT, OR USE \u25b2 \u25bc AND E -  [X] LEAVE', VIEW_W / 2, VIEW_H - 20);
 }
 
 // [H] hot-keys popup -- reachable any time during gameplay (see the
