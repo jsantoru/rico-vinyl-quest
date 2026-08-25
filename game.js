@@ -7167,6 +7167,7 @@ function loadGame(slot) {
 
   state = 'play';
   music.setMenuBreak(false);
+  syncMusicDuckToMap(player.map); // resuming inside Rico's Beat Lab should stay ducked
   toast = { text: 'Game Loaded', t: 1.2 };
   return true;
 }
@@ -7191,6 +7192,7 @@ function newGame(slot) {
   player.tempItemTimer = 0;
   state = 'select';
   music.setMenuBreak(true);
+  syncMusicDuckToMap(player.map); // always 'town' on a fresh game -- clears any leftover duck
 }
 
 // Voice line played the instant a character is locked in at the select
@@ -7270,10 +7272,11 @@ function toggleTea() {
 
 // ---------------------------------------------------------------- audio
 const music = {
-  ctx: null, master: null, noiseBuf: null, muted: false,
+  ctx: null, master: null, duckGain: null, noiseBuf: null, muted: false,
   step: 0, nextTime: 0, BPM: 92,
   layers: new Set(['tick']),
   menuDusty: false,
+  ducked: false,
 
   start() {
     if (this.ctx) return;
@@ -7282,7 +7285,17 @@ const music = {
     this.ctx = new AC();
     this.master = this.ctx.createGain();
     this.master.gain.value = 0.28;
-    this.master.connect(this.ctx.destination);
+    // Separate "duck" bus sitting between master and the speakers, so
+    // rooms that need the background music fully out of the way (Rico's
+    // Beat Lab, where the player is making their own beats on the pads)
+    // can silence it without touching -- or being touched by -- the
+    // independent mute toggle in `toggleMute()`. Two gain stages instead
+    // of one shared value means muted+ducked, muted-only, and ducked-only
+    // all resolve correctly no matter what order they're toggled in.
+    this.duckGain = this.ctx.createGain();
+    this.duckGain.gain.value = this.ducked ? 0 : 1;
+    this.master.connect(this.duckGain);
+    this.duckGain.connect(this.ctx.destination);
     const len = this.ctx.sampleRate * 0.5;
     this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const d = this.noiseBuf.getChannelData(0);
@@ -7337,6 +7350,16 @@ const music = {
   },
   enable(layer) { this.layers.add(layer); },
   setMenuBreak(on) { this.menuDusty = on; },
+  // Fully silences the background music bus (independent of the M-key
+  // mute toggle) for rooms like Rico's Beat Lab where the player needs to
+  // actually hear the sampler/drum-pad audio they're triggering, not have
+  // it fight the ambient town loop. The scheduler keeps running underneath
+  // -- only the output is silenced -- so the beat picks back up in perfect
+  // sync, at the right volume, the moment the player steps back out.
+  duck(on) {
+    this.ducked = on;
+    if (this.duckGain) this.duckGain.gain.value = on ? 0 : 1;
+  },
   crackle(t, s, stepDur) {
     const src = this.ctx.createBufferSource(); src.buffer = this.noiseBuf;
     const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 2800;
@@ -7489,6 +7512,16 @@ const music = {
   },
 };
 
+// Rooms whose own audio should have the floor to themselves, with the
+// ambient town music ducked out rather than competing with it. Currently
+// just Rico's Beat Lab (the 'groove' shop interior, home to Beat Match and
+// Beat Jam) -- add more map ids here if a future room needs the same
+// treatment.
+const MUSIC_DUCKED_MAPS = new Set(['groove']);
+function syncMusicDuckToMap(mapId) {
+  music.duck(MUSIC_DUCKED_MAPS.has(mapId));
+}
+
 // ---------------------------------------------------------------- movement
 function isSolid(map, tx, ty) {
   if (tx < 0 || ty < 0 || tx >= map.w || ty >= map.h) return true;
@@ -7529,6 +7562,7 @@ function movePlayer(dt) {
     player.x = tr.x * TILE;
     player.y = tr.y * TILE;
     if (!maps[tr.map].outside) player.skating = false;
+    syncMusicDuckToMap(tr.map); // e.g. duck the ambient loop for Rico's Beat Lab
     saveGame(); // silent autosave checkpoint -- keeps "Continue" accurate to the room the player is in
   }
 
