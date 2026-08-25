@@ -1,4 +1,8 @@
-#!/usr/bin/env bash
+#!/bin/bash
+cat src/00-engine-core.js src/05-minigame-shared.js \
+    src/10-minigames/*.js \
+    src/maps/*.js \
+    src/99-engine-tail.js > game.js#!/usr/bin/env bash
 # Regenerates game.js from the editable fragments in src/.
 #
 # Why this exists: game.js is one big closure, and several pieces of state
