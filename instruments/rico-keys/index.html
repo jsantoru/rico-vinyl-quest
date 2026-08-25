@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f0d0a" />
+  <title>Rico's Keys</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app" role="application" aria-label="Rico's Keys touchscreen piano">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">&#9835;</span>
+        <h1>Rico&apos;s Keys</h1>
+      </div>
+      <button id="powerHint" class="hint" type="button">Tap a key to start</button>
+    </header>
+
+    <section class="controls" aria-label="Sound controls">
+      <div class="control">
+        <label for="waveSel">Voice</label>
+        <select id="waveSel" aria-label="Instrument voice">
+          <option value="rhodes">Rhodes</option>
+          <option value="triangle">Soft Tri</option>
+          <option value="sawtooth">Bright Saw</option>
+          <option value="square">Square</option>
+          <option value="sine">Pure Sine</option>
+          <option value="organ">Organ</option>
+        </select>
+      </div>
+
+      <div class="control">
+        <label for="octaveVal">Octave <span id="octaveVal" class="val">4</span></label>
+        <div class="stepper" role="group" aria-label="Octave control">
+          <button id="octDown" class="step-btn" type="button" aria-label="Octave down">&minus;</button>
+          <button id="octUp" class="step-btn" type="button" aria-label="Octave up">+</button>
+        </div>
+      </div>
+
+      <div class="control">
+        <label for="volume">Volume <span id="volVal" class="val">75</span></label>
+        <input id="volume" type="range" min="0" max="100" value="75" aria-label="Master volume" />
+      </div>
+
+      <div class="control toggles">
+        <button id="sustainBtn" class="toggle" type="button" aria-pressed="false">Sustain</button>
+        <button id="labelsBtn" class="toggle is-on" type="button" aria-pressed="true">Labels</button>
+      </div>
+    </section>
+
+    <section class="keyboard-wrap" aria-label="Piano keyboard">
+      <div id="keyboard" class="keyboard" role="group" aria-label="Piano keys"></div>
+    </section>
+
+    <footer class="footer">
+      <p id="nowPlaying" aria-live="polite">Ready</p>
+      <p class="tip">Slide across keys to glissando &middot; use your computer keyboard row A&ndash;L</p>
+    </footer>
+  </main>
+
+  <script src="game.js"></script>
+</body>
+</html>
