@@ -1,21 +1,26 @@
-name: Run Bash Build and Reload
+name: Bash Build and Reload
 
 on:
   push:
     branches: [ main ]
 
 jobs:
-  build:
+  build-and-reload:
     runs-on: ubuntu-latest
     steps:
-      - name: Get your code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Run your bash build script
+      - name: Run Build Script
         run: |
-          chmod +x ./build.sh
-          ./build.sh
+          chmod +x ./bash.sh
+          ./bash.sh
 
-      # Add your reload or deployment step here, for example:
-      - name: Reload or Deploy
-        run: echo "Build complete and reloaded!"
+      # This step commits and pushes the updated index.html back to GitHub
+      - name: Commit and Reload index.html
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@://github.com"
+          git add index.html
+          git diff-index --quiet HEAD || git commit -m "chore: reload and update index.html [skip ci]"
+          git push
