@@ -6160,6 +6160,15 @@ portalClosedImg.src = 'assets/closed_for_now.png';
 const ricoLabSplashImg = new Image();
 ricoLabSplashImg.src = 'assets/rico_lab_splash.png';
 
+// One-time "you now have access to Rico's Beat Lab!" announcement, shown
+// right after the record-found splash (drawRecordCard()) the moment that
+// pickup completes the town set and unlocks the lab door -- see the
+// 'record' state handling in the input loop. Points the player at the
+// portal by Green Door Studio instead of leaving them to notice the newly-
+// unlocked 'L' door on their own. See drawLabUnlock().
+const ricoBeatLabWelcomeImg = new Image();
+ricoBeatLabWelcomeImg.src = 'assets/beat_lab_welcome.png';
+
 // The 4 instrument bays, top to bottom, matching the boxes drawn on the
 // right-hand side of rico_lab_splash.png. bx0/bx1/by0/by1 are fractions of
 // the splash image's own width/height (independent of how it's scaled to
@@ -8432,11 +8441,18 @@ function update(dt) {
       shownRecord = null;
       if (worldComplete() && !completedWorlds.has(currentWorldId())) {
         completedWorlds.add(currentWorldId());
-        state = 'win';
+        // Rico's Beat Lab (the instrument-bay lab door) unlocks the instant
+        // every town record is found -- flag that here, before the usual
+        // "BEAT COMPLETE!" win screen, so the player hears about it right
+        // away instead of having to stumble onto the newly-unlocked 'L'
+        // door on their own.
+        state = (currentWorldId() === 'town') ? 'labUnlock' : 'win';
         saveGame(); // silent autosave checkpoint
       }
       else state = 'play';
     }
+  } else if (state === 'labUnlock') {
+    if (interactPressed) state = 'win';
   } else if (state === 'win') {
     if (interactPressed) state = 'play';
   } else if (state === 'portal') {
@@ -8777,6 +8793,7 @@ function render(time) {
   drawHUD();
   if (state === 'dialog') drawDialog();
   if (state === 'record') drawRecordCard();
+  if (state === 'labUnlock') drawLabUnlock();
   if (state === 'win') drawWin();
   if (state === 'portal') drawPortalPopup();
   if (state === 'labLocked') drawLabLockedPopup();
@@ -14315,6 +14332,44 @@ function drawLabLockedPopup() {
   ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
   ctx.font = 'bold 16px monospace';
   ctx.fillText('Press [E] or tap screen to return', VIEW_W / 2, boxY + boxH - 16);
+}
+
+// One-time announcement shown right after the record-found card, the
+// instant that pickup completes the town set and unlocks Rico's Beat Lab
+// (see the 'record'/'labUnlock' state handling in the input loop). Just a
+// scale-to-fit splash plus a blinking continue prompt -- the art itself
+// already carries the "you now have access" message and the "head to the
+// portal by Green Door Studio" pointer, so there's no live layout to track
+// here the way drawLabPopup() has to for its selectable instrument boxes.
+function drawLabUnlock() {
+  ctx.fillStyle = 'rgba(8,6,12,0.6)';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+  if (ricoBeatLabWelcomeImg.complete && ricoBeatLabWelcomeImg.naturalWidth) {
+    const iw = ricoBeatLabWelcomeImg.naturalWidth, ih = ricoBeatLabWelcomeImg.naturalHeight;
+    const scale = Math.min(VIEW_W / iw, VIEW_H / ih);
+    const dw = iw * scale, dh = ih * scale;
+    const dx = (VIEW_W - dw) / 2, dy = (VIEW_H - dh) / 2;
+    ctx.drawImage(ricoBeatLabWelcomeImg, dx, dy, dw, dh);
+  } else {
+    // fallback text-only version, in case the art hasn't loaded in yet
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#e0b040';
+    ctx.font = 'bold 22px monospace';
+    ctx.fillText("YOU NOW HAVE ACCESS TO RICO'S BEAT LAB!", VIEW_W / 2, VIEW_H / 2 - 24);
+    ctx.fillStyle = '#f4ecd8';
+    ctx.font = '16px monospace';
+    const lines = wrapLinesCentered(
+      'Head over to the portal by Green Door Studio to go cook up in the lab!',
+      VIEW_W - 160
+    );
+    lines.forEach((l, i) => ctx.fillText(l, VIEW_W / 2, VIEW_H / 2 + 12 + i * 22));
+  }
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
+  ctx.font = 'bold 16px monospace';
+  ctx.fillText('- PRESS E TO CONTINUE -', VIEW_W / 2, VIEW_H - 18);
 }
 
 // The instrument picker shown once Rico's Lab is unlocked. Mirrors
