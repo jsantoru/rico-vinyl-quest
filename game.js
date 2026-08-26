@@ -3904,7 +3904,11 @@ function createSpeedSweep3DGame() {
     new T.MeshStandardMaterial({ color: 0x1c1422, roughness: 0.95 })
   );
   backFloor.rotation.x = -Math.PI / 2;
-  backFloor.position.set(0, 0, -2);
+  // Sits slightly below the shop floor's top surface (y=0) so the two
+  // don't end up coplanar -- they used to sit at the exact same height,
+  // which caused z-fighting (flickering/stuttering) wherever the shop
+  // floor strip overlapped this backdrop floor.
+  backFloor.position.set(0, -0.05, -2);
   backFloor.receiveShadow = true;
   scene.add(backFloor);
 
