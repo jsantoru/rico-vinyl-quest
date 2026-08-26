@@ -7003,7 +7003,7 @@ const player = {
   tempItem: null, tempItemTimer: 0,
 };
 const collected = new Set();
-let state = 'splash'; // splash | title | digChoice | history | slotChoose | select | play | dialog | record | win | portal | fifa | minigame | hotkeys | crate | trophies | lab | labLocked | labApp
+let state = 'splash'; // splash | title | digChoice | history | slotChoose | select | characterIntro | play | dialog | record | win | portal | fifa | minigame | hotkeys | crate | trophies | lab | labLocked | labApp
 // State to snap back to when the [H] hotkeys popup is closed -- currently
 // always 'play' since that's the only state H can be opened from, but kept
 // as its own var in case another state wants to offer the popup later.
@@ -7247,17 +7247,19 @@ function chooseCharacter(id) {
       // a fresh start rather than getting stuck.
       newGame(pendingSlot);
       selectedCharacter = id;
-      state = 'play';
-      music.setMenuBreak(false);
       saveGame();
     }
   } else {
     currentSlot = pendingSlot;
     selectedCharacter = id;
-    state = 'play';
-    music.setMenuBreak(false);
     saveGame(); // silent autosave checkpoint -- a save exists from the moment play begins
   }
+  // Splash plays between the pick and the first frame of gameplay; state
+  // only flips to 'play' (and the menu-break music ducks) once it's done.
+  playCharacterIntro(() => {
+    state = 'play';
+    music.setMenuBreak(false);
+  });
 }
 
 function toggleSkate() {
@@ -7537,7 +7539,7 @@ const music = {
 // enter/exit call sites, so it can't drift out of sync no matter which
 // of the several ways the player backs out of the lab popup (keyboard
 // [X], on-screen [X] button, closing the instrument iframe, etc.).
-const DUCKED_STATES = new Set(['lab', 'labApp']);
+const DUCKED_STATES = new Set(['lab', 'labApp', 'characterIntro']);
 function syncMusicDuck() {
   music.duck(DUCKED_STATES.has(state));
 }
@@ -8260,6 +8262,109 @@ function createLabAppOverlay() {
 }
 createLabAppOverlay();
 
+// Character-intro splash video, played once between character select and
+// the first frame of gameplay. Same DOM-overlay approach as the lab-app
+// iframe above and for the same reason: video decode/composite is handled
+// entirely by the browser's own media pipeline when it's a plain <video>
+// element, so it never competes with the canvas game loop for frame time.
+// update()/render() both early-return while state === 'characterIntro'
+// (see WORLD_HIDDEN_STATES/labApp handling below), so nothing in the world
+// is simulated or drawn underneath it either.
+let characterIntroVideoEl = null;
+let characterIntroOnDone = null;
+let characterIntroSkippable = false; // true only once playback has actually started
+function createCharacterIntroOverlay() {
+  const style = document.createElement('style');
+  style.textContent = `
+    #ricoCharIntro {
+      position: fixed; inset: 0; z-index: 1000;
+      background: #000;
+      display: none; align-items: center; justify-content: center;
+    }
+    #ricoCharIntro.open { display: flex; }
+    #ricoCharIntro video {
+      width: 100%; height: 100%;
+      object-fit: contain; /* letterbox rather than crop/stretch -- the clip's
+                               16:9 doesn't match the game's 8:5 view */
+      background: #000;
+    }
+    #ricoCharIntro .rci-skip {
+      position: absolute; right: 14px; bottom: 14px;
+      padding: 8px 16px;
+      background: rgba(20,16,26,0.55);
+      border: 1.5px solid rgba(244,236,216,0.55);
+      border-radius: 8px;
+      color: #f4ecd8; font: bold 12px monospace; letter-spacing: 0.5px;
+      -webkit-user-select: none; user-select: none;
+      padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    }
+    #ricoCharIntro .rci-skip:active { background: rgba(224,176,64,0.35); }
+  `;
+  document.head.appendChild(style);
+
+  characterIntroVideoEl = document.createElement('video');
+  characterIntroVideoEl.setAttribute('playsinline', '');
+  characterIntroVideoEl.setAttribute('webkit-playsinline', '');
+  characterIntroVideoEl.muted = false;
+  characterIntroVideoEl.preload = 'auto';
+
+  const overlay = document.createElement('div');
+  overlay.id = 'ricoCharIntro';
+  overlay.appendChild(characterIntroVideoEl);
+
+  const skipBtn = document.createElement('div');
+  skipBtn.className = 'rci-skip';
+  skipBtn.textContent = 'SKIP \u25b8';
+  bindTap(skipBtn, () => finishCharacterIntro());
+  overlay.appendChild(skipBtn);
+
+  document.body.appendChild(overlay);
+  characterIntroEl = overlay;
+
+  // Loading this now (rather than waiting until chooseCharacter() actually
+  // calls playCharacterIntro()) means the ~2MB clip is already buffered by
+  // the time the player reaches the character-select screen, so there's no
+  // stall waiting for it once a character is picked.
+  const src = document.createElement('source');
+  src.src = 'assets/character_intro.mp4';
+  src.type = 'video/mp4';
+  characterIntroVideoEl.appendChild(src);
+  characterIntroVideoEl.load();
+
+  characterIntroVideoEl.addEventListener('ended', () => finishCharacterIntro());
+  // Any playback failure (missing file, codec issue, etc.) should never be
+  // able to strand the player on a black screen -- fail straight through to
+  // gameplay exactly as if the clip had finished normally.
+  characterIntroVideoEl.addEventListener('error', () => finishCharacterIntro());
+}
+let characterIntroEl = null;
+createCharacterIntroOverlay();
+
+// Shows the overlay and plays the clip; onDone runs once (on natural end,
+// skip, or playback error) and is what actually flips state to 'play'.
+function playCharacterIntro(onDone) {
+  characterIntroOnDone = onDone;
+  state = 'characterIntro';
+  characterIntroEl.classList.add('open');
+  characterIntroSkippable = false;
+  try { characterIntroVideoEl.currentTime = 0; } catch (err) { /* not seekable yet -- fine */ }
+  const playPromise = characterIntroVideoEl.play();
+  if (playPromise && playPromise.catch) {
+    playPromise.then(() => { characterIntroSkippable = true; }).catch(() => finishCharacterIntro());
+  } else {
+    characterIntroSkippable = true;
+  }
+}
+
+function finishCharacterIntro() {
+  if (!characterIntroOnDone) return; // already finished -- ignore duplicate ended/skip/error
+  characterIntroEl.classList.remove('open');
+  characterIntroVideoEl.pause();
+  const done = characterIntroOnDone;
+  characterIntroOnDone = null;
+  done();
+}
+
 // Loads one of the 4 LAB_OPTIONS into the overlay iframe and switches
 // state to 'labApp'. Called both from update() (E on a keyboard-selected
 // box) and handleLabTap() (tapping a box directly).
@@ -8464,6 +8569,11 @@ function update(dt) {
       selectMove = 0;
     }
     if (interactPressed) chooseCharacter(SELECT_ORDER[selectIndex]);
+  } else if (state === 'characterIntro') {
+    // E also skips, same as tapping the on-screen SKIP button -- but only
+    // once playback has actually started, so an interact press held over
+    // from picking the character on the previous screen can't insta-skip.
+    if (interactPressed && characterIntroSkippable) finishCharacterIntro();
   } else if (state === 'play') {
     movePlayer(dt);
     if (interactPressed) doInteract();
@@ -8743,10 +8853,10 @@ function render(time) {
     drawSplash();
     return;
   }
-  if (state === 'labApp') {
-    // The DOM overlay (see createLabAppOverlay()) fully covers the canvas
-    // while an instrument is loaded -- skip the (otherwise wasted) redraw
-    // of the world underneath it, same reasoning as WORLD_HIDDEN_STATES.
+  if (state === 'labApp' || state === 'characterIntro') {
+    // Same reasoning as the labApp overlay: a DOM element (the <video>,
+    // see createCharacterIntroOverlay()) fully covers the canvas here, so
+    // there's nothing to gain from redrawing the world underneath it.
     return;
   }
   if (WORLD_HIDDEN_STATES.has(state)) {
