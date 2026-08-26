@@ -5931,6 +5931,80 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
 
+// ---------------------------------------------------------------- gamepad support
+// Movement, menus, and every single-key action ('e','x','q','b','c','y','k',
+// 'n','h','v','t','escape') already funnel through the `keys` object above
+// plus the edge-triggered logic inside the keydown/keyup listeners
+// (interactPressed, buyPressed, selectMove, menuMove, the 'h'/'escape'
+// overlay-closing branches, etc). Rather than re-implementing all of that
+// branching a second time for controllers -- and risking it drifting out of
+// sync as the game grows -- pollGamepad() below just synthesizes real
+// KeyboardEvents for whichever mapped button/stick transitions on a given
+// poll. The existing listeners then do 100% of the actual work, exactly as
+// if the matching keyboard key had been tapped, so a controller can reach
+// every screen/state a keyboard can (menus, minigames, overlays) with zero
+// duplicated logic.
+const GAMEPAD_DEADZONE = 0.35;
+
+// Standard Gamepad button index -> the keyboard key it stands in for. A/B
+// follow the usual "A confirms, B cancels" convention; the rest are picked
+// to mirror what's already reachable from a keyboard one-for-one.
+const GAMEPAD_BUTTON_KEY = {
+  0: 'e',         // A -- interact / confirm
+  1: 'x',         // B -- back / cancel / buy
+  2: 'q',         // X -- scratch (2nd mini-game action, e.g. the DJ minigame)
+  3: 'b',         // Y -- toggle skates
+  4: 'c',         // LB -- toggle cold brew
+  5: 'y',         // RB -- toggle iced tea
+  6: 'v',         // LT -- The Crate
+  7: 't',         // RT -- Trophy Case
+  8: 'escape',    // Back/Select -- close whatever overlay is open
+  9: 'h',         // Start -- hot keys / menu (also pages the title & history screens)
+  10: 'k',        // Left stick click -- quicksave
+  11: 'n',        // Right stick click -- new/continue dig choice
+  12: 'arrowup',
+  13: 'arrowdown',
+  14: 'arrowleft',
+  15: 'arrowright',
+};
+
+let gpPrevPressed = {}; // button index -> was it down on the previous poll
+
+function synthKeyEvent(type, key) {
+  window.dispatchEvent(new KeyboardEvent(type, { key }));
+}
+
+// Polled once per frame (see frame()). Reads gamepad 0 only -- fine for a
+// single-player game with no local co-op.
+function pollGamepad() {
+  if (!navigator.getGamepads) return;
+  const gp = navigator.getGamepads()[0];
+  if (!gp) return;
+
+  // Left stick tilt counts the same as holding the matching d-pad
+  // direction, so either one drives movement and menu navigation.
+  const ax = gp.axes[0] || 0, ay = gp.axes[1] || 0;
+  const stickPressed = {
+    14: ax < -GAMEPAD_DEADZONE, // left
+    15: ax > GAMEPAD_DEADZONE,  // right
+    12: ay < -GAMEPAD_DEADZONE, // up
+    13: ay > GAMEPAD_DEADZONE,  // down
+  };
+
+  for (const idxStr in GAMEPAD_BUTTON_KEY) {
+    const idx = Number(idxStr);
+    const key = GAMEPAD_BUTTON_KEY[idx];
+    const btn = gp.buttons[idx];
+    // Some browsers leave triggers' .pressed undefined and only populate
+    // .value -- fall back to that so LT/RT (indices 6/7) still register.
+    const pressed = !!(btn && (btn.pressed || btn.value > 0.5)) || !!stickPressed[idx];
+    const wasPressed = !!gpPrevPressed[idx];
+    if (pressed && !wasPressed) synthKeyEvent('keydown', key);
+    else if (!pressed && wasPressed) synthKeyEvent('keyup', key);
+    gpPrevPressed[idx] = pressed;
+  }
+}
+
 function axis() {
   let dx = 0, dy = 0;
   if (keys['arrowleft'] || keys['a']) dx -= 1;
@@ -8503,6 +8577,7 @@ if (state === 'splash') {
 
 let last = performance.now();
 function frame(now) {
+  pollGamepad();
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
   update(dt);
