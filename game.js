@@ -165,13 +165,28 @@ function updateSkateTrail(time) {
     skateTrail.length = 0;
   }
 }
+// Character-specific trail tint. Keyed by `selectedCharacter` (declared
+// later in the file, near CHARACTER_CHEERS_IMG/SELECT_ORDER) -- safe to
+// reference here because this is only ever *called* mid-game, long after
+// that assignment has run, same reasoning as worldDef()/currentWorldId()
+// above referencing `maps`/`collected`. Falls back to the original
+// icy white-blue for any unrecognized id so this never breaks if a new
+// character gets added before a color is picked for them.
+const CHARACTER_TRAIL_COLOR = {
+  santos: '#6be08a',  // green, matches Santos' portrait accent
+  ricoAlt: '#7ac4ff', // blue, matches the Yankees-cap outfit
+  rico: '#f0c33e',    // gold, matches the UI's classic Rico/gold accent
+};
+function currentTrailColor() { return CHARACTER_TRAIL_COLOR[selectedCharacter] || '#e0e8f4'; }
+
 function drawSkateTrail(time) {
+  const color = currentTrailColor();
   for (let i = 0; i < skateTrail.length; i++) {
     const s = skateTrail[i];
     const k = Math.max(0, 1 - (time - s.t) / SKATE_TRAIL_LIFE);
     if (k <= 0) continue;
     ctx.globalAlpha = k * 0.35;
-    ctx.fillStyle = '#e0e8f4';
+    ctx.fillStyle = color;
     ctx.fillRect(s.x - 9, s.y - 1, 18, 2);
   }
   ctx.globalAlpha = 1;
@@ -7111,6 +7126,37 @@ let activePortal = null; // { x, y } tile the player walked into to open the por
 const completedWorlds = new Set(); // worlds whose 5 records have all been found
 let toast = null;    // { text, t }
 
+// Level-intro card -- a full-screen "LEVEL N / world name" splash drawn with
+// drawRetroTitle() (the same carved-gold look used on character select).
+// showLevelIntro() is the one entry point: pass the world id about to be
+// entered and a callback for what happens once the card is dismissed, either
+// by [E] (after LEVEL_INTRO_SKIP_DELAY_MS, so a held-over interact press
+// from the previous screen can't insta-skip it) or automatically after
+// LEVEL_INTRO_AUTO_MS. Currently only shown for Level 1 on a fresh game --
+// see chooseCharacter() -- but any future world-to-world transition can
+// route through showLevelIntro() the same way to get this for free.
+let levelIntroWorldId = null;
+let levelIntroOnDone = null;
+let levelIntroStartTime = 0;
+const LEVEL_INTRO_SKIP_DELAY_MS = 400;
+const LEVEL_INTRO_AUTO_MS = 2600;
+// Numbers a world by its position among the player-visible (non-locked)
+// worlds in WORLD_DEFS -- see crateWorldIds() -- so level numbers stay
+// correct as more worlds get added/unlocked with no manual renumbering.
+function levelNumberFor(worldId) { return crateWorldIds().indexOf(worldId) + 1; }
+function showLevelIntro(worldId, onDone) {
+  levelIntroWorldId = worldId;
+  levelIntroOnDone = onDone;
+  levelIntroStartTime = performance.now();
+  state = 'levelIntro';
+}
+function finishLevelIntro() {
+  if (!levelIntroOnDone) return; // already finished -- ignore a duplicate press/timeout
+  const done = levelIntroOnDone;
+  levelIntroOnDone = null;
+  done();
+}
+
 // ---------------------------------------------------------------- Rico's Lab
 // The lab door only opens once every record in the current town has been
 // found (see checkLabDoor()). activeLabDoor mirrors activePortal -- it
@@ -7331,8 +7377,18 @@ function chooseCharacter(id) {
   // Splash plays between the pick and the first frame of gameplay; state
   // only flips to 'play' (and the menu-break music ducks) once it's done.
   playCharacterIntro(() => {
-    state = 'play';
-    music.setMenuBreak(false);
+    if (pendingMode === 'new') {
+      // Fresh save: show the "LEVEL 1" card before the player's first frame
+      // of gameplay. A continued save skips straight to 'play' since the
+      // player is resuming a level already in progress, not starting one.
+      showLevelIntro(currentWorldId(), () => {
+        state = 'play';
+        music.setMenuBreak(false);
+      });
+    } else {
+      state = 'play';
+      music.setMenuBreak(false);
+    }
   });
 }
 
@@ -8649,6 +8705,11 @@ function update(dt) {
     // once playback has actually started, so an interact press held over
     // from picking the character on the previous screen can't insta-skip.
     if (interactPressed && characterIntroSkippable) finishCharacterIntro();
+  } else if (state === 'levelIntro') {
+    const shown = performance.now() - levelIntroStartTime;
+    if ((interactPressed && shown >= LEVEL_INTRO_SKIP_DELAY_MS) || shown >= LEVEL_INTRO_AUTO_MS) {
+      finishLevelIntro();
+    }
   } else if (state === 'play') {
     movePlayer(dt);
     if (interactPressed) doInteract();
@@ -8919,7 +8980,7 @@ function viewToWorld(vx, vy) {
 // screens glitched exactly like being outside. They were quietly rendering
 // the outdoors the whole time. Skipping the world draw for these states
 // (the same way 'splash' already did) removes that cost entirely.
-const WORLD_HIDDEN_STATES = new Set(['title', 'digChoice', 'history', 'slotChoose', 'select']);
+const WORLD_HIDDEN_STATES = new Set(['title', 'digChoice', 'history', 'slotChoose', 'select', 'levelIntro']);
 
 function render(time) {
   // Startup optimization: the splash is the first screen and is drawn
@@ -8942,6 +9003,7 @@ function render(time) {
     else if (state === 'history') drawHistory(time);
     else if (state === 'slotChoose') drawSlotChoose(time);
     else if (state === 'select') drawCharacterSelect(time);
+    else if (state === 'levelIntro') drawLevelIntro(time);
     if (toast) drawToast();
     return;
   }
@@ -15144,11 +15206,32 @@ function drawCrate() {
   const padOrder = def.padOrder;
   const foundInWorld = padOrder.filter((id) => collected.has(recKey(worldId, id))).length;
 
+  // Cross-level progress strip -- one small chip per unlocked world, in
+  // WORLD_DEFS order (so it renumbers itself as more worlds get added).
+  // Filled gold once completedWorlds has that world, otherwise dim; the
+  // chip for whichever world tab is currently browsed gets a bright
+  // outline. Read-only -- browsing still happens via the world tab row
+  // below (left/right), same as before this strip was added.
+  const chipSize = 15, chipGap = 6;
+  const chipTotalW = chipSize * ids.length + chipGap * (ids.length - 1);
+  const chipX = VIEW_W / 2 - chipTotalW / 2, chipY = boxY + 50;
+  ids.forEach((wid, i) => {
+    const x = chipX + i * (chipSize + chipGap);
+    const done = completedWorlds.has(wid);
+    ctx.fillStyle = done ? '#e0b040' : '#262030';
+    ctx.fillRect(x, chipY, chipSize, chipSize);
+    if (i === crateWorldIndex) {
+      ctx.strokeStyle = '#f4ecd8';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x - 1.5, chipY - 1.5, chipSize + 3, chipSize + 3);
+    }
+  });
+
   // world tab row -- left/right (arrows, d-pad, or dedicated buttons in
   // future control schemes) cycles through every world in WORLD_DEFS
   ctx.font = 'bold 20px monospace';
   ctx.fillStyle = '#f4ecd8';
-  const tabY = boxY + 70;
+  const tabY = boxY + 78;
   ctx.fillText(`\u25C0  ${def.name.toUpperCase()}  \u25B6`, VIEW_W / 2, tabY);
   ctx.font = '15px monospace';
   ctx.fillStyle = '#9a90a8';
@@ -15776,6 +15859,27 @@ function drawRetroTitle(text, cx, cy, size) {
   grad.addColorStop(1, '#b3760f');
   ctx.fillStyle = grad;
   ctx.fillText(text, cx, cy);
+}
+
+// Full-screen "LEVEL N" card -- see showLevelIntro() for how/when this gets
+// triggered. Reuses drawRetroTitle() (gold-on-carved-outline text) and
+// drawStars() so it costs no new art, just two lines of text over a dark
+// backdrop that already exists elsewhere in the file.
+function drawLevelIntro(time) {
+  ctx.fillStyle = 'rgba(8,6,12,0.93)';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  drawStars(time);
+
+  const def = WORLD_DEFS[levelIntroWorldId] || WORLD_DEFS.town;
+  const num = levelNumberFor(levelIntroWorldId);
+
+  drawRetroTitle(`LEVEL ${num}`, VIEW_W / 2, VIEW_H / 2 - 14, 46);
+  drawRetroTitle(def.name.toUpperCase(), VIEW_W / 2, VIEW_H / 2 + 40, 24);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = Math.floor(performance.now() / 400) % 2 ? '#e0b040' : '#f4ecd8';
+  ctx.font = 'bold 15px monospace';
+  ctx.fillText('- PRESS E TO DROP IN -', VIEW_W / 2, VIEW_H - 40);
 }
 
 function drawCharacterSelect(time) {
